@@ -46,12 +46,20 @@ RUN set -e; cd /src \
 
 FROM docker.io/library/debian:13-slim
 
+# libopenblas0-pthread: Debian's numpy links the reference BLAS unless an
+# optimised one is installed (the alternatives system then picks it). The
+# CW skimmer's neural engine is small matrix products every 20 ms on every
+# channel: on ohs-box the reference BLAS cost 0.36 % of a core a channel,
+# OpenBLAS half that (14/10/2026). One BLAS thread (OPENBLAS_NUM_THREADS
+# below): the products are too small to share, and spare threads would
+# spin on cores the other apps use.
 # python3-soapysdr and the SDRplay module built above, for the soapy device;
 # soapysdr-tools for SoapySDRUtil, which is how to see from a shell on the
 # controller what the container can find (podman exec ... SoapySDRUtil --find).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-numpy \
+        libopenblas0-pthread \
         python3-paramiko \
         python3-libiio \
         python3-soapysdr \
@@ -116,7 +124,8 @@ ENV SHACK_FORM=store \
     XDG_CACHE_HOME=/tmp/cache \
     SHACK_PORT=8080 \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    OPENBLAS_NUM_THREADS=1
 
 USER shack
 WORKDIR /opt/shack-radio
