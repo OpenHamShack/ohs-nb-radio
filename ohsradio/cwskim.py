@@ -25,6 +25,15 @@ contract is docs/ENGINE-API.md `cwskim`/`cwspot` and SERVER-API
   items. The spots of the last 30 minutes stay here for GET api/cwskim.
 - It never retunes the receiver. With the segment outside the span, state
   is "outside" and nothing is skimmed; partly outside, "partial".
+- Both CW engines run on every channel, and a call is spotted only when it
+  passes the callsign check and has been seen twice (Brian, 14/10/2026;
+  shack_cw.skim.calls has the rule and the measurements). The callsign
+  list is the RBN week shipped with shack_cw, plus Super Check Partial's
+  MASTER.SCP in the data folder if it is there. That is never bundled
+  (nothing allows passing it on): with `cwSkimScp` on (off by default) it
+  is downloaded when the skimmer starts, at most once a day, as the site's
+  developer guide asks (shack_cw.skim.scp.fetch), or the operator puts a
+  copy there. A call on no list needs a third decode.
 
 Off by default (`cwSkim`, Brian 13/10/2026): switched on per use.
 """
@@ -33,6 +42,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from pathlib import Path
 
 from ohscore import shacklibs
 from ohscore.dsp.bank import Channel
@@ -47,6 +57,8 @@ MARGIN_HZ = 3_000.0       # skim no closer than this to the edge of the receiver
 GUARD_HZ = 2_000.0        # channel room either side of the cover, for the filter's skirt
 FALLBACK_HZ = 100_000.0   # a band with no CW-only rows: CW-allowed rows this far up from its edge
 SPOTS_PER_S = 5.0
+ENGINE = "both"           # both CW engines on every channel (shack_cw.skim.pool)
+SCP_FILE = "MASTER.SCP"   # the callsign list, in the data folder
 KEEP_S = 1800.0
 KEEP_N = 500
 
@@ -84,7 +96,8 @@ def _thread_runner(was, on_result):
     from shack_cw.skim.runner import SkimRunner
     c = was.config
     return SkimRunner(on_result, mode="thread", max_channels=c["max_channels"], squelch_db=c["squelch_db"],
-                      pitch=c["pitch"], country=c["country"], history=c["history"], birdies=c["birdies"])
+                      pitch=c["pitch"], country=c["country"], history=c["history"], birdies=c["birdies"],
+                      engine=c["engine"])
 
 
 def selftest(out=print, mode: str = "process", seconds: float = 40.0, timeout: float = 120.0) -> int:
@@ -168,9 +181,16 @@ class CwSkim:
         s = radio.st
         self.lock = threading.Lock()
         data = getattr(radio, "data_dir", None)
+        # The callsign list, by name: the worker is a process of its own and
+        # re-reads the file when it changes, so a list fetched after the
+        # start (fetch_scp) is used within a minute.
+        self.scp_path = Path(data) / SCP_FILE if data else None
         self.runner = SkimRunner(self._result, mode=mode, max_channels=int(s["cwSkimMax"]),
                                  squelch_db=float(s["cwSkimSquelch"]), pitch=float(s["cwPitch"]),
-                                 country=("ohscore.dxcc:skim_lookup", [str(data) if data else None]))
+                                 country=("ohscore.dxcc:skim_lookup", [str(data) if data else None]),
+                                 history=("shack_cw.skim.scp:history", [[str(self.scp_path)]])
+                                 if self.scp_path else None,
+                                 engine=ENGINE)
         self.ch: Channel | None = None
         self.ch_d = 0
         self.gen = 0
@@ -210,8 +230,27 @@ class CwSkim:
                                    "start ({why}).").format(why=e), "warn")
             if self.stopped:
                 self.runner.stop()
+                return
+            self.fetch_scp()
         threading.Thread(target=go, name=f"{self.radio.THREAD_PREFIX}-cwskim-start", daemon=True).start()
         self._set_state("running", "")
+
+    def fetch_scp(self) -> str:
+        """Bring MASTER.SCP up to date if `cwSkimScp` allows (at most once a
+        day; see the module). On the start thread, never the receive one; a
+        failure costs only the list, and is logged."""
+        if self.scp_path is None or not self.radio.st.get("cwSkimScp", False):
+            return "off"
+        from shack_cw.skim import scp
+        version = self.radio.app_version() or "dev"
+        try:
+            got = scp.fetch(self.scp_path, f"OpenHamShack-Radio/{version}")
+        except (OSError, ValueError) as e:
+            log.warning("CW skimmer: MASTER.SCP not fetched (%s); the bundled RBN list stands alone", e)
+            return "failed"
+        if got == "fetched":
+            log.info("CW skimmer: MASTER.SCP fetched into %s", self.scp_path)
+        return got
 
     def stop(self) -> None:
         self.stopped = True

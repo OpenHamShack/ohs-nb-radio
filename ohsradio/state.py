@@ -170,8 +170,18 @@ with REG.after("pskReporter"):
        help="How far over the noise a CW signal must stand to be decoded by the skimmer. A signal is followed "
             "once it stands this plus 2 dB over the floor.")
     _k("cwSkimMax", "int", 64, "setting", lo=8, hi=256,
-       help="The most CW signals the skimmer decodes at once, strongest first. Each takes about a third of a "
-            "per cent of one processor core.")
+       help="The most CW signals the skimmer decodes at once, strongest first. Each takes about half a per "
+            "cent of one processor core.")
+    # The skimmer's callsign list is the RBN week shipped with shack_cw; an
+    # operator may add MASTER.SCP, which is never bundled (shack_cw.skim.scp
+    # says why). Downloading it is opt-in: it is a request to a third party
+    # on the operator's behalf, and it adds few calls (72 against 70 RBN
+    # calls on the measurements in shack_cw.skim.calls).
+    _k("cwSkimScp", "bool", False, "setting",
+       help="Also download Super Check Partial's list of contest callsigns (MASTER.SCP) from "
+            "supercheckpartial.com once a day while the skimmer runs, so more calls are spotted after two "
+            "decodes instead of three. Radio already carries a list of calls the Reverse Beacon Network heard "
+            "recently. Off: a copy you put in the data folder is still used.")
 
 # --- status (read-only) -------------------------------------------------------
 _o("rxDial", help="Frequency the receiver is demodulating (vfo + RIT, or the repeater input in reverse).")

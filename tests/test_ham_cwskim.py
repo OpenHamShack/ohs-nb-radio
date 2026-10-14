@@ -226,6 +226,55 @@ def ham_server_default_kinds():
     return FEED_KINDS_DEFAULT
 
 
+class CallsignList(unittest.TestCase):
+    """Both engines and the callsign list (Brian, 14/10/2026): the worker
+    is built with engine "both" and the list by name; MASTER.SCP is only
+    fetched when the operator has switched cwSkimScp on."""
+
+    def test_the_worker_runs_both_engines_with_the_list_from_the_data_folder(self):
+        r = radio(cwSkim=True)
+        self.addCleanup(ham_helpers.close, r)
+        r.start()
+        wait(r, lambda g: r.cwskim is not None and r.cwskim.runner.state == "running", 30)
+        c = r.cwskim.runner.config
+        self.assertEqual(c["engine"], "both")
+        self.assertEqual(c["history"], ("shack_cw.skim.scp:history", [[str(Path(r.data_dir) / "MASTER.SCP")]]))
+        # The factory the worker calls answers from the bundled RBN week
+        # even with no MASTER.SCP in the data folder.
+        h = skim_runner._factory(c["history"])
+        self.assertTrue(len(h) > 10_000)
+        self.assertIs(h("QQ9QQQ"), False)
+
+    def test_master_scp_is_fetched_only_when_switched_on(self):
+        import shack_cw.skim.scp as scp
+        asked = []
+
+        def fake_fetch(path, ua, **kw):
+            asked.append((Path(path), ua))
+            return "fetched"
+        orig = scp.fetch
+        scp.fetch = fake_fetch
+        self.addCleanup(setattr, scp, "fetch", orig)
+        r = radio()
+        self.addCleanup(ham_helpers.close, r)
+        self.assertIs(r.st["cwSkimScp"], False)
+        r.set(cwSkim=True)
+        r.start()
+        wait(r, lambda g: r.cwskim is not None and r.cwskim.runner.state == "running", 30)
+        ham_helpers.pump(r, 1.0)
+        self.assertEqual(asked, [])
+        self.assertEqual(r.cwskim.fetch_scp(), "off")
+        r.set(cwSkimScp=True)
+        self.assertEqual(r.cwskim.fetch_scp(), "fetched")
+        self.assertEqual(asked[-1][0], Path(r.data_dir) / "MASTER.SCP")
+        self.assertTrue(asked[-1][1].startswith("OpenHamShack-Radio/"))
+
+        def offline(path, ua, **kw):
+            raise OSError("no route to host")
+        scp.fetch = offline
+        self.assertEqual(r.cwskim.fetch_scp(), "failed")
+
+
 class NothingThatCanKey(unittest.TestCase):
     def test_the_workers_imports(self):
         # What the skimmer's worker process loads: the runner, and the
@@ -235,6 +284,7 @@ class NothingThatCanKey(unittest.TestCase):
         code = ("import sys; sys.path.insert(0, %r); from ohscore import shacklibs; shacklibs.cw(); "
                 "import shack_cw.skim.runner as r; f = r._factory(('ohscore.dxcc:skim_lookup', [None])); "
                 "assert f('DL1ABC')['country'] == 'Fed. Rep. of Germany', f('DL1ABC'); "
+                "h = r._factory(('shack_cw.skim.scp:history', [['/nonexistent/MASTER.SCP']])); h('DL1ABC'); "
                 "print(' '.join(sorted(sys.modules)))" % str(ROOT))
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
         self.assertEqual(out.returncode, 0, out.stderr)

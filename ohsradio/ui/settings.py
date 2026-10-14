@@ -34,7 +34,8 @@ class SettingsDialog(core.SettingsDialog):
               "toneburstMs": "Toneburst length", "ctcssLevel": "CTCSS level", "seqOutput": "PTT line",
               "seqPort": "Serial port", "seqLine": "Line", "seqDelayMs": "Sequence delay",
               "simHourUtc": "Time of day (UTC)", "simAntSwr": "Simulated antenna SWR",
-              "cwSkim": "CW skimmer", "cwSkimSquelch": "CW skimmer squelch", "cwSkimMax": "CW skimmer channels"}
+              "cwSkim": "CW skimmer", "cwSkimSquelch": "CW skimmer squelch", "cwSkimMax": "CW skimmer channels",
+              "cwSkimScp": "Download MASTER.SCP"}
     CHOICE_LABELS = {**core.CHOICE_LABELS,
                      "device": {"sim": "Simulator", "pluto": "Pluto family", "hl2": "Hermes-Lite 2",
                                 "soapy": "SoapySDR (RX only)"},
@@ -78,6 +79,7 @@ class SettingsDialog(core.SettingsDialog):
         self._add(box, "cwSkim")
         self._add(box, "cwSkimSquelch")
         self._add(box, "cwSkimMax")
+        self._add(box, "cwSkimScp")
         lay.insertWidget(at, tmp)
         return sc
 

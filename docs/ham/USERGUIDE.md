@@ -427,16 +427,16 @@ Type in the line under the terminal and press **Enter**: the keyer sends it at *
 
 ### The CW skimmer (CW Activity)
 
-**CW Activity** in the lower panel (Ctrl + K) decodes every CW signal in the CW segment of the band the dial is in, all at once, whatever mode and frequency you are listening to - as CW Skimmer does. Switch it on with **CW skimmer** at the top of the view (or Settings › Station); it is off until you do, because it takes a share of a processor core while it runs (about a third of a per cent for each signal it decodes).
+**CW Activity** in the lower panel (Ctrl + K) decodes every CW signal in the CW segment of the band the dial is in, all at once, whatever mode and frequency you are listening to - as CW Skimmer does. Switch it on with **CW skimmer** at the top of the view (or Settings › Station); it is off until you do, because it takes a share of a processor core while it runs (about half a per cent for each signal it decodes).
 
-- **Spots** lists each call it has heard and checked: when it was last heard (UTC), its frequency, speed, signal-to-noise in 500 Hz (as the Reverse Beacon Network measures it), its country, and **CQ**, **DX** or **BEACON**. A call heard only once, and in no history, is grey with a **?** until it is heard again. **By frequency** sorts it as a band map, **Newest** by time.
+- **Spots** lists each call it has heard and checked: when it was last heard (UTC), its frequency, speed, signal-to-noise in 500 Hz (as the Reverse Beacon Network measures it), its country, and **CQ**, **DX** or **BEACON**. Every signal is read by two decoders at once - a neural one and the classic one - and a call counts when either prints it. A call is listed as soon as it is read, but is grey with a **?** until it has been read twice and is on Radio's list of active callsigns (the calls the Reverse Beacon Network heard in a recent week, plus Super Check Partial's MASTER.SCP if you have it), or three times if it is not on the list. **By frequency** sorts it as a band map, **Newest** by time.
 - **Signals** lists the channels it is decoding now, strongest first, each with the text it is reading.
 - The spots are marks along the foot of the wide scope (**Marks on scope** turns them off), and each newly confirmed call is labelled on the waterfalls.
 - **A click on a spot, a signal or a mark tunes there in CW.** It only tunes: nothing in CW Activity ever transmits or answers a call. **Clear** empties the list, not the skimmer.
 - It follows the band the dial is in and never retunes the radio. If the receiver's span does not reach the band's CW segment (10 m, a Hermes-Lite 2's narrow span), the view says so.
 - Spots stay on this computer: nothing is sent to the Reverse Beacon Network or anywhere else.
 - The **Watch** workspace opens on CW Activity, with two thirds of the window for the wide scope ([Workspaces](#workspaces)).
-- **Settings › Station › CW skimmer**: the squelch (how far over the noise a signal must stand to be decoded) and how many signals it decodes at once (64; up to 256 for a contest).
+- **Settings › Station › CW skimmer**: the squelch (how far over the noise a signal must stand to be decoded), how many signals it decodes at once (64; up to 256 for a contest), and **Download MASTER.SCP**: on, Radio also fetches Super Check Partial's list of contest callsigns from supercheckpartial.com into its data folder when the skimmer starts, at most once a day. It is not part of Radio because nothing allows passing it on. Off (the default), Radio still uses a copy you put there yourself.
 
 ### PSK31, PSK63, PSK125 and RTTY
 
@@ -715,7 +715,8 @@ The table below is generated from the Settings window itself (`tools/settings-re
 | Report stations heard to PSKReporter | On / Off | Off | Send the callsigns you decode in FT8, FT4 and JS8 to PSKReporter every five minutes: their call, frequency, mode, signal report and grid, with your callsign, locator and this program's name. |
 | CW skimmer | On / Off | Off | Decode every CW signal in the band's CW segment at once, whatever the dial is on, and spot the calls it hears. Receive only; the spots stay on this station. |
 | CW skimmer squelch | 3.0 dB – 20.0 dB | 6.0 dB | How far over the noise a CW signal must stand to be decoded by the skimmer. A signal is followed once it stands this plus 2 dB over the floor. |
-| CW skimmer channels | 8 – 256 | 64 | The most CW signals the skimmer decodes at once, strongest first. Each takes about a third of a per cent of one processor core. |
+| CW skimmer channels | 8 – 256 | 64 | The most CW signals the skimmer decodes at once, strongest first. Each takes about half a per cent of one processor core. |
+| Download MASTER.SCP | On / Off | Off | Also download Super Check Partial's list of contest callsigns (MASTER.SCP) from supercheckpartial.com once a day while the skimmer runs, so more calls are spotted after two decodes instead of three. Radio already carries a list of calls the Reverse Beacon Network heard recently. Off: a copy you put in the data folder is still used. |
 
 #### Radio
 

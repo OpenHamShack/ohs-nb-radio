@@ -14,7 +14,7 @@ msgstr ""
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
-#: ohsradio/ui/settings.py:311
+#: ohsradio/ui/settings.py:313
 #, python-brace-format
 msgid "Bands & power, {band}: not a number"
 msgstr ""
@@ -38,7 +38,7 @@ msgstr ""
 msgid "Done: the Pluto now runs as {chip}, which tunes {range}."
 msgstr ""
 
-#: ohsradio/state.py:217
+#: ohsradio/state.py:227
 #, python-brace-format
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
@@ -99,17 +99,17 @@ msgstr ""
 msgid "Serial"
 msgstr ""
 
-#: ohsradio/cwskim.py:249
+#: ohsradio/cwskim.py:288
 #, python-brace-format
 msgid "The CW segment, {lo:.3f}-{hi:.3f} MHz, is outside what the receiver covers now, {slo:.3f}-{shi:.3f} MHz."
 msgstr ""
 
-#: ohsradio/cwskim.py:209
+#: ohsradio/cwskim.py:229
 #, python-brace-format
 msgid "The CW skimmer is running in a thread: its worker process could not start ({why})."
 msgstr ""
 
-#: ohsradio/cwskim.py:326
+#: ohsradio/cwskim.py:365
 msgid "The CW skimmer stopped."
 msgstr ""
 
@@ -160,7 +160,7 @@ msgstr ""
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
 
-#: ohsradio/cwskim.py:241
+#: ohsradio/cwskim.py:280
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 

@@ -473,7 +473,10 @@ not merge.
   - `dial`: where Radio's dial goes to hear it in CW, `f - cwPitch`.
   - `wpm`: the sender's speed, once learnt.
   - `snr`: key-on dB in 500 Hz, averaged over QSB (the RBN's measure).
-  - `text`: the channel's last 48 characters. Keep your own history by `id`.
+  - `text`: the channel's last 48 characters, as the neural engine printed
+    them with its language model (up to 1 s after they were sent); the
+    classic engine's copy only feeds the spots. Keep your own
+    history by `id`.
   - `call`: the station identified there, if any.
   - `kind`: `cq`, `dx` or `beacon`, if there is a call.
   - `active`: seen in the last 20 s. A quiet one stays listed for 2 minutes.
@@ -489,9 +492,13 @@ not merge.
 "confidence", "country", "dxcc", "continent"[, "bustedOf"]}}`.
 
 - `rev` counts up by one per item.
-- `status`: `valid` (two hits within 150 Hz and 10 minutes, or one for a
-  call in the station's log or a confirmed call), `unconfirmed` (one hit:
-  show it dim), `busted` (a Morse-alike misreading of a stronger call
+- `status`: `valid` (passed the callsign check and seen twice: two
+  decodes within 150 Hz and 10 minutes, by either of the two CW engines
+  every channel runs, for a call on the callsign list - the RBN week
+  shipped with shack_cw, and MASTER.SCP if there is one (`cwSkimScp`) -
+  or already confirmed; three for any other call of a
+  call's shape in a DXCC entity, and for every call while there is no
+  list), `unconfirmed` (fewer: show it dim), `busted` (a Morse-alike misreading of a stronger call
   confirmed beside it: `bustedOf` names that call; never show it as a
   spot), `qsy` (a confirmed call now more than 1 kHz from where it was).
 - `kind`: `cq` (calling CQ or a contest CQ), `dx` (sending its call: DE,
@@ -519,6 +526,7 @@ The skimmer's state keys (ohsradio/state.py; Radio only):
 | `cwSkim` | setting | bool | **false** | | Decode every CW signal in the band's CW segment, whatever the dial is on. Off by default; switched on per use. |
 | `cwSkimSquelch` | setting | float | 6 | 3 .. 20 dB | The decoders' squelch (`snr_db`). A signal is followed once it stands this plus 2 dB over the floor. |
 | `cwSkimMax` | setting | int | 64 | 8 .. 256 | Signals decoded at once, strongest first. |
+| `cwSkimScp` | setting | bool | false | | Also download Super Check Partial's MASTER.SCP into the data folder when the skimmer starts, at most once a day (a conditional GET). The callsign list is the RBN week shipped with shack_cw plus MASTER.SCP if it is there (downloaded, or put there by the operator); a call on it is spotted after two decodes, any other after three. |
 | `cwSkimState`, `cwSkimWhy` | status | str | `off`, `""` | | As `cwskim`'s `state` and `why`. |
 | `cwSkimSignals`, `cwSkimChannels` | status | int | 0 | | Signals being followed / decoders running. |
 | `cwSkimCpu` | status | float | 0 | % | The skimmer's own share of one core. |
