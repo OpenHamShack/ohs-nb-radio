@@ -553,11 +553,10 @@ class Mirrors(unittest.TestCase):
                             seen=update.Seen(self.root / "seen.json"))
 
     def test_with_no_mirror_set_the_apps_ask_their_own_site_alone(self):
-        # MIRROR_BASE is empty until Brian picks a host: no address may be
-        # tried that does not exist.
-        self.assertEqual(update.MIRROR_BASE, "")
+        # MIRROR_BASE is empty until Brian picks a host, and an empty base
+        # adds no address: none may be tried that does not exist.
         url = "https://openhamshack.com/desktop/nb/update.json"
-        self.assertEqual(update.with_mirrors(url), (url,))
+        self.assertEqual(update.with_mirrors(url, [""]), (url,))
         self.assertEqual(update.with_mirrors(url, ["https://mirror.example/", ""]),
                          (url, "https://mirror.example/desktop/nb/update.json"))
         try:
@@ -565,9 +564,11 @@ class Mirrors(unittest.TestCase):
             from ohsnb.ui.face import Qo100Face
         except ImportError as e:          # PyQt6 missing: ohsnb.ui imports it
             self.skipTest(str(e))
-        self.assertEqual(Qo100Face.update_feeds, (Qo100Face.update_feed,))
-        self.assertEqual(HamFace.update_feeds, (HamFace.update_feed,))
-        self.assertTrue(Qo100Face.update_feed.startswith("https://openhamshack.com/"))
+        for face in (Qo100Face, HamFace):
+            self.assertTrue(face.update_feed.startswith("https://openhamshack.com/desktop/"))
+            self.assertEqual(face.update_feeds, update.with_mirrors(face.update_feed))
+            if not update.MIRROR_BASE:
+                self.assertEqual(face.update_feeds, (face.update_feed,))
 
     def test_a_401_challenge_falls_back_to_the_mirror_quietly(self):
         site = self.challenge(401)
