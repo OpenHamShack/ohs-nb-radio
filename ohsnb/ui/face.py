@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 
+from ohscore import update
 from ohscore.ui.face import Face
 from ohsnb.i18n import _
 
@@ -72,6 +73,7 @@ class Qo100Face(Face):
     former_name = "OpenHamShack NB"
     package = "openhamshack-nb"
     update_feed = "https://openhamshack.com/desktop/nb/update.json"
+    update_feeds = update.with_mirrors(update_feed)
     # The app's name in a diagnostics upload (ohscore/diagupload.py), as in its feed's folder.
     diag_app = "nb"
     freq_label = "Downlink"

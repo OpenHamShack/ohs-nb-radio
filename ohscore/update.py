@@ -54,9 +54,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
 from .i18n.text import _
 
@@ -351,6 +351,10 @@ class Offer:
     url: str               # absolute, resolved against the manifest's URL
     rollback: bool         # going back to the version the manifest recommends
     notes_url: str = ""
+    # The same file beside the feed's other addresses, tried in turn if
+    # `url` fails (see download). Any copy is as good as another: each is
+    # held to the signed size and SHA-256.
+    alternates: tuple[str, ...] = ()
 
 
 def choose(m: Manifest, plat: str, arch: str, installed: str, manifest_url: str = "") -> Offer | None:
@@ -383,6 +387,40 @@ def choose(m: Manifest, plat: str, arch: str, installed: str, manifest_url: str 
     url = urllib.parse.urljoin(manifest_url, entry.url) if manifest_url else entry.url
     notes = urllib.parse.urljoin(manifest_url, m.notes_url) if (manifest_url and m.notes_url) else ""
     return Offer(entry, url, rollback, notes)
+
+
+# ------------------------------------------------------------------ where the feed is
+# A second address for every feed (17/10/2026). Ray's checks for NB were
+# answered 401 by 20i's StackProtect: a bot challenge, shown to his VPN's
+# address and to no-one else we know of, that a program cannot pass.
+# Where the feed comes from does not matter to trust - the manifest is
+# believed only once its Ed25519 signature checks, and every file only
+# once it matches the signed size and SHA-256 - so a mirror on another
+# host, carrying the same signed files byte for byte, needs no trust of
+# its own. It only has to be somewhere StackProtect is not.
+#
+# TODO(Brian): the mirror host is not chosen yet (Cloudflare is the likely
+# one). Set MIRROR_BASE to its address - the root under which /desktop/nb/
+# and /desktop/ham/ appear exactly as on openhamshack.com, such as
+# "https://updates.example.net" - and release. Until then it is empty, and
+# an empty base means no fallback at all: no client may send a request to
+# a host that does not exist (or that someone else could later register).
+# docs/update-feed.md, "Mirrors", says what a mirror must carry.
+MIRROR_BASE = ""
+
+
+def with_mirrors(url: str, bases: Sequence[str] | None = None) -> tuple[str, ...]:
+    """`url`, then the same path under each mirror base (MIRROR_BASE by
+    default): the ordered list of addresses a face declares for its feed.
+    Empty bases are skipped, so with no mirror set this is just (url,)."""
+    path = urllib.parse.urlsplit(url).path
+    out = [url]
+    for base in ((MIRROR_BASE,) if bases is None else bases):
+        if base:
+            alt = base.rstrip("/") + path
+            if alt not in out:
+                out.append(alt)
+    return tuple(out)
 
 
 # ------------------------------------------------------------------ fetching
@@ -418,6 +456,7 @@ class Result:
     message: str
     offer: Offer | None = None
     when: float = 0.0
+    source: str = ""       # the feed address that answered ("" when none did)
 
 
 class Seen:
@@ -446,17 +485,55 @@ class Seen:
         os.replace(tmp, self.path)
 
 
-def check(feed_url: str, app: str, version: str, *, plat: str, arch: str,
+def check(feed_url: str | Sequence[str], app: str, version: str, *, plat: str, arch: str,
           seen: Seen | None = None, keys=None, fetcher: Callable[[str, str, int], bytes] = fetch,
           clock=time.time) -> Result:
     """Fetch the manifest and its signature, prove them, and say what this
-    installation should do. Never raises: every outcome is a Result, and
-    is logged. `app` as for read_manifest."""
+    installation should do. `feed_url` is one address, or an ordered list
+    of addresses for the same feed (with_mirrors), tried in turn until one
+    gives a manifest that proves itself. Never raises: every outcome is a
+    Result, and is logged. `app` as for read_manifest.
+
+    The next address is tried after ANY failure, not only the refusals a
+    challenge gives (401, 403, 429, 5xx, a timeout, a refused connection):
+    a challenge page can as well come back as a 200 of HTML, which fails
+    as "not JSON", or be bigger than a manifest may be. Moving on is always
+    safe, since nothing from any address is believed until it is signed,
+    and the stale-copy rule (Seen) holds for every address alike.
+
+    When every address fails, the result is the first refusal if there was
+    one - a feed that failed to prove itself is worth saying so about,
+    wherever it came from - and otherwise the first address's own failure:
+    with one address, exactly what a single check has always said. A
+    failure that a later address recovers from is only logged."""
+    urls = [feed_url] if isinstance(feed_url, str) else [u for u in feed_url if u]
     now = clock()
+    failed: list[Result] = []
+    for url in urls:
+        res = _check_at(url, urls, app, version, plat=plat, arch=arch, seen=seen, keys=keys, fetcher=fetcher,
+                        now=now)
+        if res.status not in ("offline", "refused"):
+            if failed:
+                log.info("update check: answered by %s after %d address(es) failed", url, len(failed))
+            else:
+                log.info("update check: answered by %s", url)
+            return res
+        failed.append(res)
+        if url != urls[-1]:
+            log.info("update check: %s failed (%s); trying the next address", url, res.status)
+    if not failed:
+        return Result("offline", "no update feed address", when=now)
+    return next((r for r in failed if r.status == "refused"), failed[0])
+
+
+def _check_at(url: str, urls: list[str], app: str, version: str, *, plat: str, arch: str, seen: Seen | None,
+              keys, fetcher, now: float) -> Result:
+    """One address's check; `urls` is the whole list, for the offer's
+    alternate download addresses."""
     ua = user_agent(app, version)
     try:
-        data = fetcher(feed_url, ua, MAX_MANIFEST)
-        sig = fetcher(feed_url + ".sig", ua, SIG_LEN)
+        data = fetcher(url, ua, MAX_MANIFEST)
+        sig = fetcher(url + ".sig", ua, SIG_LEN)
     except UpdateError as e:
         log.info("update check: %s", e)
         return Result("offline", str(e), when=now)
@@ -465,21 +542,28 @@ def check(feed_url: str, app: str, version: str, *, plat: str, arch: str,
         if seen is not None and m.published < seen.published():
             raise NotTrusted(f"the manifest ({m.published}) is older than one already seen "
                              f"({seen.published()}); a stale or replayed copy")
-        offer = choose(m, plat, arch, version, feed_url)
+        offer = choose(m, plat, arch, version, url)
     except (NotTrusted, ValueError) as e:
-        log.warning("update check: refused %s: %s", feed_url, e)
+        log.warning("update check: refused %s: %s", url, e)
         return Result("refused", str(e), when=now)
     if seen is not None:
         seen.record(m.published)
+    if offer is not None and len(urls) > 1:
+        # The file resolves against the address that answered (choose),
+        # then beside each other address. "What's new" resolves against the
+        # first, the canonical site: it opens in a browser, which can pass a
+        # challenge, and a mirror carries no pages.
+        offer = replace(offer, alternates=tuple(urllib.parse.urljoin(u, offer.entry.url) for u in urls if u != url),
+                        notes_url=urllib.parse.urljoin(urls[0], m.notes_url) if m.notes_url else "")
     if offer is not None:
         what = "going back to" if offer.rollback else "new"
         log.info("update check: %s %s %s (%s %s)", app, what, offer.entry.version, plat, offer.entry.arch)
-        return Result("available", f"{offer.entry.version} is available", offer, now)
+        return Result("available", f"{offer.entry.version} is available", offer, now, url)
     if not any(e.platform == plat for e in m.entries):
         log.info("update check: the feed has nothing for %s yet", plat)
-        return Result("unsupported", f"no {plat} release is published yet", when=now)
+        return Result("unsupported", f"no {plat} release is published yet", when=now, source=url)
     log.info("update check: %s %s is up to date", app, version)
-    return Result("current", f"{version} is the newest", when=now)
+    return Result("current", f"{version} is the newest", when=now, source=url)
 
 
 # ------------------------------------------------------------------ downloading
@@ -489,15 +573,38 @@ def download(offer: Offer, folder: Path, ua: str, progress: Callable[[int, int],
     """The offered file into `folder`, under the manifest's name, proved
     against the signed manifest's size and SHA-256 before it is given its
     real name - so a file under that name has always been checked. Older
-    downloads in the folder are removed: one update at a time."""
-    e = offer.entry
+    downloads in the folder are removed: one update at a time.
+
+    From offer.url (beside the feed address that answered), then from each
+    of offer.alternates in turn if that fails in any way - a challenge, an
+    outage, or a copy that does not match, which the next copy may. A
+    cancel stops at once. If every address fails, the first one's error is
+    raised: with a single address, exactly what it always was."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
+    first: UpdateError | None = None
+    for i, url in enumerate((offer.url, *offer.alternates)):
+        try:
+            path = _download_from(url, offer.entry, folder, ua, progress, cancelled, timeout, opener)
+        except UpdateError as err:
+            if cancelled is not None and cancelled():
+                raise
+            first = first or err
+            log.info("update: %s", err)
+            continue
+        if i:
+            log.info("update: downloaded from %s after %d address(es) failed", url, i)
+        return path
+    raise first
+
+
+def _download_from(url: str, e: Entry, folder: Path, ua: str, progress, cancelled, timeout: float, opener) -> Path:
+    """One address's download for download()."""
     final = folder / e.url
     part = folder / (e.url + ".part")
     h = hashlib.sha256()
     got = 0
-    req = urllib.request.Request(offer.url, headers={"User-Agent": ua})
+    req = urllib.request.Request(url, headers={"User-Agent": ua})
     try:
         with opener(req, timeout=timeout) as r, open(part, "wb") as out:
             while True:
@@ -515,10 +622,10 @@ def download(offer: Offer, folder: Path, ua: str, progress: Callable[[int, int],
                     progress(got, e.size)
     except urllib.error.HTTPError as err:
         part.unlink(missing_ok=True)
-        raise UpdateError(f"{offer.url}: the server answered {err.code}") from None
+        raise UpdateError(f"{url}: the server answered {err.code}") from None
     except (urllib.error.URLError, OSError) as err:
         part.unlink(missing_ok=True)
-        raise UpdateError(f"{offer.url}: download failed ({getattr(err, 'reason', err)})") from None
+        raise UpdateError(f"{url}: download failed ({getattr(err, 'reason', err)})") from None
     except UpdateError:
         part.unlink(missing_ok=True)
         raise
@@ -530,7 +637,7 @@ def download(offer: Offer, folder: Path, ua: str, progress: Callable[[int, int],
     for old in folder.iterdir():
         if old != final and old.is_file():
             old.unlink(missing_ok=True)
-    log.info("update: downloaded and checked %s (%d bytes)", final, got)
+    log.info("update: downloaded and checked %s (%d bytes) from %s", final, got, url)
     return final
 
 

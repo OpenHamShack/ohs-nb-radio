@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 
+from ohscore import update
 from ohscore.dsp.fm import tone_name
 from ohscore.ui.face import Face
 from ohsradio.i18n import _
@@ -73,6 +74,7 @@ class HamFace(Face):
     former_name = "OpenHamShack HAM"
     package = "openhamshack-radio"
     update_feed = "https://openhamshack.com/desktop/ham/update.json"
+    update_feeds = update.with_mirrors(update_feed)
     # The app's name in a diagnostics upload (ohscore/diagupload.py), as in its feed's folder.
     diag_app = "ham"
     freq_label = "Frequency"

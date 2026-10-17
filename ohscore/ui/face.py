@@ -28,6 +28,10 @@ class Face:
     package = ""                      # "openhamshack-nb": the .deb, the launcher, its source-site section
     # Its signed update feed (ohscore/update.py, docs/update-feed.md); "" for none.
     update_feed = ""
+    # Every address of that same feed, in order: update_feed first, then
+    # its mirrors (update.with_mirrors), each tried when the one before
+    # fails. Empty: update_feed alone.
+    update_feeds: tuple[str, ...] = ()
 
     def icon(self):
         """The app's QIcon."""

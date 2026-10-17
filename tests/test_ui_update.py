@@ -162,6 +162,28 @@ class UpdateInTheWindow(WindowCase):
         self.assertTrue(c.dialog.btn_install.isVisible())
         c.dialog.close()
 
+    # ------------------------------------------------------------ the feed's addresses
+    def test_the_faces_addresses_are_tried_in_order(self):
+        # The face's own site first; when it cannot be reached, its mirror.
+        win, _bridge, _radio = self.window()
+        win.face.update_feeds = (closed_port_url(), self.server.url + "update.json")
+        c = self.updater(win, feed_url=None)
+        self.assertEqual(c.feed_url, win.face.update_feeds[0])
+        r = self.checked(c)
+        self.assertEqual(r.status, "available", r.message)
+        self.assertEqual(r.source, self.server.url + "update.json")
+        self.assertTrue(win.update_banner.isVisible())
+
+    def test_the_environments_address_is_the_only_one_tried(self):
+        win, _bridge, radio = self.window()
+        win.face.update_feeds = (self.server.url + "update.json",)
+        env = radio.CONFIG.app.env_var("UPDATE_URL")
+        with mock.patch.dict("os.environ", {env: closed_port_url()}):
+            c = self.updater(win, feed_url=None)
+        r = self.checked(c)
+        self.assertEqual(r.status, "offline")                  # not rescued by the face's good feed
+        self.assertEqual(self.server.requests, [])
+
     # ------------------------------------------------------------ when
     def test_the_schedule_checks_once_then_daily_and_never_with_the_setting_off(self):
         win, bridge, radio = self.window()

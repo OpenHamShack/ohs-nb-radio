@@ -211,7 +211,21 @@ class UpdateController(QObject):
         self.app_name = face.app_name
         self.package = face.package
         appid = radio.CONFIG.app
-        self.feed_url = feed_url or appid.getenv("UPDATE_URL") or getattr(face, "update_feed", "")
+        # The addresses to check, in order. An explicit one (the tests) or
+        # the environment's (a test feed, by hand) is the ONLY one tried:
+        # pointing a copy at a test feed must not let it wander off to the
+        # real site's mirror when the test feed is down. Otherwise the
+        # face's list - its own site first, then any mirror (update.
+        # with_mirrors) - or, for a face that declares no list, its one
+        # update_feed.
+        explicit = feed_url or appid.getenv("UPDATE_URL")
+        if explicit:
+            self.feed_urls = (explicit,) if isinstance(explicit, str) else tuple(explicit)
+        else:
+            one = getattr(face, "update_feed", "")
+            self.feed_urls = tuple(getattr(face, "update_feeds", ()) or ((one,) if one else ()))
+        # The address Help › Check for updates… names: the canonical one.
+        self.feed_url = self.feed_urls[0] if self.feed_urls else ""
         self.version = version if version is not None else diag.app_version(type(radio).__module__.split(".")[0])
         self.keys = keys
         self.plat = plat or ("windows" if update.WINDOWS else "macos" if update.MACOS else "linux")
@@ -296,7 +310,7 @@ class UpdateController(QObject):
         args = dict(plat=self.plat, arch=self.arch, seen=self.seen, keys=self.keys, fetcher=self.fetcher,
                     clock=self.clock)
         threading.Thread(target=lambda: self._checked.emit(
-            update.check(self.feed_url, self.package, self.version, **args)), daemon=True,
+            update.check(self.feed_urls, self.package, self.version, **args)), daemon=True,
             name="update-check").start()
         self._refresh_dialog()
         return True

@@ -480,6 +480,161 @@ class Schedule(unittest.TestCase):
         self.assertTrue(s.due(3600.0, True))
 
 
+# ---------------------------------------------------------------- a feed with a mirror
+class Challenge:
+    """What 20i's StackProtect shows a client it suspects (Ray's VPN,
+    17/10/2026): the same HTML page for every path, with whatever status
+    the challenge uses (401, or 200). Remembers each path asked for."""
+
+    PAGE = b"<!doctype html><html><head><title>Checking your browser</title></head><body>...</body></html>"
+
+    def __init__(self, status: int):
+        challenge = self
+        self.paths: list[str] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                challenge.paths.append(self.path)
+                self.send_response(status)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(Challenge.PAGE)))
+                self.end_headers()
+                self.wfile.write(Challenge.PAGE)
+
+            def log_message(self, *_a):
+                pass
+
+        self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}/"
+
+    def close(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+
+@unittest.skipUnless(HAVE_CRYPTO, "python3-cryptography is not installed")
+class Mirrors(unittest.TestCase):
+    """One feed at two addresses: the site first, then a mirror carrying
+    the same signed files. The mirror is a real local server; so is the
+    site, as a challenge, as a second copy, or as a closed port."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.k, self.keys = new_key()
+        self.deb = b"the real package " * 1000
+        self.data, self.sig = manifest(self.k, self.keys, [entry(data=self.deb)])
+        self.mirror_dir = self.root / "mirror"
+        self.mirror = self.serve(self.mirror_dir)
+        self.closing: list = []
+
+    def tearDown(self):
+        self.mirror.close()
+        for s in self.closing:
+            s.close()
+        self.tmp.cleanup()
+
+    def serve(self, folder: Path, payload=True) -> Served:
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "update.json").write_bytes(self.data)
+        (folder / "update.json.sig").write_bytes(self.sig)
+        if payload:
+            (folder / "openhamshack-nb_0.2.0_all.deb").write_bytes(self.deb)
+        return Served(folder)
+
+    def challenge(self, status: int) -> Challenge:
+        c = Challenge(status)
+        self.closing.append(c)
+        return c
+
+    def check(self, *urls):
+        return update.check(list(urls), "openhamshack-nb", "0.1.8", plat="linux", arch="amd64", keys=self.keys,
+                            seen=update.Seen(self.root / "seen.json"))
+
+    def test_with_no_mirror_set_the_apps_ask_their_own_site_alone(self):
+        # MIRROR_BASE is empty until Brian picks a host: no address may be
+        # tried that does not exist.
+        self.assertEqual(update.MIRROR_BASE, "")
+        url = "https://openhamshack.com/desktop/nb/update.json"
+        self.assertEqual(update.with_mirrors(url), (url,))
+        self.assertEqual(update.with_mirrors(url, ["https://mirror.example/", ""]),
+                         (url, "https://mirror.example/desktop/nb/update.json"))
+        try:
+            from ohsradio.ui.face import HamFace
+            from ohsnb.ui.face import Qo100Face
+        except ImportError as e:          # PyQt6 missing: ohsnb.ui imports it
+            self.skipTest(str(e))
+        self.assertEqual(Qo100Face.update_feeds, (Qo100Face.update_feed,))
+        self.assertEqual(HamFace.update_feeds, (HamFace.update_feed,))
+        self.assertTrue(Qo100Face.update_feed.startswith("https://openhamshack.com/"))
+
+    def test_a_401_challenge_falls_back_to_the_mirror_quietly(self):
+        site = self.challenge(401)
+        with self.assertLogs("ohscore.update", "INFO") as logged:
+            r = self.check(site.url + "update.json", self.mirror.url + "update.json")
+        self.assertEqual(r.status, "available", r.message)
+        self.assertEqual(r.source, self.mirror.url + "update.json")
+        self.assertEqual(site.paths, ["/update.json"])
+        self.assertTrue(any("answered by " + self.mirror.url in line for line in logged.output), logged.output)
+        # A 401 is "could not reach": nothing above INFO, so nothing scary.
+        self.assertFalse([line for line in logged.output if line.startswith(("WARNING", "ERROR"))])
+
+    def test_a_challenge_page_served_as_200_falls_back_to_the_mirror(self):
+        site = self.challenge(200)
+        r = self.check(site.url + "update.json", self.mirror.url + "update.json")
+        self.assertEqual(r.status, "available", r.message)
+        self.assertEqual(r.source, self.mirror.url + "update.json")
+
+    def test_a_mirror_serving_a_bad_signature_is_refused(self):
+        site = self.challenge(401)
+        (self.mirror_dir / "update.json").write_bytes(self.data.replace(b"Things got better", b"Things got worse!"))
+        with self.assertLogs("ohscore.update", "WARNING"):
+            r = self.check(site.url + "update.json", self.mirror.url + "update.json")
+        self.assertEqual(r.status, "refused")
+        self.assertIn("signature does not match", r.message)
+        self.assertIsNone(r.offer)
+
+    def test_both_down_is_the_sites_own_offline_result(self):
+        first, second = closed_port_url(), closed_port_url()
+        r = self.check(first, second)
+        self.assertEqual(r.status, "offline")
+        self.assertIn("could not be reached", r.message)
+        self.assertTrue(r.message.startswith(first), r.message)
+        self.assertEqual(r.source, "")
+
+    def test_the_payload_resolves_against_the_mirror_that_answered(self):
+        site = self.challenge(401)
+        r = self.check(site.url + "update.json", self.mirror.url + "update.json")
+        self.assertEqual(r.offer.url, self.mirror.url + "openhamshack-nb_0.2.0_all.deb")
+        path = update.download(r.offer, self.root / "dl", "openhamshack-nb/0.1.8")
+        self.assertEqual(path.read_bytes(), self.deb)
+        self.assertEqual(site.paths, ["/update.json"])          # never asked for the package
+
+    def test_a_payload_the_site_cannot_give_comes_from_the_mirror(self):
+        # The site answers the feed but not the package (a challenge on the
+        # big file, or a missing upload): the same file beside the mirror's
+        # copy of the feed is fetched instead, and proved the same way.
+        site = self.serve(self.root / "site", payload=False)
+        self.closing.append(site)
+        r = self.check(site.url + "update.json", self.mirror.url + "update.json")
+        self.assertEqual(r.source, site.url + "update.json")
+        self.assertEqual(r.offer.url, site.url + "openhamshack-nb_0.2.0_all.deb")
+        self.assertEqual(r.offer.alternates, (self.mirror.url + "openhamshack-nb_0.2.0_all.deb",))
+        path = update.download(r.offer, self.root / "dl", "openhamshack-nb/0.1.8")
+        self.assertEqual(path.read_bytes(), self.deb)
+
+    def test_a_mirror_with_the_wrong_package_is_still_refused(self):
+        site = self.serve(self.root / "site", payload=False)
+        self.closing.append(site)
+        (self.mirror_dir / "openhamshack-nb_0.2.0_all.deb").write_bytes(b"x" * len(self.deb))
+        r = self.check(site.url + "update.json", self.mirror.url + "update.json")
+        with self.assertRaises(update.UpdateError) as caught:
+            update.download(r.offer, self.root / "dl", "openhamshack-nb/0.1.8")
+        self.assertIn("404", str(caught.exception))             # the first address's error
+        self.assertEqual(list((self.root / "dl").iterdir()), [])
+
+
 # ---------------------------------------------------------------- end to end
 @unittest.skipUnless(HAVE_CRYPTO, "python3-cryptography is not installed")
 class EndToEnd(unittest.TestCase):
