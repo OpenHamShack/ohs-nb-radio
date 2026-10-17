@@ -44,6 +44,39 @@ page and guides stand in for them. For the same reason the feed carries no
 `notesUrl` any more. Old packages stay behind too. `source` uploads its
 whole folder, because its page is the GPL's directions to the source.
 
+## The update mirror (not set up yet)
+
+From 0.1.22 the apps can fall back to a second address for their feed
+when openhamshack.com refuses them - 20i StackProtect's bot challenge
+answers some VPN addresses 401, and a program cannot pass it
+(`docs/update-feed.md`, "Mirrors"). No mirror exists yet:
+`MIRROR_BASE` in `ohscore/update.py` is empty, so no client asks one.
+To bring one up:
+
+1. Pick the host (Cloudflare is the likely one: R2 or Pages) and give
+   it an address of ours, e.g. `https://updates.<domain>`. Turn off its
+   own bot protection for that address (Bot Fight Mode, challenges,
+   "under attack") - a mirror that challenges is no mirror.
+2. Copy each feed folder's uploaded files to the same path there:
+   `desktop/nb/` and `desktop/ham/` with `update.json`,
+   `update.json.sig`, every file `update.json` names and their
+   `.sha256`. Byte for byte: never re-sign, re-serialise or recompress.
+   Order as for the site: payloads, then `update.json.sig`, then
+   `update.json`.
+3. Serve `update.json` and `update.json.sig` with
+   `Cache-Control: no-cache` (or a TTL of a few minutes).
+4. Verify as step 6 below does: fetch each file back with a
+   `?v=<random>` and compare its sha256 with the local copy;
+   `curl -A openhamshack-nb/0.1.21 https://updates.<domain>/desktop/nb/update.json`
+   must give JSON, not a page.
+5. Set `MIRROR_BASE = "https://updates.<domain>"` and release. Only
+   copies from that release on know the mirror; Ray still needs 0.1.22
+   installed by hand once (or from a network the challenge lets through).
+
+From then on every release uploads to the mirror after the site, in the
+same order. `publish.sh` does not do that yet: it is a step to add once
+the host, and its upload route, are chosen.
+
 ## The upload key
 
 **The month key first.** On 09/10 Brian allowed one openhamshack.com key

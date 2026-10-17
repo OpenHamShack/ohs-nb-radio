@@ -66,11 +66,59 @@ was last installed to. On a Mac the new .app lands beside the old one,
 which the operator bins. See `docs/names.md` for the full list of what
 changed and what is not carried across automatically.
 
-Mirrors (branch `feature/update-feed-fallback`, 17/10/2026, not merged
-when this was written) add other URLs for the same feed. They combine
-with this unchanged: every URL serves the same signed bytes, so the
-`app` a mirror's copy names is the same, and a client checks the
-signature whatever URL it came from.
+Mirrors (below) add other URLs for the same feed. They combine with
+this unchanged: every URL serves the same signed bytes, so the `app` a
+mirror's copy names is the same, and a client checks the signature
+whatever URL it came from.
+
+## Mirrors
+
+A feed may have more than one address (17/10/2026). Ray's checks were
+answered 401 by 20i StackProtect's bot challenge, shown to his VPN's
+address, which a program cannot pass. Where a feed is fetched from does
+not affect trust: nothing in the manifest is believed until its
+signature checks, and every file is held to the signed size and
+SHA-256. So a mirror is any other host that carries **the same signed
+files, byte for byte**, at the same path:
+
+- `update.json`, `update.json.sig`, and every file `update.json` names,
+  under the same path as on openhamshack.com: `/desktop/nb/` and
+  `/desktop/ham/` below the mirror's base address. Copy them; never
+  re-sign, re-serialise or recompress anything. A mirror that differs by
+  one byte is a mirror whose clients refuse it.
+- Served as plain GETs with no challenge of its own (no bot check, no
+  JavaScript test, no cookie wall), and with `Cache-Control: no-cache`
+  (or a TTL of minutes) on `update.json` and `update.json.sig`, so it
+  does not keep handing out an old manifest after a release.
+- Updated in the same order as the site: payloads, then
+  `update.json.sig`, then `update.json`.
+
+The client side:
+
+- A face lists its addresses in order (`update_feeds`: its own site
+  first, then `update.with_mirrors()`, which puts the same path under
+  each base in `MIRROR_BASE`). An address is tried when the one before
+  it fails in any way: 401, 403, 429, 5xx, a timeout, no connection, or
+  a body that is not a validly signed feed (a challenge page can come
+  back as a 200 of HTML). The first that proves itself answers; the log
+  names it. A failure the next address recovers from is only logged.
+- When every address fails, the check reports the first refusal if
+  there was one, otherwise the first address's own failure.
+- Payload names are bare file names, so they resolve against the
+  address that answered. The offer also carries the same name beside
+  every other address, and the download falls through to those in turn,
+  each copy proved the same way. `notesUrl` resolves against the first
+  address, the canonical site: it opens in a browser, and a mirror
+  carries no pages.
+- `OHSNB_UPDATE_URL` / `OHSRADIO_UPDATE_URL`, when set, is the only address
+  tried: a copy pointed at a test feed never falls back to the real one.
+- `MIRROR_BASE` in `ohscore/update.py` is empty until a mirror host is
+  chosen, and an empty base adds no address: no client sends a request
+  to a host that does not exist. Setting it takes a release, and only
+  copies from that release on know the mirror.
+- The `Seen` rule holds across addresses: a mirror serving an older
+  manifest than one already accepted is refused like a stale CDN copy,
+  and the next address is tried.
 
 ## The manifest (schema 1)
 
@@ -175,7 +223,8 @@ openssl pkeyutl -verify -pubin -inkey release.pub -rawin -in update.json -sigfil
 
 ## What a client does
 
-1. GET `update.json` and `update.json.sig` - plain GETs, no query string,
+1. GET `update.json` and `update.json.sig` from the first address, or
+   the next after a failure at any step to 4 (Mirrors, above) - plain GETs, no query string,
    no cookie, with `User-Agent: <app>/<version>` and nothing else about
    the machine. Up to 64 KiB and exactly 64 bytes.
 2. Parse the JSON only to read `key`. Refuse if the key is not trusted;
@@ -194,7 +243,8 @@ openssl pkeyutl -verify -pubin -inkey release.pub -rawin -in update.json -sigfil
    older and equals `recommended` (offered as going back). Otherwise
    nothing.
 7. On the operator's click, download `url` (resolved against the
-   manifest's URL) to `<data folder>/updates/`, stopping past `size`;
+   address that answered, then beside each other address in turn if
+   that fails) to `<data folder>/updates/`, stopping past `size`;
    refuse unless size and SHA-256 match; only then give it its real name.
 8. Windows: refuse unless Windows calls the installer's Authenticode
    signature `Valid` and the signer's organisation is `360 Technology`.
@@ -259,6 +309,10 @@ Only an installed copy checks by itself - a run from source never does.
 - The sites serve both with `Cache-Control: no-cache`
   (`site/htaccess`, `site/ham/htaccess`), so 20i's CDN edge does not sit
   on an old feed. Verify after uploading with `curl` and a `?v=<random>`.
+- **A mirror** (once `MIRROR_BASE` is set) gets the same files after
+  the site, copied byte for byte in the same order, and is verified the
+  same way: each file's sha256 on the mirror equal to the local copy's.
+  Nothing uploads to a mirror yet; see `docs/publishing.md`.
 
 `tools/update-feed.py verify [--app ham]` checks a folder as a client
 would. `tools/update-feed.py write --version <older> --recommended`
@@ -268,7 +322,8 @@ the folder; an archived installer must be put back first).
 ## Taking this into another OpenHamShack repository
 
 Copy `ohscore/update.py` as it is (keep `RELEASE_KEYS` the same: one key
-for every app). Write the feed with a copy of
+for every app, and `MIRROR_BASE` the same: one mirror for every feed,
+each under its own path). Write the feed with a copy of
 `tools/update-feed.py`, changing `APPS` to that project's package names,
 file names and folders. Give the installer the `/RELAUNCH=1` entry. The
 window half is Qt-specific to NB and HAM; another app needs the same
