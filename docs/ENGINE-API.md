@@ -41,6 +41,7 @@ from ohsnb.radio import Radio
 from ohscore.engine import TxRefused     # also Feed, slot_start
 radio = Radio()                    # loads $OHS_NB_CONF / ~/.config/openhamshack-nb/config.json; opens nothing
 feeds = {k: radio.subscribe(k, 64) for k in ("wide", "zoom", "meter", "lock", "state", "toast", "events")}
+# Both apps also offer "decoders" (the decoder sessions' results, below).
 # NB also offers "mmb" (the multimedia beacon), "midtext" (the middle beacon's text) and "kgstv" (KG-STV pictures);
 # the Beacon view subscribes to those itself. And "skim" (the band skimmer's list) and "overpower" (signals over the
 # beacon, and LEILA's siren), which the Band view subscribes to.
@@ -101,6 +102,12 @@ radio.stop()                       # unkeys, closes, saves
 | `dish_reset()` (NB) | forget `dishBest` | |
 | `dish_snapshot() -> dict` (NB) | what the phone page serves: `{open, snr, best, rise, where, tone}` (`tone` the pitch in Hz) | |
 | `status_lines` | a deque of the last 120 one-a-second status lines (two minutes), for Help › Save diagnostics… (`ohscore/diag.py`) | |
+| `decoders.catalogue() -> list[dict]` | every decoder this installation has, whichever library decodes it (shack_sdr, shack_cw, ohsdigi): `{id, family, inputs, rateHz, bandwidthHz, outputs, panel, params, needs, engine, available, why, whyText, version, fixed}`. `fixed`: can run on a frequency of its own. `[]` without shack_sdr. Below. | |
+| `decoders.start(decoder, freq_hz, params=None) -> dict` | a decoder session on `freq_hz` (a dial frequency: the signal's own, RTTY's centre between mark and space), independent of the dial; saved in `decoderSessions` and started again with the radio. Returns the session (below). | `ohscore.decoders.Refused(sentence)` (a `ValueError`) with `code`: `unknown_decoder`, `decoder_unavailable` (`needs` names a codec, if that is why), `bad_params`, `outside_span`, `too_many_sessions` (`decodersMax`), `not_running` |
+| `decoders.stop(id) -> bool` | stop a session and forget it; False if there was none | |
+| `decoders.sessions() -> list[dict]` | the mode decoder (`id` `"vfo"`, while the mode is decoded by shack_sdr: RTTY) and every fixed session | |
+| `decoders.session(id, since=None) -> dict or None` | one session, with `results`: its kept results (the last 500 or 30 minutes) newer than `rev` `since` | |
+| `decoders.codecs(rescan=False) -> list[dict]` | every codec the loader knows (codec2, faad2, fdk-aac, mbelib): `{id, for, state, path, version, why, whyText, where, host, shippable}`, `state` `found`, `missing` or `refused`. The first call looks (and probes a new file in a child process); later ones answer from that until `rescan`. | |
 
 `send()` message options by mode (unknown options are dropped, not errors):
 
@@ -260,7 +267,9 @@ Decoder output as DESIGN.md "Modes" defines it, each with `"mode"`, plus `"t"`
 - ft8/ft4: `{"mode":"ft8","slot":<utc>,"snr":-12,"dt":0.2,"df":1234,"text":"CQ GM4BRI IO86","call":"GM4BRI","grid":"IO86"}`,
   plus `"ap":"a1".."a6"` on an a-priori decode and `"lowConfidence":true` on one WSJT-X would mark "?".
   The same whichever decoder produced it (ohsdigi, or jt9: `ft8DecoderInUse`); `{"mode":..,"slot":..,"error":".."}` when a slot could not be decoded at all.
-- psk/rtty/cw: `{"mode":"psk31","df":1500,"text":"abc","snr":...}` (streaming text)
+- psk/rtty/cw: `{"mode":"psk31","df":1500,"text":"abc","snr":...}` (streaming text). RTTY's, decoded by
+  shack_sdr since Radio's SDR milestone 1, are `{"mode":"rtty","text":"CQ","center":1000.0,"offsetHz":-2.1,"snr":11.0}`:
+  `text` may be several characters, `offsetHz` is how far the signal sits from `center`.
 - freedv: `{"mode":"freedv","sync":true,"snr":4.1,"text":"..."}`
 - sstv: `{"mode":"sstv","state":"start|line|done","name":"...png","line":n,"of":m}` - a `start` with `"partial": true` is a picture joined part way through, started from its line syncs with no VIS header heard: its first line is not the top, and it ends when the syncs stop (its PNG has only the lines received)
 - hsmodem (NB): `{"mode":"hsmodem","kind":...}` with the kinds and fields of
@@ -273,6 +282,40 @@ Decoder output as DESIGN.md "Modes" defines it, each with `"mode"`, plus `"t"`
 
 The exact fields come from ohscore/modes; the engine adds `t` and `dial` and
 guarantees `mode`.
+
+### `decoders`
+
+Decoder sessions' results (`ohscore/decoders.py`; RADIO-SDR-PLAN §4.3-4.4 in
+the openhamshack repo). Not in anyone's default set: a client asks for it.
+A session is shack_sdr's (Rust decoders on threads of their own, the GIL
+released) or a Python-backed one (CW through shack_cw); the mode decoder
+is the session `"vfo"` while the mode is decoded by shack_sdr (RTTY), and
+keeps sending its `events` items as well, unchanged. A fixed session takes
+a 12 kHz channel at its frequency from the engine's filter bank.
+
+```json
+{"session": "ds_3f2a", "rev": 813, "t": 1792663200.25, "type": "text", "text": "CQ TEST DE ", "offsetHz": -12.5, "snrDb": 14.0}
+{"session": "ds_3f2a", "rev": 814, "t": 1792663201.0, "type": "state", "state": "outside", "why": "outside_span", "whyText": "..."}
+```
+
+- `rev` rises by one per result, per session: a gap means one was missed;
+  `decoders.session(id, since=rev)` has the last 500 (or 30 minutes).
+- `t` is UTC from the samples, never the clock.
+- `type`: `text` (`text`, `offsetHz`, `snrDb`), `frame`, `image`, `audio`,
+  `meta` (later milestones), or `state` (`state`, `why` a code, `whyText`).
+- States: `starting`, `running`, `nosignal`, `synced`, `outside` (the
+  frequency left the receiver's span: fed nothing, and back by itself when
+  the span covers it), `budget` (paused at `decodeCpuMax`; never the mode
+  decoder), `error`, `stopped`.
+
+A session, as `sessions()` gives it:
+
+```json
+{"id": "ds_3f2a", "decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45},
+ "state": "synced", "why": null, "whyText": "", "since": "2026-10-22T10:00:00Z", "rev": 812,
+ "stats": {"snrDb": 14.2, "offsetHz": -12.5, "cpu": 0.004, "dropped": 0, "baud": 45.45, "sync": true, "chars": 120},
+ "panel": "text"}
+```
 
 ### `mmb` (OpenHamShack QO-100 NB)
 

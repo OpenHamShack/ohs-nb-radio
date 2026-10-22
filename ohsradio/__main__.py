@@ -58,8 +58,18 @@ def main(argv=None) -> int:
     ap.add_argument("--cw-skim-selftest", action="store_true",
                     help="decode a synthetic CW band in the CW skimmer's worker process and exit (0 if every "
                          "station is spotted); proves a frozen build can start the worker. Opens no radio")
+    ap.add_argument("--decode", action="append", default=[], metavar="DECODER@MHZ",
+                    help="--headless: also run this decoder on a frequency of its own, e.g. rtty@14.0835 "
+                         "(the Decoders view's sessions; repeat for more); its text is printed as it comes")
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="log in detail (DEBUG), to the log file and the console")
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ["--codec-probe"]:
+        # The codec loader's child process in a frozen build (ohscore/sdr.py):
+        # load one library and print one line. Before anything else - no
+        # logging, no config, no radio, no window.
+        from ohscore import sdr
+        return sdr.main_probe(argv[1:])
     a = ap.parse_args(argv)
     if a.cw_skim_selftest:
         # Like --pad-report: no logging setup, no config, no radio.
@@ -107,7 +117,7 @@ def _run(a) -> int:
             return 2
         return run(cfg, persist=not override, band=a.band, rf=a.rf, mode=a.mode)
     radio = Radio(cfg, persist=not override)
-    feeds = {k: radio.subscribe(k, 256) for k in ("wide", "zoom", "toast", "events", "meter", "state")}
+    feeds = {k: radio.subscribe(k, 256) for k in ("wide", "zoom", "toast", "events", "meter", "state", "decoders")}
     stop = {"now": False}
     signal.signal(signal.SIGINT, lambda *_: stop.__setitem__("now", True))
     signal.signal(signal.SIGTERM, lambda *_: stop.__setitem__("now", True))
@@ -117,6 +127,13 @@ def _run(a) -> int:
     except Exception as e:  # noqa: BLE001
         print(f"Could not start: {e}", file=sys.stderr)
         return 1
+    for want in a.decode:
+        name, _, mhz = want.partition("@")
+        try:
+            sess = radio.decoders.start(name, float(mhz) * 1e6)
+            print(f"decoder session {sess['id']}: {name} at {float(mhz):.4f} MHz ({sess['state']})")
+        except ValueError as e:
+            print(f"--decode {want}: {e}", file=sys.stderr)
     st = radio.state()
     if st["simWhy"] and not st["simFallback"]:     # a fallback says so in its own warning
         print(f"SIMULATOR: {st['simWhy']}")
@@ -139,6 +156,13 @@ def _run(a) -> int:
                 elif k == "events":
                     for it in items:
                         print("decode:", {x: y for x, y in it.items() if x != "t"})
+                elif k == "decoders":
+                    for it in items:
+                        if it.get("type") == "text":
+                            print(f"decoder {it['session']}: {it['text']!r}")
+                        elif it.get("type") == "state":
+                            print(f"decoder {it['session']}: {it['state']}"
+                                  f"{' (' + it['whyText'] + ')' if it.get('whyText') else ''}")
             if time.monotonic() >= next_line:
                 next_line += 1.0
                 print(status_line(radio.state(), counts), flush=True)

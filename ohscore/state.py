@@ -190,6 +190,25 @@ class Registry:
             fn(st)
 
 
+
+def _clean_sessions(value: list) -> list:
+    """decoderSessions: a list of {decoder, freqHz, params}, at most 16."""
+    if not isinstance(value, list) or len(value) > 16:
+        raise ValueError(_("decoderSessions must be a list of at most 16 sessions"))
+    out = []
+    for v in value:
+        if not isinstance(v, dict) or not isinstance(v.get("decoder"), str) or not v["decoder"]:
+            raise ValueError(_("Each decoder session needs a decoder"))
+        try:
+            freq = float(v.get("freqHz"))
+        except (TypeError, ValueError):
+            raise ValueError(_("Each decoder session needs a frequency in hertz")) from None
+        params = v.get("params") or {}
+        if not isinstance(params, dict) or not all(isinstance(x, (bool, int, float, str)) for x in params.values()):
+            raise ValueError(_("A decoder session's settings must be plain values"))
+        out.append({"decoder": v["decoder"][:32], "freqHz": freq, "params": dict(params)})
+    return out
+
 def add_shared_keys(reg: Registry) -> None:
     """The keys both apps have. Help text here is the app-neutral wording;
     an app that means something narrower (a QO-100 downlink dial, say)
@@ -333,6 +352,21 @@ def add_shared_keys(reg: Registry) -> None:
            "if it is missing or fails. WSJT-X's jt9 puts jt9 first. Whichever is not decoding checks the other's "
            "work, where both are installed.")
 
+    # --- decoders (ohscore/decoders.py, shack_sdr; RADIO-SDR-PLAN §3.4, §4.3) ---------
+    # Fixed-frequency decoder sessions, beside the mode decoder: how many may
+    # run, the processor time they may share (the host pauses the newest
+    # when they would take more, never the mode decoder), and the sessions
+    # themselves, which start again with the radio. Both limits take effect
+    # when the radio next starts: the host is made with them.
+    k("decodersMax", "int", 4, "setting", lo=0, hi=16, restart=True,
+      help="How many decoders may run on frequencies of their own, beside the mode's decoder.")
+    k("decodeCpuMax", "float", 0.25, "setting", lo=0.05, hi=1.0, restart=True,
+      help="The share of one processor core the decoders may use between them. Past it the newest is paused until "
+           "there is room; the mode's own decoder is never paused.")
+    k("decoderSessions", "list", [], "setting", validate=_clean_sessions,
+      help="The decoders running on frequencies of their own, started again with the radio: each one's decoder, "
+           "frequency (Hz) and settings.")
+
     # --- IQ recording (ohscore/sigmf.py) --------------------------------------------
     k("recLimitMin", "float", 0.0, "setting", lo=0.0, hi=600.0, unit="min",
       help="Stop an IQ recording by itself after this many minutes (0: only when you stop it). At 1.2 MS/s a "
@@ -437,6 +471,9 @@ def add_shared_keys(reg: Registry) -> None:
                                        "failed)' after a fallback; '' in other modes."),
         ("decoderMissing", "str", "", "Why the chosen mode cannot be decoded here (no decoder in this installation, "
                                       "or it failed to start); '' when it can, or the mode needs none."),
+        ("decoders", "dict", {}, "The decoder sessions (ohscore/decoders.py): available, how many run, the "
+                                 "processor share they may use, and which codecs are missing (null until the "
+                                 "first look)."),
     ]:
         k(name, type_, default, "status", help=help_)
 

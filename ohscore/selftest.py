@@ -20,7 +20,8 @@ closes it again; FreeDV once per waveform the registry knows. A decoder
 that is listed as available but will not construct is a failure, as is one
 listed as unavailable. FT8, FT4, Q65 and JS8 go further: a message
 encoded here is decoded through the very function the slot decoder calls
-with ohsdigi, so a module that imports but cannot decode is caught too.
+with ohsdigi, so a module that imports but cannot decode is caught too;
+RTTY likewise through shack_sdr's decoder.
 
 Every mode the app offers must decode, in the store form too. Q65 and JS8
 were "not carried" there until ohsdigi decoded them (10/10/2026): they
@@ -104,6 +105,29 @@ def _decodes_js8() -> str:
     return "" if want in got else f"ohsdigi decoded {got!r} from {want!r}"
 
 
+def _decodes_rtty() -> str:
+    """'' if RTTY this installation encoded comes back through the mode
+    decoder - shack_sdr's Rust decoder in its own host (modes/sdrmode.py) -
+    else why not. The store image carries shack_sdr as a wheel unpacked
+    at build time, the same way 0.1.10-beta.1 lost ohsdigi, so a module
+    that imports but cannot decode is caught here too."""
+    from .modes import rtty, sdrmode
+    from . import sdr
+    if not sdr.available():
+        return sdr.why()
+    audio = rtty.Encoder().render(text=ROUND_TRIP, center=1000.0)
+    pcm = np.concatenate([np.zeros(6000, np.float32), 0.3 * audio, np.zeros(6000, np.float32)])
+    dec = sdrmode.rtty_decoder(lambda ev: None)
+    try:
+        for i in range(0, len(pcm), 1200):
+            dec.feed(pcm[i:i + 1200], i / 12_000.0)
+        dec.drain()
+        got = dec.text
+    finally:
+        dec.close()
+    return "" if ROUND_TRIP in got else f"shack_sdr decoded {got!r} from {ROUND_TRIP!r}"
+
+
 def _construct(mode: str, freedv_mode: str, folder: str) -> str:
     """'' if the engine's decoder for `mode` constructs, else why not."""
     info, missing = modes_glue._entry(mode, freedv_mode)
@@ -157,6 +181,8 @@ def check(app: str) -> list[dict]:
                         why = _decodes_js8()
                     if not why and mode == "q65":
                         why = _decodes_q65()
+                    if not why and mode == "rtty":
+                        why = _decodes_rtty()
                 except Exception as e:  # noqa: BLE001 - a crash is a failure to report, not to hide
                     why = f"{type(e).__name__}: {e}"
                 rows.append({"mode": label, "ok": not why, "required": required, "why": why})

@@ -95,7 +95,8 @@ from . import audio as audio_mod
 from . import diag
 from . import host
 from . import sigmf
-from . import modes_glue
+from . import modes_glue, sdr
+from .decoders import Decoders
 from . import countries
 from . import dxcc
 from . import pskreporter
@@ -309,7 +310,9 @@ class Engine:
     STATE = None                 # ohscore.state.Registry
     CONFIG = None                # ohscore.config.Config
     DEVICES = None               # ohscore.devices.DeviceRegistry
-    FEED_KINDS: tuple = ("wide", "zoom", "events", "meter", "state", "toast")
+    # decoders: the decoder sessions' results (ohscore/decoders.py), never in
+    # anyone's default set.
+    FEED_KINDS: tuple = ("wide", "zoom", "events", "meter", "state", "toast", "decoders")
     PRESETS: list = []           # built-in memories
     FREQ_KEY = "dl"              # what log records and memories call their frequency
     LOG_TITLE = ""               # first line of an ADIF export
@@ -435,6 +438,12 @@ class Engine:
                 logging.getLogger(self.LOGGER).warning("station profile not adopted", exc_info=True)
         self.lock = threading.RLock()
         self.feeds: dict[str, list[Feed]] = {k: [] for k in self.FEED_KINDS}
+        # Decoder sessions (ohscore/decoders.py): the host is made by start().
+        # The codec loader learns this app's folders first, before anything
+        # (FreeDV's look for codec2) can ask it a question.
+        sdr.configure(self.CONFIG.app.name, self.data_dir,
+                      data_from_env=bool(data_dir) or bool(self.CONFIG.app.getenv("DATA")))
+        self.decoders = Decoders(self)
         self._inj_audio, self._inj_device = audio, device
         self.dev = None
         self.audio = None
@@ -645,6 +654,18 @@ class Engine:
                 if self.st.get(k) != v:
                     self.st[k] = v
                     self.pending[k] = v
+
+    def _keep_setting(self, key: str, value) -> None:
+        """A setting the engine itself changes (the decoder sessions it
+        runs), validated, published and saved like an operator's change,
+        without set()'s restart and authorisation rules: it is the record
+        of what is running, not a request to change it."""
+        value = self.STATE.coerce(key, value)
+        with self.lock:
+            self.st[key] = value
+            self.pending[key] = value
+            self.cfg[key] = value
+            self.dirty = True
 
     def set(self, authorise: bool = False, **changes) -> dict:
         """Validate and apply. All-or-nothing: one bad value and nothing
@@ -862,6 +883,7 @@ class Engine:
         self.rx_gain_applied = self._rx_gain_wanted(self.st)     # open() applied the configured gain
         self.rx_samples = 0
         self.modes_info = self._mode_caps(modes_glue.available(self.STATE.modes, self.st["freedvMode"]))
+        self.decoders.open(realtime)
         self.running = True
         self.last_heartbeat = time.monotonic()
         self._status(running=True, error="", canTx=bool(self.dev.can_tx), fs=fs, modes=self.modes_info,
@@ -871,6 +893,8 @@ class Engine:
         self._derive()
         self.watch.seed(dict(self.st))
         self.reconf = True
+        self.decoders.restore()
+        self.decoders.scan_codecs_later()
         for name, fn in (("rx", self._rx_loop), ("decode", self._decode_loop), ("supervisor", self._supervise)):
             t = threading.Thread(target=fn, name=f"{self.THREAD_PREFIX}-{name}", daemon=True)
             self.threads.append(t)
@@ -965,6 +989,10 @@ class Engine:
             # never lands in the middle of its read (one block at most).
             pf.stop()
             pf.thread.join(timeout=1.0)
+        # The decoder host before the device (RADIO-SDR-PLAN §3.5): it holds
+        # no hardware, so this never delays the broker's release, and its
+        # workers join within a second.
+        self.decoders.close()
         if self.dev:
             try:
                 self.dev.close()
@@ -1216,6 +1244,10 @@ class Engine:
                 opts["speed"] = int(self.st.get("hsSpeed") or 4410)
             if mode in ("ft8", "ft4", "q65", "js8"):
                 opts["calls"] = self._slot_calls
+            if modes_glue.hosted(mode):
+                # A shack_sdr session in the engine's own host, listed as
+                # the decoder session "vfo" (ohscore/decoders.py).
+                opts["link"] = self.decoders.link()
             if mode in ("ft8", "ft4"):
                 # Asked at every slot, like the calls, so Settings' choice
                 # applies from the next slot; the decoder says which one it
@@ -1239,6 +1271,9 @@ class Engine:
         self._status(decoderMissing=missing)
         old, self.decoder = self.decoder, dec
         if old is not None:
+            retire = getattr(old, "retire", None)
+            if retire is not None:
+                retire()            # a decoder session (modes/sdrmode.py) ends with its mode
             self.retired.append(old)
 
     def _slot_calls(self) -> tuple[str, str]:
@@ -1471,9 +1506,10 @@ class Engine:
         if not (s["mode"] == "freedv" and self.decoder is not None):
             with self.play_lock:
                 self.audio.play(heard * np.float32(vol))
+        utc = self._audio_utc(now, len(audio))
         if self.decoder is not None:
             try:
-                self.decode_q.put_nowait((audio, self._audio_utc(now, len(audio))))
+                self.decode_q.put_nowait((audio, utc))
             except queue.Full:
                 pass
 
@@ -1487,6 +1523,8 @@ class Engine:
 
         # The app's consumers that follow the channels.
         self._rx_monitor(X, starts, t_stream)
+        # The fixed decoder sessions' channels (ohscore/decoders.py).
+        self.decoders.rx(X, starts, utc)
 
         if now >= self.meter_due:
             self.meter_due = now + 0.1
@@ -2733,6 +2771,7 @@ class Engine:
                          rxLate=self.rx_late, rxLostS=round(self.rx_lost / self.geo.fs, 3),
                          rxBehindS=round(self.prefetch.behind_s, 3) if self.prefetch is not None else 0.0,
                          rxStreamPct=self._stream_pct(now), **self._supervise_status())
+            self.decoders.tick()
             self._keyer_tick(now)
             self._diag_tick(now)
             self._rec_tick()

@@ -84,8 +84,10 @@ UPLINK_NO_CLASS = ("Whether your licence allows a QO-100 uplink is not checked u
 # required one since 05/10/2026 and nobody is upgrading into it unset).
 NO_LICENCE_WARN = ("No licence class is set, so the uplink can't be checked against your licence. Transmitting "
                    "is not refused: choose yours in Settings › Licence.")
+# decoders: the decoder sessions' results (ohscore/decoders.py); NB runs
+# only its mode decoder there in Radio's SDR milestone 1, listed as "vfo".
 FEED_KINDS = ("wide", "zoom", "events", "lock", "meter", "state", "toast", "mmb", "midtext", "kgstv", "skim",
-              "overpower")
+              "overpower", "decoders")
 CLICK_BEACONS = ("lower", "middle", "upper")    # what click-to-lock can be told a signal is
 # The warning that our downlink is over the beacon (_level_warn). It comes
 # on at LEVEL_WARN_DB over and goes only once the level is back under

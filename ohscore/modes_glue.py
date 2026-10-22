@@ -46,6 +46,13 @@ def _entry(name: str, freedv_mode: str = "700d"):
     return info, ("" if info.available else info.why)
 
 
+def hosted(name: str) -> bool:
+    """Whether `name`'s decoder is a shack_sdr session, which the engine
+    hands a link to its own decoder host (modes/sdrmode.py)."""
+    info = _registry().get(name)
+    return bool(getattr(info, "hosted", False))
+
+
 def why_not(name: str, freedv_mode: str = "700d") -> tuple[str, str]:
     """(the mode's label, the sentence saying why it cannot be decoded
     here, '' if it can), for the engine to tell the operator when a mode

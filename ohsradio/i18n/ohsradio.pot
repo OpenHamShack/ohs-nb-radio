@@ -10,7 +10,7 @@ msgstr ""
 msgid "'{command}' failed on the radio (exit {status}: {output}). The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:799
+#: ohsradio/radio.py:800
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -43,7 +43,7 @@ msgstr ""
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
 
-#: ohsradio/radio.py:538
+#: ohsradio/radio.py:539
 #, python-brace-format
 msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
 msgstr ""
@@ -113,7 +113,7 @@ msgstr ""
 msgid "The CW skimmer stopped."
 msgstr ""
 
-#: ohsradio/radio.py:584
+#: ohsradio/radio.py:585
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
@@ -150,12 +150,12 @@ msgstr ""
 msgid "The settings were written, but the radio did not restart within {secs:.0f} s and still runs as {chip}. Unplug it and plug it back in, wait half a minute, then use Help › Check radio…."
 msgstr ""
 
-#: ohsradio/radio.py:499
+#: ohsradio/radio.py:500
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz ({radio} MHz through {converter}) is outside it"
 msgstr ""
 
-#: ohsradio/radio.py:502
+#: ohsradio/radio.py:503
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
@@ -164,7 +164,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:757
+#: ohsradio/radio.py:758
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -287,7 +287,7 @@ msgstr ""
 msgid "{error}. The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:582
+#: ohsradio/radio.py:583
 #, python-brace-format
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""

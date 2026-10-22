@@ -69,9 +69,10 @@ from . import plans
 from .plans import repeaters
 from .sequencer import Sequencer, SequencerError, make_output
 
-# cwskim and cwspot: the CW skimmer (cwskim.py, docs/ENGINE-API.md). Never in
-# the server's default set, so a client gets them only when it asks.
-FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot")
+# cwskim and cwspot: the CW skimmer (cwskim.py, docs/ENGINE-API.md); decoders:
+# the decoder sessions' results (ohscore/decoders.py). Never in the
+# server's default set, so a client gets them only when it asks.
+FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders")
 # How long after a re-centring the receive channel is taken to hold the
 # new centre's samples (Radio._rx_settled): a device read and the analysis
 # bank's overlap are a few tens of milliseconds at every supported rate;

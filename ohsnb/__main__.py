@@ -88,6 +88,12 @@ def main(argv=None) -> int:
                          "(the window's dummy-load tick and confirmation, for a run with nobody to click them)")
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="log in detail (DEBUG), to the log file and the console")
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ["--codec-probe"]:
+        # The codec loader's child process in a frozen build (ohscore/sdr.py):
+        # load one library and print one line, before anything else.
+        from ohscore import sdr
+        return sdr.main_probe(argv[1:])
     a = ap.parse_args(argv)
     if a.keyed and (a.rig_diagnostic is None or not a.promised):
         # Before anything is opened: over SSH nobody is at the radio to

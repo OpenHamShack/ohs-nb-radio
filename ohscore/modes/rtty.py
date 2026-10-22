@@ -2,6 +2,15 @@
 shift state, 1.5 stop bits. 12 kHz mono float32 audio, same as every other
 mode here.
 
+This is the transmit half, and the code table both halves agree on.
+Receive is shack_sdr's Rust decoder since Radio's SDR milestone 1
+(modes/sdrmode.py): the Python decoder that lived here was removed once
+its scores on a synthetic sweep were captured as the golden numbers the
+Rust one must never fall below (ohs-libs shack_sdr testdata/rtty/
+golden.json). The notes below on why a receiver needs a squelch, LTRS at
+the start and unshift-on-space are the reasons the encoder is written as
+it is, and why the Rust decoder does what this one did.
+
 RTTY is asynchronous, character by character, which is the one thing that
 makes it more forgiving than it looks: every character carries its own
 start bit, so the decoder only has to find *that* character's edge and can
@@ -28,7 +37,6 @@ stop that, each the convention real RTTY software follows:
 from __future__ import annotations
 
 import numpy as np
-from typing import Callable
 
 FS = 12_000.0
 
@@ -60,21 +68,15 @@ FIGURE_TO_CODE = {f: c for c, l, f in _ROWS if f}
 LTRS, FIGS = "11111", "11011"
 SPACE, CR, LF = "00100", "00010", "01000"
 
-# The decoder prints what a teleprinter would have put on the paper. CR and
-# LF arrive as a pair (CR LF, or CR CR LF from older habits) and become one
-# line break: LF is the newline, CR prints nothing. BELL rang the bell and
-# printed nothing, and blank (00000) did nothing at all, so neither is shown:
-# handed to the terminal as raw control codes they drew as an empty box.
-_SILENT = {"\r", "\a", None}
-
 
 def _text_to_codes(text: str) -> list[str]:
     """Letters and figures each have their own code space; this inserts a
     shift code whenever the next character isn't in the table the line is
     currently shifted to, mirroring what a real Baudot teleprinter did.
 
-    Unshift-on-space: a space puts the receiver back in letters (see
-    Decoder._on_code), so a figure after a space needs its FIGS again.
+    Unshift-on-space: a space puts the receiver back in letters (every
+    receiver we work does it, shack_sdr's included), so a figure after a
+    space needs its FIGS again.
     A newline goes as CR LF, the teleprinter's carriage return and line
     feed; a bare CR in the text is dropped so CR LF is not doubled."""
     out: list[str] = []
@@ -175,156 +177,3 @@ class Encoder:
         if not out:
             return np.zeros(1, np.float32)
         return np.concatenate(out)
-
-
-class Decoder:
-    """Async start-stop decode. Mark/space energy is measured with two
-    vectorised Goertzels per quarter-bit interval (one matmul each per
-    feed() call covering the whole new block); only the resulting sparse
-    per-quarter-bit series is walked by a Python loop to find start
-    edges and read bits -- a few hundred iterations per second, not
-    a per-sample loop.
-
-    `squelch` is the minimum mean mark/space contrast, 0..1, a frame must
-    show to be printed when nothing has been copied for a while; `hold`
-    the lower one that applies for HOLD_S after a frame that passed (see
-    _frame)."""
-
-    # Per bit: (|mark| - |space|) / (|mark| + |space|), summed over the bit's
-    # two middle quarters, is near +-1 for a clean FSK bit and spread around
-    # +-0.3 for noise (two Rayleigh magnitudes). A frame's mean over its seven
-    # bits (start and stop counted with their expected sign) is what the
-    # squelch compares. Measured (600 s of noise, the message at 0-40 Hz off
-    # tune, tests/test_modes_rtty.py keeps the figures honest):
-    #   noise frames above 0.35: 5 a minute; above 0.40: 0.8; above 0.45: none
-    #   a signal's 10th percentile: 0.58 at 0 dB SNR (3 kHz), 0.46 at -3 dB,
-    #   0.51 at 0 dB but 25 Hz off tune (the leak between 66-sample bins).
-    # So a frame opens the squelch at 0.45 - noise effectively never does -
-    # and while copy is running the bar drops to 0.35 for a second and a
-    # half, so one weak frame inside a message is still printed. Ending an
-    # over then costs, on average, a tenth of a garbage character.
-    SQUELCH = 0.45
-    HOLD = 0.35
-    HOLD_S = 1.5
-    ENVELOPE = 0.4
-
-    def __init__(self, emit: Callable[[dict], None], baud: float = 45.45, shift: float = 170.0,
-                 center: float = 1000.0, squelch: float | None = None, hold: float | None = None, **_opts):
-        self.emit = emit
-        self.baud = baud
-        self.center = center
-        self.squelch = self.SQUELCH if squelch is None else float(squelch)
-        self.hold = min(self.squelch, self.HOLD if hold is None else float(hold))
-        self._hold_q = int(round(self.HOLD_S * baud * 4))   # HOLD_S in quarter-bits
-        mark_f = center + shift / 2
-        space_f = center - shift / 2
-        self.frame_len = max(1, int(round(FS / baud / 4)))  # one quarter of a bit interval
-        n = np.arange(self.frame_len)
-        self._basis_mark = np.exp(-2j * np.pi * mark_f * n / FS)
-        self._basis_space = np.exp(-2j * np.pi * space_f * n / FS)
-        self.reset()
-
-    def reset(self) -> None:
-        self._buf = np.zeros(0, dtype=np.float32)
-        self._mark = np.zeros(0, dtype=np.float64)   # |Goertzel| at mark, one per quarter-bit
-        self._space = np.zeros(0, dtype=np.float64)  # and at space
-        self._scan = 1            # index into the series: search for the next start edge from here
-        self._base = 0            # quarters trimmed off the front so far (absolute = base + index)
-        self._open_until = -1     # absolute quarter until which the lower `hold` bar applies
-        self._shifted_to_figs = False
-        self._text = ""
-
-    def feed(self, audio: np.ndarray, t: float) -> None:
-        buf = np.concatenate([self._buf, audio.astype(np.float32)])
-        n_frames = len(buf) // self.frame_len
-        if n_frames:
-            used = n_frames * self.frame_len
-            self._buf = buf[used:]
-            frames = buf[:used].reshape(n_frames, self.frame_len).astype(np.complex128)
-            self._mark = np.concatenate([self._mark, np.abs(frames @ self._basis_mark)])
-            self._space = np.concatenate([self._space, np.abs(frames @ self._basis_space)])
-        else:
-            self._buf = buf
-
-        pol = self._mark - self._space
-        # A frame is start + 5 data + 1.5 stop bits, 4 quarter-bits each; the
-        # stop bit is read in its first bit, so 7 bits of quarters are needed.
-        NEEDED = 7 * 4
-        while True:
-            # The next mark->space edge: a quarter that reads space after one
-            # that read mark. Only edges, not every space quarter: after a
-            # rejected candidate the rest of that space run is the same
-            # (non-)start bit, and trying each of its quarters in turn was
-            # how noise got several chances at every dip.
-            seg = pol[self._scan - 1:]
-            edges = np.where((seg[1:] < 0) & (seg[:-1] >= 0))[0]
-            if len(edges) == 0:
-                self._scan = max(1, len(pol) - 1)
-                break
-            j = self._scan + int(edges[0])
-            if j + NEEDED > len(pol):
-                self._scan = j  # wait for more data; re-examine this same edge next time
-                break
-            code = self._frame(j)
-            if code is None:
-                self._scan = j + 1
-                continue
-            self._on_code(code)
-            # Resume inside the stop bit: the earliest the next start edge can be.
-            self._scan = j + 6 * 4 + 2
-
-        # Trim what can never be touched again (keep a small margin so a
-        # partially-matched search at the tail isn't thrown away).
-        if self._scan > 256:
-            drop = self._scan - 32
-            self._mark = self._mark[drop:]
-            self._space = self._space[drop:]
-            self._scan -= drop
-            self._base += drop
-
-    def _frame(self, j: int) -> str | None:
-        """The five data bits of a frame whose start edge is quarter `j`, or
-        None if it is not a frame worth printing.
-
-        Quarter j is the first to read space, so the true edge lies within
-        half a quarter of j's start; bit k then certainly covers quarters
-        j+4k+1 and j+4k+2, and those two are what it is read from. Reading
-        one quarter (the old way) threw away half of every bit's energy for
-        nothing; reading all four would let a neighbour's bit leak in."""
-        idx = j + 4 * np.arange(7)[:, None] + np.array([1, 2])[None, :]
-        m = self._mark[idx].sum(axis=1)
-        s = self._space[idx].sum(axis=1)
-        d = m - s
-        if d[0] >= 0 or d[6] <= 0:
-            return None      # no start bit, or no stop bit: not a frame
-        contrast = np.abs(d) / np.maximum(m + s, 1e-12)
-        bar = self.hold if self._base + j <= self._open_until else self.squelch
-        if contrast.mean() < bar:
-            return None      # bits that look like noise, not a two-tone signal
-        e = m + s
-        if e.min() < self.ENVELOPE * e.max():
-            return None      # not constant-envelope: noise at one end, a signal at the other
-        self._open_until = self._base + j + self._hold_q
-        return "".join("1" if x > 0 else "0" for x in d[1:6])
-
-    def _on_code(self, code: str) -> None:
-        if code == LTRS:
-            self._shifted_to_figs = False
-            return
-        if code == FIGS:
-            self._shifted_to_figs = True
-            return
-        ch = (CODE_TO_FIGURE if self._shifted_to_figs else CODE_TO_LETTER).get(code)
-        if code == SPACE:
-            # Unshift-on-space (fldigi's and MMTTY's default, and what our
-            # encoder assumes): a space returns to letters, so a lost LTRS
-            # garbles one group of figures rather than everything after it.
-            self._shifted_to_figs = False
-        if ch in _SILENT:
-            return
-        self._text += ch
-        self.emit({"mode": "rtty", "text": ch, "center": self.center})
-
-    @property
-    def text(self) -> str:
-        return self._text

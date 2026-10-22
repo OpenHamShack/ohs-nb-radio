@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Callable
 
-from . import cw, rtty, psk, ft8, freedv, js8, q65, sstv, hsmodem, kgstv
+from . import cw, rtty, psk, ft8, freedv, js8, q65, sstv, hsmodem, kgstv, sdrmode
+from .. import sdr
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,9 @@ class ModeInfo:
     passband_hz: tuple[float, float]
     make_decoder: Callable[..., object]
     make_encoder: Callable[..., object] | None  # None where there's no sensible standalone encoder (FT8/FT4 use jt9's wrapper itself; SSTV decode-only modes)
+    # Decoded by a shack_sdr session (modes/sdrmode.py): the engine hands
+    # its decoder a link to the engine's own decoder host.
+    hosted: bool = False
 
 
 def _text_entry(id_: str, label: str, module, offset: float, passband: tuple[float, float], **fixed) -> ModeInfo:
@@ -43,6 +47,18 @@ def _text_entry(id_: str, label: str, module, offset: float, passband: tuple[flo
         make_encoder=partial(module.Encoder().render, **fixed) if hasattr(module, "Encoder") else None,
     )
 
+
+# RTTY: shack_sdr's Rust decoder (RADIO-SDR-PLAN §8.1) for receive, in both
+# apps; rtty.py's encoder for Enable TX and send(), unchanged. Listed with
+# the reason on a package built for no particular processor, which carries
+# no shack_sdr (ohscore/sdr.py).
+_rtty_entry = ModeInfo(
+    id="rtty", label="RTTY 45.45/170", kind="text", available=sdr.available(), why=sdr.why(),
+    offset_hz=1000.0, passband_hz=(830.0, 1170.0),
+    make_decoder=sdrmode.rtty_decoder,
+    make_encoder=rtty.Encoder().render,
+    hosted=True,
+)
 
 _ft8_entry = ModeInfo(
     id="ft8", label="FT8", kind="slot",
@@ -130,7 +146,7 @@ _kgstv_entry = ModeInfo(
 
 MODES: dict[str, ModeInfo] = {
     "cw": _text_entry("cw", "CW", cw, offset=700.0, passband=(400.0, 1000.0)),
-    "rtty": _text_entry("rtty", "RTTY 45.45/170", rtty, offset=1000.0, passband=(830.0, 1170.0)),
+    "rtty": _rtty_entry,
     "psk31": _text_entry("psk31", "PSK31", psk, offset=1000.0, passband=(970.0, 1030.0), variant="psk31"),
     "psk63": _text_entry("psk63", "PSK63", psk, offset=1000.0, passband=(940.0, 1060.0), variant="psk63"),
     "psk125": _text_entry("psk125", "PSK125", psk, offset=1000.0, passband=(875.0, 1125.0), variant="psk125"),

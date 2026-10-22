@@ -9,7 +9,7 @@ msgstr ""
 msgid "'Key the IC-9700 for digital modes' is off: the level set keys the radio exactly as a digital over does, so it needs it on and saved"
 msgstr ""
 
-#: ohsnb/radio.py:1482
+#: ohsnb/radio.py:1484
 msgid "A recording is running: the hold is marked in it."
 msgstr ""
 
@@ -23,7 +23,7 @@ msgstr ""
 msgid "Band on MAIN"
 msgstr ""
 
-#: ohsnb/radio.py:849
+#: ohsnb/radio.py:851
 #, python-brace-format
 msgid "Beacon lock: no beacon within +-{tight:g} kHz of the correction held; searching +-{search:g} kHz"
 msgstr ""
@@ -67,7 +67,7 @@ msgstr ""
 msgid "DATA MOD set to USB"
 msgstr ""
 
-#: ohsnb/radio.py:875
+#: ohsnb/radio.py:877
 #, python-brace-format
 msgid "GPS-locked LNB: predicted transmit correction {pred:+.0f} Hz"
 msgstr ""
@@ -112,7 +112,7 @@ msgstr ""
 msgid "NB's level was not changed."
 msgstr ""
 
-#: ohsnb/radio.py:723
+#: ohsnb/radio.py:725
 #, python-brace-format
 msgid "Not locked to the {beacon} there: {error}"
 msgstr ""
@@ -135,7 +135,7 @@ msgstr ""
 msgid "Over {n} of {total}: {what}"
 msgstr ""
 
-#: ohsnb/radio.py:882
+#: ohsnb/radio.py:884
 msgid "Own signal not found near the expected place; searching the whole band"
 msgstr ""
 
@@ -144,12 +144,12 @@ msgstr ""
 msgid "RF POWER is not low{rf}, so the audio reaching the radio is too hot. Its USB MOD Level is {pct} %, in the usual range, so Check and set leaves it: turn it down on the radio (SET > Connectors > MOD Input > USB MOD Level), to 20 % say, then set the level again."
 msgstr ""
 
-#: ohsnb/radio.py:1470
+#: ohsnb/radio.py:1472
 #, python-brace-format
 msgid "Receive gain held at {db:g} dB (manual), the Receiver gain setting - the radio could not say where its AGC was. The AGC is back when you close this."
 msgstr ""
 
-#: ohsnb/radio.py:1474
+#: ohsnb/radio.py:1476
 #, python-brace-format
 msgid "Receive gain held at {db:g} dB (manual), where the AGC had it. The AGC is back when you close this."
 msgstr ""
@@ -187,22 +187,22 @@ msgstr ""
 msgid "Stopped: the over ended before the level was found. Nothing was changed."
 msgstr ""
 
-#: ohsnb/radio.py:1108
+#: ohsnb/radio.py:1110
 #, python-brace-format
 msgid "TX lock measured the IC-9700 {err:+.0f} Hz off, more than the {cap:.0f} Hz it may correct (Settings › Transmitter): not corrected. Check the radio's frequency reference"
 msgstr ""
 
-#: ohsnb/radio.py:1179
+#: ohsnb/radio.py:1181
 #, python-brace-format
 msgid "TX lock stopped correcting the IC-9700: its {step:+.0f} Hz correction did not show on the downlink, so the signal it measured may not be yours. Correction put back to {corr:+.0f} Hz; switch TX lock off and on to try again"
 msgstr ""
 
-#: ohsnb/radio.py:1127
+#: ohsnb/radio.py:1129
 #, python-brace-format
 msgid "TX lock: the IC-9700 landed {err:+.0f} Hz off; corrected by {step:+.0f} Hz for the next over, the most one over moves it (rigTxCorr {corr:+.0f} Hz)"
 msgstr ""
 
-#: ohsnb/radio.py:1131
+#: ohsnb/radio.py:1133
 #, python-brace-format
 msgid "TX lock: the IC-9700 landed {err:+.0f} Hz off; corrected for the next over (rigTxCorr {corr:+.0f} Hz)"
 msgstr ""
@@ -305,7 +305,7 @@ msgstr ""
 msgid "The IC-9700's settings changed since the check: check again"
 msgstr ""
 
-#: ohsnb/radio.py:1200
+#: ohsnb/radio.py:1202
 #, python-brace-format
 msgid "The IC-9700's stored correction ({corr:+.0f} Hz) is more than the {cap:.0f} Hz TX lock may correct: reset to 0"
 msgstr ""
@@ -314,7 +314,7 @@ msgstr ""
 msgid "The keyed checks need your confirmation of the band and power first"
 msgstr ""
 
-#: ohsnb/radio.py:643
+#: ohsnb/radio.py:645
 msgid "The over-power watch is off (Settings › LNB & locks)"
 msgstr ""
 
@@ -348,7 +348,7 @@ msgstr ""
 msgid "The transmit filter may be 2.7 kHz wide at most (QO-100 rule)"
 msgstr ""
 
-#: ohsnb/radio.py:1292
+#: ohsnb/radio.py:1294
 #, python-brace-format
 msgid "The {name} setup assistant is using the radio: wait for it to finish"
 msgstr ""
@@ -370,12 +370,12 @@ msgstr ""
 msgid "Transmit gain cannot exceed the ceiling of {ceiling:g} dB set in Settings"
 msgstr ""
 
-#: ohsnb/radio.py:306
+#: ohsnb/radio.py:308
 #, python-brace-format
 msgid "Transmit gain cannot exceed {cap:g} dB: more would overdrive {converter} (Settings › Converters)"
 msgstr ""
 
-#: ohsnb/radio.py:1376
+#: ohsnb/radio.py:1378
 msgid "Transmitting: dish alignment opens once you are back on receive"
 msgstr ""
 
@@ -402,7 +402,7 @@ msgstr ""
 msgid "USB MOD Level set to {pct} %"
 msgstr ""
 
-#: ohsnb/radio.py:1692
+#: ohsnb/radio.py:1694
 msgid "Unkeyed: lost the IC-9700 link mid-over. NB cannot confirm the radio stopped transmitting - check it, and release it there if it is still on the air"
 msgstr ""
 
@@ -429,7 +429,7 @@ msgstr ""
 msgid "analysis done in {secs:.1f} s"
 msgstr ""
 
-#: ohsnb/radio.py:696
+#: ohsnb/radio.py:698
 #, python-brace-format
 msgid "beacon must be one of {names}"
 msgstr ""
@@ -491,11 +491,11 @@ msgstr[1] ""
 msgid "rigctld port: a number such as 4532"
 msgstr ""
 
-#: ohsnb/radio.py:718
+#: ohsnb/radio.py:720
 msgid "set from the click"
 msgstr ""
 
-#: ohsnb/radio.py:710
+#: ohsnb/radio.py:712
 #, python-brace-format
 msgid "snapped {offset:+.0f} Hz to {why}"
 msgstr ""
@@ -609,22 +609,22 @@ msgstr ""
 msgid "{text} is not a number of hertz"
 msgstr ""
 
-#: ohsnb/radio.py:733
+#: ohsnb/radio.py:735
 #, python-brace-format
 msgid "{title} set where you clicked ({how}): rxCorr {corr:+.0f} Hz; beacon lock is on Hold, so nothing follows the drift"
 msgstr ""
 
-#: ohsnb/radio.py:736
+#: ohsnb/radio.py:738
 #, python-brace-format
 msgid "{title} set where you clicked ({how}): rxCorr {corr:+.0f} Hz; beacon lock is on Manual, so nothing follows the drift"
 msgstr ""
 
-#: ohsnb/radio.py:730
+#: ohsnb/radio.py:732
 #, python-brace-format
 msgid "{title} set where you clicked ({how}): rxCorr {corr:+.0f} Hz; beacon lock is searching +-{span:g} kHz there"
 msgstr ""
 
-#: ohsnb/radio.py:717
+#: ohsnb/radio.py:719
 #, python-brace-format
 msgid "{why}, so the click itself was used"
 msgstr ""
