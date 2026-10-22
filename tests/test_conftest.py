@@ -116,5 +116,48 @@ class GivesBackWhatAModuleLeft(unittest.TestCase):
         self.assertIn("2 passed", res.stdout)
 
 
+@unittest.skipUnless(HAVE, "needs pytest")
+class RememberedTemplates(unittest.TestCase):
+    """conftest.memoised, which the run puts around simsignals.voice: a
+    remembered template is the one the simulator would have made, and
+    the generator ends where it would have."""
+
+    def setUp(self):
+        import numpy as np
+        from conftest import memoised
+        from ohscore.devices import simsignals as sg
+        self.np = np
+        self.real = getattr(sg.voice, "__wrapped__", sg.voice)
+        self.memo = memoised(self.real, 64 << 20)
+
+    def test_a_repeat_is_the_same_samples_and_leaves_the_generator_where_the_real_one_does(self):
+        np = self.np
+        plain = np.random.default_rng(7)
+        want = self.real(plain, 2.0, (0.0, 0.5))
+        for _ in range(2):                                  # made, then remembered
+            rng = np.random.default_rng(7)
+            got = self.memo(rng, 2.0, (0.0, 0.5))
+            np.testing.assert_array_equal(got, want)
+            self.assertEqual(rng.bit_generator.state, plain.bit_generator.state)
+            self.assertEqual(rng.random(), self._next(plain))     # what the simulator draws next
+        self.assertEqual(len(self.memo.cache), 1)
+        self.assertFalse(got.flags.writeable)
+
+    def _next(self, g):
+        """The next draw from a copy of `g`, leaving `g` alone."""
+        c = self.np.random.Generator(type(g.bit_generator)())
+        c.bit_generator.state = g.bit_generator.state
+        return c.random()
+
+    def test_another_generator_state_or_argument_is_another_template(self):
+        np = self.np
+        a = self.memo(np.random.default_rng(7), 1.0)
+        b = self.memo(np.random.default_rng(8), 1.0)
+        c = self.memo(np.random.default_rng(7), 1.5)
+        self.assertEqual(len(self.memo.cache), 3)
+        self.assertFalse(np.array_equal(a, b))
+        self.assertNotEqual(len(a), len(c))
+
+
 if __name__ == "__main__":
     unittest.main()

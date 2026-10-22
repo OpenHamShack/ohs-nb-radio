@@ -107,6 +107,70 @@ def _malloc_trim():
 _trim = _malloc_trim()
 
 
+def memoised(fn, max_bytes: int):
+    """`fn(rng, *args)` - a simulator template drawn from a numpy
+    Generator - remembered by the generator's state and the arguments.
+    A repeat call returns the same samples, read-only, and leaves the
+    generator exactly where `fn` would have left it, so whatever the
+    simulator draws next is unchanged: a cached run is the uncached run.
+
+    Why. The Radio simulator builds each band's stations when it opens,
+    synchronously when it runs faster than real time (the tests): about
+    2 s a radio, nearly all of it simsignals.voice. Every Radio test
+    builds the same bands from the same seed (ham_helpers: simSeed 7,
+    13:00 UTC), so across the suite that was about 380 s of the same
+    templates made again (12% of the one-process run, main-thread
+    samples on ohs-dev, 22/10/2026).
+
+    Read-only so a template shared between two simulators can never be
+    changed under one of them: anything that tried would fail loudly. At
+    most `max_bytes` of templates are kept, the least recently used going
+    first. Thread-safe: the real-time simulator builds bands on workers."""
+    import collections
+    import functools
+    import threading
+    lock = threading.Lock()
+    cache: collections.OrderedDict = collections.OrderedDict()
+    size = [0]
+
+    @functools.wraps(fn)
+    def wrapper(rng, *args, **kwargs):
+        key = (repr(rng.bit_generator.state), args, tuple(sorted(kwargs.items())))
+        with lock:
+            hit = cache.get(key)
+            if hit is not None:
+                cache.move_to_end(key)
+        if hit is not None:
+            out, after = hit
+            rng.bit_generator.state = after
+            return out
+        out = fn(rng, *args, **kwargs)
+        out.flags.writeable = False
+        with lock:
+            if key not in cache:
+                cache[key] = (out, rng.bit_generator.state)
+                size[0] += out.nbytes
+                while size[0] > max_bytes and cache:
+                    _k, (old, _s) = cache.popitem(last=False)
+                    size[0] -= old.nbytes
+        return out
+    wrapper.cache = cache
+    return wrapper
+
+
+def _remember_voices() -> None:
+    try:
+        import scratch_home  # noqa: F401  first, as in every test file: no test may touch the real config
+        from ohscore.devices import simsignals
+    except ImportError:          # this file copied into a scratch tree (test_conftest.py)
+        return
+    if not hasattr(simsignals.voice, "cache"):
+        simsignals.voice = memoised(simsignals.voice, 512 << 20)
+
+
+_remember_voices()
+
+
 @pytest.fixture(autouse=True, scope="module")
 def _give_back_the_modules_memory():
     """After each test module, collect its garbage and hand the freed
