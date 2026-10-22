@@ -14,6 +14,18 @@ radios. SoapySDR stays as the generic route on Linux (`soapy`).
 transmit method: the engine refuses an over before anything else is asked
 ("This radio can only receive"), as it does for SoapySDR receivers.
 
+**Antenna input: the setting is `soapyAntenna`/`soapyAntennaLabels` on
+every SDR source, not only the SoapySDR path.** Those names stayed from
+when soapy.py was the only device with more than one input (RADIO-SDR-PLAN
+§6); renaming them now would break the Remote tablet picker being built
+against them (see HANDOVER.md), so they are kept and documented as
+applying to every source instead - the engine, Settings and the API treat
+`sdrplay`/`rtlsdr` the same as `soapy` (see `SourceDevice.open`,
+`set_antenna`, `status`). shack_sdr's own antenna names are
+SoapySDRPlay3's ("Antenna A/B/C", "Hi-Z", "Tuner 1/2 ...") for an RSP, and
+"RX" for an RTL-SDR, so a label saved against one path reads the same
+against the other (ohs-libs shack_sdr README "Antenna/input selection").
+
 **SDRplay's API is never ours** (Brian, 22/10/2026: use if installed, on
 every form). Without it, opening the RSP says "Install SDRplay's API to use
 this radio" - on a controller, ask the administrator, whose controller
@@ -61,6 +73,7 @@ def _sentence(kind: str, reason: str, detail: str) -> str:
         "out-of-range": _("The {radio} cannot tune that frequency."),
         "read-failed": _("The {radio} stopped sending samples."),
         "disconnected": _("The {radio} was unplugged."),
+        "bad-antenna": _("The {radio} has no such antenna input."),
     }
     text = words.get(reason, _("The {radio} failed ({reason}).")).format(radio=name, reason=reason)
     return f"{text} ({detail})" if detail else text
@@ -133,8 +146,52 @@ class SourceDevice(Device):
         self.src = self._make()
         try:
             self.src.open()
+            self._apply_saved_antenna()
         except SdrError as e:
-            self.src = None
+            src, self.src = self.src, None
+            if src is not None:
+                try:
+                    src.close()
+                except Exception:  # noqa: BLE001 - tidying up a device that never finished opening
+                    pass
+            raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
+
+    def _saved_antenna(self) -> str:
+        return str(self.cfg.get("soapyAntenna", "") or "").strip()
+
+    def _apply_saved_antenna(self) -> None:
+        """Applied here, at open, so an unknown name fails the open the
+        same way an unknown SoapySDR antenna does (soapy.py's open) rather
+        than leaving the receiver listening on the wrong input with
+        nothing said. `SdrplaySource` already took this in its own
+        constructor (RADIO-SDR-PLAN §6, `_make` below), where it is
+        validated against the model `open()` found, so by the time we get
+        here `self.src.antenna` already matches and this is a no-op;
+        `RtlSdrSource` has no such constructor argument (one input, "RX"),
+        so for that source this is the only place the saved name is ever
+        applied - through the same `set_antenna` (below) the engine calls
+        live, which is why a name the receiver does not have fails here
+        exactly as it would during a live switch."""
+        name = self._saved_antenna()
+        if name and name != self.src.antenna:
+            self.src.set_antenna(name)
+
+    def set_antenna(self, name: str) -> None:
+        """Live switch while running, called by the engine exactly as
+        SoapyDevice.set_antenna is (ohscore/engine.py `_configure_rx`): ""
+        is the driver's default, already applied at open, so there is
+        nothing to change; a name the receiver does not have raises, and
+        the engine only toasts that - never retries or falls back - so a
+        label saved for a radio later swapped for a different one cannot
+        silently try its old antenna's name."""
+        if self.src is None:
+            return
+        name = str(name or "").strip()
+        if not name:
+            return
+        try:
+            self.src.set_antenna(name)
+        except self._error as e:
             raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
 
     def set_rx_if(self, hz: float) -> None:
@@ -213,4 +270,5 @@ class SdrplayDevice(SourceDevice):
         serial = str(self.cfg.get("sdrSerial") or "").strip() or None
         gain = self._gain(self.cfg.get("rxGainMode", "slow_attack"), float(self.cfg.get("rxGain", 40.0)))
         return SdrplaySource(self.rx_if or 145_000_000.0, self.fs, gain, serial=serial,
-                             lna_state=int(self.cfg.get("sdrplayLna", 4)))
+                             lna_state=int(self.cfg.get("sdrplayLna", 4)),
+                             antenna=self._saved_antenna() or None)
