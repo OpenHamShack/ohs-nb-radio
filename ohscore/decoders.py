@@ -150,6 +150,12 @@ class Decoders:
             fixed = list(self.fixed.values())
             self.fixed.clear()
             self.vfo = None
+        # The first codec scan (scan_codecs_later) writes its probe cache
+        # into the data folder: let it finish, within a second, so nothing
+        # is written there after the radio has stopped.
+        scan = self._codec_scan
+        if scan is not None and scan.is_alive():
+            scan.join(1.0)
         if host is None:
             return True
         joined = host.close()
