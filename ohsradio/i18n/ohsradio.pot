@@ -292,7 +292,7 @@ msgstr ""
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""
 
-#: ohsradio/ui/face.py:66
+#: ohsradio/ui/face.py:67
 #, python-brace-format
 msgid "{mhz:.4f} MHz is outside what OpenHamShack Radio tunes (0.1 MHz - 6 GHz)"
 msgstr ""
@@ -302,7 +302,7 @@ msgstr ""
 msgid "{rate:g} MS/s, FIR as needed"
 msgstr ""
 
-#: ohsradio/ui/face.py:48
+#: ohsradio/ui/face.py:49
 #, python-brace-format
 msgid "{text} is not a frequency"
 msgstr ""
