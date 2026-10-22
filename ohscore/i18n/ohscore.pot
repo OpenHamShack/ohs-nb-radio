@@ -70,7 +70,7 @@ msgstr ""
 msgid "Ask your controller's administrator to install SDRplay's API (Controller › Optional libraries) to use this radio."
 msgstr ""
 
-#: ohscore/decoders.py:471
+#: ohscore/decoders.py:477
 #, python-brace-format
 msgid "Ask your controller's administrator to install {codec} (Controller › Optional libraries)."
 msgstr ""
@@ -231,7 +231,7 @@ msgstr ""
 msgid "Each decoder session needs a frequency in hertz"
 msgstr ""
 
-#: ohscore/decoders.py:463
+#: ohscore/decoders.py:469
 #, python-brace-format
 msgid "Found: {path}"
 msgstr ""
@@ -304,7 +304,7 @@ msgstr ""
 msgid "No memory called {name}"
 msgstr ""
 
-#: ohscore/decoders.py:411
+#: ohscore/decoders.py:417
 msgid "No more decoders can run at once"
 msgstr ""
 
@@ -326,12 +326,12 @@ msgstr ""
 msgid "Not a WAV file this program can read ({error}): save it as 16-bit PCM WAV"
 msgstr ""
 
-#: ohscore/decoders.py:474
+#: ohscore/decoders.py:480
 #, python-brace-format
 msgid "Not found: {codec} is normally included; reinstalling the program puts it back."
 msgstr ""
 
-#: ohscore/decoders.py:475
+#: ohscore/decoders.py:481
 #, python-brace-format
 msgid "Not installed. This program never includes {codec}: install it yourself, or put it in the codecs folder."
 msgstr ""
@@ -512,8 +512,8 @@ msgstr ""
 msgid "Size"
 msgstr ""
 
-#: ohscore/decoders.py:417
-#: ohscore/decoders.py:212
+#: ohscore/decoders.py:423
+#: ohscore/decoders.py:218
 msgid "Start the radio before adding a decoder"
 msgstr ""
 
@@ -618,7 +618,7 @@ msgstr ""
 msgid "The controller's services did not answer ({why})"
 msgstr ""
 
-#: ohscore/decoders.py:408
+#: ohscore/decoders.py:414
 #, python-brace-format
 msgid "The decoder does not take those settings ({detail})"
 msgstr ""
@@ -628,7 +628,7 @@ msgstr ""
 msgid "The decoder failed and was stopped; the log has the details."
 msgstr ""
 
-#: ohscore/decoders.py:418
+#: ohscore/decoders.py:424
 #, python-brace-format
 msgid "The decoder would not start ({code})"
 msgstr ""
@@ -638,7 +638,7 @@ msgstr ""
 msgid "The filter is fixed in {mode}"
 msgstr ""
 
-#: ohscore/decoders.py:208
+#: ohscore/decoders.py:214
 msgid "The frequency must be a number of hertz"
 msgstr ""
 
@@ -711,7 +711,7 @@ msgstr ""
 msgid "The voice keyer stopped repeating: {error}"
 msgstr ""
 
-#: ohscore/decoders.py:468
+#: ohscore/decoders.py:474
 #, python-brace-format
 msgid "The {codec} in {path} was refused: {reason}."
 msgstr ""
@@ -761,7 +761,7 @@ msgstr ""
 msgid "The {radio} would not take a setting."
 msgstr ""
 
-#: ohscore/decoders.py:215
+#: ohscore/decoders.py:221
 #, python-brace-format
 msgid "There are already {n} decoders running, the most Settings › Decoders allows"
 msgstr ""
@@ -774,8 +774,8 @@ msgstr ""
 msgid "There is no call in that message to answer"
 msgstr ""
 
-#: ohscore/decoders.py:200
-#: ohscore/decoders.py:413
+#: ohscore/decoders.py:206
+#: ohscore/decoders.py:419
 #, python-brace-format
 msgid "There is no decoder called {name}"
 msgstr ""
@@ -996,15 +996,15 @@ msgstr ""
 msgid "decoderSessions must be a list of at most 16 sessions"
 msgstr ""
 
-#: ohscore/decoders.py:465
+#: ohscore/decoders.py:471
 msgid "it crashed when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:465
+#: ohscore/decoders.py:471
 msgid "it did not answer when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:466
+#: ohscore/decoders.py:472
 msgid "it gave a wrong answer when it was tested"
 msgstr ""
 
@@ -1012,7 +1012,7 @@ msgstr ""
 msgid "its decoder did not start (the log says why)"
 msgstr ""
 
-#: ohscore/decoders.py:467
+#: ohscore/decoders.py:473
 msgid "its folder does not allow programs to run"
 msgstr ""
 
@@ -1171,7 +1171,7 @@ msgstr ""
 msgid "{file}: samples of type {type} cannot be played (complex ones can: {types})"
 msgstr ""
 
-#: ohscore/decoders.py:218
+#: ohscore/decoders.py:224
 #, python-brace-format
 msgid "{freq} is outside what the receiver covers now"
 msgstr ""
