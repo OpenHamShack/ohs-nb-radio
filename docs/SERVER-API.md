@@ -312,7 +312,11 @@ Tested only into the simulator: nothing in this server has keyed a radio.
   through `api/set` at control level: a client names an input as
   "Antenna C - 80 m dipole" by combining `antenna`/`antennas` with this
   the way Settings' Radio page does (ohscore/antennas.py `display_name`).
-  A
+  Despite the name, `soapyAntenna`/`soapyAntennaLabels` are not only for
+  `device` soapy: they apply the same way to `sdrplay` and `rtlsdr`
+  below, through shack_sdr's own `antennas()`/`set_antenna` rather than
+  SoapySDR's (ohscore/devices/sdrsource.py) - the setting kept its
+  SoapySDR-era name because a client is being built against it. A
   key-up through a receiver is refused with "This radio can only receive"
   before the broker is asked. The image runs SDRplay's API service beside
   the server (store/radio/entrypoint.sh) and asks for the USB bus; the
@@ -322,10 +326,14 @@ Tested only into the simulator: nothing in this server has keyed a radio.
   broker's `rtlsdr-1` (an RTL-SDR, 0bda:2838; the image carries Debian's
   librtlsdr0) and `device` sdrplay the same RSP as soapy, `sdrplay-1`,
   through SDRplay's API directly. The claim's USB serial becomes
-  `sdrSerial` (a platform key, like soapyArgs). `device` libresdr is the
-  broker's `libresdr-1`, opened by the Pluto driver at the address the
-  claim gives (`plutoUri`). SDRplay's API stays in the image until the
-  platform stages it as a host library (§6.3); an image built with
+  `sdrSerial` (a platform key, like soapyArgs). `rtlsdr` has one input,
+  "RX"; `sdrplay`'s inputs depend on the RSP model (SoapySDRPlay3's own
+  names - "Antenna A/B/C", "Hi-Z", "Tuner 1/2 ..."), both reported and
+  switched through `soapyAntenna` exactly as the soapy path above is.
+  `device` libresdr is the broker's `libresdr-1`, opened by the Pluto
+  driver at the address the claim gives (`plutoUri`). SDRplay's API stays
+  in the image until the platform stages it as a host library (§6.3); an
+  image built with
   `SHACK_STORE_DROP_SDRPLAY=1` carries none and starts the service from
   `/opt/hostlibs/sdrplay-api/`, and without it the RSP says "Ask your
   controller's administrator to install SDRplay's API".
