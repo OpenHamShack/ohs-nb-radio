@@ -1,0 +1,12 @@
+# The SDRplay receivers in Radio's store image (store/radio/Containerfile):
+# SDRplay's own API (closed source, from sdrplay.com; its licence is
+# sdrplay_license.txt inside the installer) and SoapySDRPlay3, the MIT
+# SoapySDR module for it (github.com/pothosware/SoapySDRPlay3, the tag's
+# source archive). Debian ships neither. Not committed: the API is not ours
+# to put in a GPL repository, and the module is built from source in the
+# image. tools/build-store.sh copies both into the staged tree from
+# SDRPLAY_DIST (default ~/build/ohs-dist/sdrplay; the build host keeps the installer
+# in ~/vendor) and the Containerfile checks these hashes again before it
+# unpacks anything.
+3a97ca764263bbe76fb0f2220e6408942357e8864c19e1408a6d6987af382fe3  SDRplay_RSP_API-Linux-3.15.2.run
+d0191ee40d8206d7a8d2a52f0a06fa2f495e6ae314da0c3abd9b8e9888620722  SoapySDRPlay3-0.5.2.tar.gz

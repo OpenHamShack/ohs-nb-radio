@@ -1,0 +1,36 @@
+# The Corresponding Source for the third-party GPL and LGPL code inside the
+# macOS apps (tools/build-macos.sh), in packaging/windows/sources.txt's
+# format - read that file for the fields and for why we host the source
+# ourselves rather than point upstream:
+#   file | sha256 | licence | installers that carry it | what it is the source of | url [fallback url ...]
+#
+# tools/release.sh [nb|ham] --macos publishes this list - as it was at the
+# commit the .dmg was built from - on the shared source site as the
+# manifest openhamshack-nb-macos or openhamshack-radio-macos (--carried-by NB or HAM,
+# as with Windows), together with that commit's own source, and refuses to
+# put the .dmg on the site unless every tarball is there and verified. A
+# section of its own rather than lines in the Windows installer's: the
+# sets differ (libad9361 here, libusb and dfu-util there), and each must stay exactly
+# as long as its own download is offered. The Mac-only tarballs were
+# fetched from the URLs below on 07/10/2026 and matched these hashes.
+#
+# WSJT-X 2.7.0 and the libraries its tools loaded (Qt 5.15.2, FFTW 3.3.8,
+# GCC 8.2.0's libquadmath) were listed here until 17/10/2026, when the Mac
+# apps stopped carrying them (tools/build-macos.sh); the manifests already
+# published for the .dmg files that did carry them keep their lines.
+#
+# How each was identified (07/10/2026):
+#   - libiio, libad9361, codec2: the release tarballs build-macos.sh builds
+#     from, by the same hashes it pins.
+#   - PortAudio (MIT) and Python's own libraries (PSF, Apache-2.0, MIT,
+#     BSD, public domain) need no source.
+
+libiio-0.26.tar.gz | fb445fb860ef1248759f45d4273a4eff360534480ec87af64c6b8db3b99be7e5 | LGPL-2.1-or-later | NB and HAM for macOS | libiio/libiio.dylib and iio.py (libiio 0.26; GitHub's archive of tag v0.26) | https://github.com/analogdevicesinc/libiio/archive/refs/tags/v0.26.tar.gz
+libad9361-iio-0.3.tar.gz | 1dc35dd997e1938a97489fa1f349ee16889f9de8901a2c7af46184468dc90598 | LGPL-2.1 | NB and HAM for macOS | libad9361.dylib (libad9361-iio v0.3; GitHub's archive of tag v0.3) | https://github.com/analogdevicesinc/libad9361-iio/archive/refs/tags/v0.3.tar.gz
+codec2-1.2.0.tar.gz | cbccae52b2c2ecc5d2757e407da567eb681241ff8dadce39d779a7219dbcf449 | LGPL-2.1 | NB and HAM for macOS | libcodec2.dylib (codec2 1.2.0; GitHub's archive of tag 1.2.0) | https://github.com/drowe67/codec2/archive/refs/tags/1.2.0.tar.gz
+pyqt6-6.11.0.tar.gz | 45dd60aa69976de1918b5ced6b4e7b6a25abd2a919ecef5fd5826ecc76718889 | GPL-3.0 | NB and HAM for macOS | PyQt6/QtCore, QtGui, QtWidgets .abi3.so (PyQt6 6.11.0) | https://files.pythonhosted.org/packages/source/P/PyQt6/pyqt6-6.11.0.tar.gz
+paramiko-3.5.1.tar.gz | b2c665bc45b2b215bd7d7f039901b14b067da00f3a11e6640995fd58f2664822 | LGPL-2.1 | HAM for macOS | paramiko (bundled as bytecode; Paramiko 3.5.1) | https://files.pythonhosted.org/packages/7d/15/ad6ce226e8138315f2451c2aeea985bf35ee910afb477bae7477dc3a8f3b/paramiko-3.5.1.tar.gz
+qtbase-everywhere-src-6.11.2.tar.xz | 5b2e00eccaf5a4d8c14134ffa0ea8dfd0a35ae1ffc7f8d87fa4305a1ed23cf22 | LGPL-3.0 | NB and HAM for macOS | PyQt6/Qt6/lib QtCore, QtGui, QtNetwork, QtWidgets, QtDBus frameworks and plugins (Qt 6.11.2) | https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qtbase-everywhere-src-6.11.2.tar.xz
+qtsvg-everywhere-src-6.11.2.tar.xz | d594337feca84c26fb67fe87b85e6a5c12fda404b611d905f9d138210c311876 | LGPL-3.0 | NB and HAM for macOS | QtSvg.framework and the svg plugins (Qt 6.11.2) | https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qtsvg-everywhere-src-6.11.2.tar.xz
+qtimageformats-everywhere-src-6.11.2.tar.xz | cecd8900f34b6550076309bc94f62f828008b633a4239e0a08c86788f41001f8 | LGPL-3.0 | NB and HAM for macOS | the icns, tga, tiff, wbmp and webp image-format plugins (Qt 6.11.2) | https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qtimageformats-everywhere-src-6.11.2.tar.xz
+qttranslations-everywhere-src-6.11.2.tar.xz | 021684c1a7937a9fabc3b056a6698ad5978794caf9ac190fd6cc11399e67c014 | LGPL-3.0 | NB and HAM for macOS | PyQt6/Qt6/translations (Qt 6.11.2) | https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qttranslations-everywhere-src-6.11.2.tar.xz

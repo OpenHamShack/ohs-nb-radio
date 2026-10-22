@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OpenHamShack Radio app icon - shared by the package (hicolor/scalable) and the
+  window (ohsradio/ui/appicon.py loads this same file), so there is one icon.
+
+  Drawn by hand, no external assets (house rule). OpenHamShack QO-100 NB's sibling: the
+  same tile and the same waterfall well with signals burning down it in the
+  "Ember" colours, but where NB has a dish aimed at the satellite, HAM has
+  a mast with a beam on it, radiating both ways - terrestrial, all bands.
+  Its arcs are green, not NB's cyan, so the two tell apart at a glance in a
+  dock. Big solid shapes and no text, so it reads at 16 px.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#14261f"/>
+      <stop offset="1" stop-color="#070a12"/>
+    </linearGradient>
+    <linearGradient id="burn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff2c8"/>
+      <stop offset="0.25" stop-color="#fbb33a"/>
+      <stop offset="0.6" stop-color="#d23a4a"/>
+      <stop offset="1" stop-color="#5a1270" stop-opacity="0.35"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#b9c6d8"/>
+    </linearGradient>
+    <clipPath id="wfclip"><rect x="8" y="41" width="48" height="16" rx="3.5"/></clipPath>
+  </defs>
+
+  <!-- tile -->
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="url(#bg)"/>
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="12.25" fill="none" stroke="#2a5844" stroke-width="1.5"/>
+
+  <!-- mast and a three-element beam, seen end-on -->
+  <line x1="32" y1="14" x2="32" y2="38" stroke="url(#metal)" stroke-width="2.6" stroke-linecap="round"/>
+  <line x1="22" y1="14" x2="42" y2="14" stroke="url(#metal)" stroke-width="2.4" stroke-linecap="round"/>
+  <line x1="24.5" y1="20" x2="39.5" y2="20" stroke="url(#metal)" stroke-width="2.2" stroke-linecap="round"/>
+  <line x1="27" y1="26" x2="37" y2="26" stroke="url(#metal)" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="32" cy="9.5" r="2.6" fill="#ffb547"/>
+  <path d="M 30 38 L 26 38.5 M 34 38 L 38 38.5" stroke="#8a9bb4" stroke-width="1.6" stroke-linecap="round"/>
+
+  <!-- radiating both ways -->
+  <path d="M 17 12 A 9 9 0 0 0 17 26" stroke="#3ddc84" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <path d="M 12.5 9 A 13 13 0 0 0 12.5 29" stroke="#3ddc84" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-opacity="0.6"/>
+  <path d="M 47 12 A 9 9 0 0 1 47 26" stroke="#3ddc84" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <path d="M 51.5 9 A 13 13 0 0 1 51.5 29" stroke="#3ddc84" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-opacity="0.6"/>
+
+  <!-- waterfall well, with signals burning down it -->
+  <rect x="8" y="41" width="48" height="16" rx="3.5" fill="#05070c"/>
+  <g clip-path="url(#wfclip)">
+    <rect x="12" y="41" width="2" height="16" fill="url(#burn)" opacity="0.8"/>
+    <rect x="19" y="41" width="7" height="12" fill="url(#burn)" opacity="0.9"/>
+    <rect x="33" y="44" width="3" height="13" fill="url(#burn)"/>
+    <rect x="42" y="41" width="9" height="9" fill="url(#burn)" opacity="0.85"/>
+    <rect x="42" y="50" width="9" height="7" fill="#5a1270" opacity="0.5"/>
+  </g>
+  <!-- the trace over it -->
+  <path d="M 8 40 L 11 40 L 13 33.5 L 15 40 L 19 40 L 21 35 L 24 34 L 26 35.5 L 27.5 40 L 32.5 40 L 34.5 36 L 36 40 L 41 40 L 43 34 L 47 33 L 50.5 34.5 L 52 40 L 56 40"
+        stroke="#7fe6f5" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+</svg>

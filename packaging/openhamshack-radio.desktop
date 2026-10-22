@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=OpenHamShack Radio
+GenericName=Amateur Radio SDR Transceiver
+Comment=Transmit and receive SSB, CW, AM, FM, FT8 and more on the amateur bands, 160 m to 6 cm
+Exec=openhamshack-radio
+Icon=openhamshack-radio
+Terminal=false
+NoDisplay=false
+StartupNotify=true
+Categories=HamRadio;Network;
+Keywords=amateur radio;ham radio;transceiver;SDR;ADALM-Pluto;Pluto;LibreSDR;Hermes-Lite;HL2;HF;VHF;UHF;2m;70cm;FM;repeater;CTCSS;SSB;CW;FT8;FT4;PSK31;RTTY;FreeDV;SSTV;band plan;waterfall;bandscope;OpenHamShack;OpenHamShack HAM;

@@ -1,0 +1,84 @@
+# OpenHamShack QO-100 NB, the store form: `python3 -m ohsnb --server`.
+#
+# Built by tools/build-store.sh from a staged copy of one commit (this
+# folder's files at the top, with ohscore/, ohsnb/ and tools/vendor/ beside
+# them), never from a working tree, and carried in the signed package so a
+# controller with no route out can install it (D12).
+#
+# Debian 13, as the .deb is tested on: Debian's numpy, libiio 0.26 and
+# libad9361 for the Pluto, codec2 for FreeDV, cryptography for nothing here
+# but kept because ohscore imports it lazily for update checks. No PyQt, no
+# PortAudio, no sound card: audio goes over the API (ohscore/server/audio.py).
+FROM docker.io/library/debian:13-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-numpy \
+        python3-libiio \
+        libad9361-0 \
+        libcodec2-1.2 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# The shared OpenHamShack libraries, exactly the pinned wheels: each one's
+# hash is checked against tools/vendor/requirements.lock before it is
+# unpacked into site-packages (no pip in the image; a wheel is a zip with
+# nothing to run at install).
+#
+# Then ohsdigi, the one decoder for FT8, FT4, Q65, JS8 and HSmodem (BETA-PLAN D9): the
+# wheel for this architecture, checked against tools/vendor/ohsdigi.lock,
+# and only its module kept, as ohscore/ohsdigi.abi3.so - where ohscore imports
+# it from (ohscore.ohsdigi), exactly where the .deb puts it. COPY ohscore/
+# below adds to that folder rather than replacing it. WSJT-X is not
+# installed: jt9 would only be the fallback and the per-slot shadow (a
+# second decode of every slot on the controller's CPU) and would bring Qt
+# with it. Q65 and JS8 need no program either since ohsdigi decodes them
+# (10/10/2026): the wheel must be one built since then, or the selftest
+# below fails the build on them.
+COPY tools/vendor/ /tmp/vendor/
+RUN cd /tmp/vendor \
+    && site="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
+    && mkdir -p "$site" \
+    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec; do \
+         f="$(ls ${w}-*.whl)"; \
+         want="$(sed -n "s/^$(echo $w | tr _ -)==.*--hash=sha256:\([0-9a-f]*\).*/\1/p" requirements.lock)"; \
+         echo "$want  $f" | sha256sum -c - || exit 1; \
+         python3 -m zipfile -e "$f" "$site"; \
+       done \
+    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec; shack_bandplan.load()" \
+    && arch="$(uname -m)" \
+    && f="$(ls ohs_ohsdigi-*-manylinux_*_${arch}.whl)" \
+    && want="$(sed -n "s/^ohs-ohsdigi==.*--hash=sha256:\([0-9a-f]*\).*# ${arch}$/\1/p" ohsdigi.lock)" \
+    && echo "$want  $f" | sha256sum -c - \
+    && python3 -m zipfile -e "$f" /tmp/ohsdigi \
+    && install -D -m 0644 /tmp/ohsdigi/ohsdigi/ohsdigi.abi3.so /opt/shack-qo100nb/ohscore/ohsdigi.abi3.so \
+    && rm -rf /tmp/vendor /tmp/ohsdigi
+
+RUN useradd --uid 1000 --create-home --home-dir /data --shell /usr/sbin/nologin shack
+
+COPY ohscore/ /opt/shack-qo100nb/ohscore/
+COPY ohsnb/ /opt/shack-qo100nb/ohsnb/
+COPY LICENSE pad-actions.json pad-layout.json /opt/shack-qo100nb/
+
+# Everything the engine keeps is on the data volume (module.yaml), so the
+# read-only image is never written to.
+ENV SHACK_FORM=store \
+    OHS_NB_CONF=/data/config.json \
+    OHS_NB_DATA=/data \
+    OHS_NB_UI_CONF=/data/ui.json \
+    SHACK_STATION_DB=/data/shack/station.db \
+    HOME=/data \
+    XDG_CACHE_HOME=/tmp/cache \
+    SHACK_PORT=8080 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+USER shack
+WORKDIR /opt/shack-qo100nb
+# The image proves, as the user it runs as, that every decoder the app
+# offers loads and that FT8 and FT4 decode a slot, before it can be
+# packaged: 0.1.10-beta.1 shipped with no FT8 decoder and nothing said so.
+# tools/store-check.sh runs the same check against a built image.
+RUN python3 -m ohscore.selftest ohsnb
+EXPOSE 8080
+ENTRYPOINT ["python3", "-m", "ohsnb", "--server"]

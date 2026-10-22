@@ -1,0 +1,50 @@
+# The shared source archive, https://openhamshack.com/source/ - Apache
+# on 20i, behind 20i's StackCDN. tools/source-site.py copies this file from
+# packaging/source-site/htaccess in the openhamshack-nb repository into the site
+# folder as .htaccess on every build: edit it there, never on the server or
+# in the folder, or the next build puts it back.
+
+# A missing file gets the archive's own page (source-site.py writes
+# 404.html), not Apache's stock one. A local path, so the 404 status stays;
+# the folder's own since the archive became /source/ on openhamshack.com.
+ErrorDocument 404 /source/404.html
+# files/ and manifests/ are not to be browsed: the page and SHA256SUMS
+# list what is on offer (already the server's answer; kept explicit).
+Options -Indexes
+AddDefaultCharset utf-8
+# No extension, so no type: a browser would download the checksums the page
+# tells people to read.
+<Files "SHA256SUMS">
+  ForceType text/plain
+</Files>
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# A directory asked for without its trailing slash (/files, /manifests).
+# Apache's own fix-up builds its redirect from the scheme Apache was
+# reached by, and the CDN reaches it over plain HTTP, so https://.../files
+# went to http://.../files/ and only then back up to https (the audit of
+# 06/10/2026). The site is HTTPS-only: redirect here, to https, before
+# mod_dir's fix-up runs (mod_rewrite's runs first). %{REQUEST_URI}, not $1,
+# which in a folder's .htaccess is only the path below /source/.
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule [^/]$ https://%{HTTP_HOST}%{REQUEST_URI}/ [R=301,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+# The page, the checksums, the manifests and the how-to change whenever a
+# release is published: five minutes.
+<FilesMatch "(\.html|\.txt|^SHA256SUMS)$">
+  Header set Cache-Control "public, max-age=300"
+</FilesMatch>
+# A tarball is identified by its name and SHA-256 together, and
+# source-site.py refuses the same name with different bytes, so what is
+# under a name never changes: a year, immutable. Only files/ holds these.
+<FilesMatch "\.(tar\.gz|tar\.xz|tar\.bz2|tar\.zst|tgz|zip)$">
+  Header set Cache-Control "public, max-age=31536000, immutable"
+</FilesMatch>
+<FilesMatch "^(robots\.txt|sitemap\.xml)$">
+  Header set Cache-Control "public, max-age=86400"
+</FilesMatch>
+</IfModule>

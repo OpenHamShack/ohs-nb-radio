@@ -1,0 +1,1 @@
+FT8 replies now go in your next slot, not ~27 s later, and can start up to 6 s late as in WSJT-X. New TX = RX switch; a bigger band activity list with resizable text. The AKP03E pad's keys no longer flicker.

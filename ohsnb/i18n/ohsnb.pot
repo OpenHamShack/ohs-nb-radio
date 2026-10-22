@@ -1,0 +1,630 @@
+# English template for the ohsnb gettext domain (docs/I18N.md).
+# Written by tools/i18n.py pot; do not edit.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+#: ohsnb/rigsetup.py:622
+msgid "'Key the IC-9700 for digital modes' is off: the level set keys the radio exactly as a digital over does, so it needs it on and saved"
+msgstr ""
+
+#: ohsnb/radio.py:1482
+msgid "A recording is running: the hold is marked in it."
+msgstr ""
+
+#: ohsnb/rigsetup.py:446
+msgid "Band NB tunes (selected)"
+msgstr ""
+
+#: ohsnb/rigsetup.py:435
+#: ohsnb/rigsetup.py:439
+#: ohsnb/rigsetup.py:441
+msgid "Band on MAIN"
+msgstr ""
+
+#: ohsnb/radio.py:849
+#, python-brace-format
+msgid "Beacon lock: no beacon within +-{tight:g} kHz of the correction held; searching +-{search:g} kHz"
+msgstr ""
+
+#: ohsnb/ui/settings.py:24
+msgid "CI-V address: a hex number such as A2"
+msgstr ""
+
+#: ohsnb/rigsetup.py:626
+msgid "Choose a digital mode in NB first (FT8, say): the tone goes out where its overs do"
+msgstr ""
+
+#: ohsnb/extrig.py:171
+msgid "Choose your upconverter (Settings > Transmitter, from the list in Settings > Converters): OpenHamShack QO-100 NB cannot work out where to put the IC-9700 without its local oscillator"
+msgstr ""
+
+#: ohsnb/extrig.py:306
+#, python-brace-format
+msgid "Could not unkey the IC-9700 ({error}): NB cannot confirm it stopped transmitting - check the radio, and release it there if it is still on the air"
+msgstr ""
+
+#: ohsnb/rigsetup.py:421
+msgid "DATA MOD (where USB-D audio comes from)"
+msgstr ""
+
+#: ohsnb/rigsetup.py:569
+#, python-brace-format
+msgid "DATA MOD back to {src}"
+msgstr ""
+
+#: ohsnb/rigsetup.py:571
+msgid "DATA MOD left at USB: NB could not read what it was before"
+msgstr ""
+
+#: ohsnb/rigsetup.py:526
+#, python-brace-format
+msgid "DATA MOD reads {got} after NB set it to USB"
+msgstr ""
+
+#: ohsnb/rigsetup.py:527
+msgid "DATA MOD set to USB"
+msgstr ""
+
+#: ohsnb/radio.py:875
+#, python-brace-format
+msgid "GPS-locked LNB: predicted transmit correction {pred:+.0f} Hz"
+msgstr ""
+
+#: ohsnb/rigsetup.py:770
+#, python-brace-format
+msgid "Its RF POWER is {rf} %, and at a low setting the 9700 holds its output down with the ALC, so any of NB's levels makes the same power (the ALC reading high is that, not a fault). To set the level properly, turn RF POWER up to 50 % on the radio into the dummy load, set the level again, and then put RF POWER back to {rf} %."
+msgstr ""
+
+#: ohsnb/overpower.py:282
+#, python-brace-format
+msgid "LEILA evidence not saved: {error}"
+msgstr ""
+
+#: ohsnb/overpower.py:291
+#, python-brace-format
+msgid "LEILA evidence saved: {name} ({seconds:.0f} s of receive IQ, in Recordings)"
+msgstr ""
+
+#: ohsnb/extrig.py:496
+msgid "Lost the IC-9700 link while it was transmitting: receive audio is back on, and NB no longer knows whether it is transmitting"
+msgstr ""
+
+#: ohsnb/rigsetup.py:586
+msgid "MAIN and SUB exchanged back"
+msgstr ""
+
+#: ohsnb/rigsetup.py:513
+#, python-brace-format
+msgid "MAIN and SUB exchanged: {band} is on MAIN"
+msgstr ""
+
+#: ohsnb/rigsetup.py:521
+msgid "MAIN selected"
+msgstr ""
+
+#: ohsnb/rigsetup.py:314
+msgid "NB is transmitting: the setup assistant waits until it has stopped"
+msgstr ""
+
+#: ohsnb/rigsetup.py:747
+msgid "NB's level was not changed."
+msgstr ""
+
+#: ohsnb/radio.py:723
+#, python-brace-format
+msgid "Not locked to the {beacon} there: {error}"
+msgstr ""
+
+#: ohsnb/overpower.py:116
+msgid "Nothing has been kept yet: capture has only just been turned on"
+msgstr ""
+
+#: ohsnb/rigsetup.py:457
+msgid "Nothing to change: the IC-9700 is already set up for NB"
+msgstr ""
+
+#: ohsnb/rigsetup.py:548
+msgid "Nothing to restore: the setup assistant has not changed the radio"
+msgstr ""
+
+#: ohsnb/rigdiag.py:410
+#: ohsnb/rigdiag.py:427
+#, python-brace-format
+msgid "Over {n} of {total}: {what}"
+msgstr ""
+
+#: ohsnb/radio.py:882
+msgid "Own signal not found near the expected place; searching the whole band"
+msgstr ""
+
+#: ohsnb/rigsetup.py:778
+#, python-brace-format
+msgid "RF POWER is not low{rf}, so the audio reaching the radio is too hot. Its USB MOD Level is {pct} %, in the usual range, so Check and set leaves it: turn it down on the radio (SET > Connectors > MOD Input > USB MOD Level), to 20 % say, then set the level again."
+msgstr ""
+
+#: ohsnb/radio.py:1470
+#, python-brace-format
+msgid "Receive gain held at {db:g} dB (manual), the Receiver gain setting - the radio could not say where its AGC was. The AGC is back when you close this."
+msgstr ""
+
+#: ohsnb/radio.py:1474
+#, python-brace-format
+msgid "Receive gain held at {db:g} dB (manual), where the AGC had it. The AGC is back when you close this."
+msgstr ""
+
+#: ohsnb/rigsetup.py:581
+msgid "SUB selected again"
+msgstr ""
+
+#: ohsnb/rigsetup.py:431
+msgid "Satellite mode"
+msgstr ""
+
+#: ohsnb/rigsetup.py:469
+#, python-brace-format
+msgid "Satellite mode has to go off before NB can put {band} on MAIN"
+msgstr ""
+
+#: ohsnb/rigsetup.py:506
+msgid "Satellite mode off"
+msgstr ""
+
+#: ohsnb/rigsetup.py:593
+msgid "Satellite mode on again"
+msgstr ""
+
+#: ohsnb/rigsetup.py:619
+msgid "Save Settings with IC-9700 (CI-V) as the transmitter first: the level set keys it through NB's link"
+msgstr ""
+
+#: ohsnb/rigsetup.py:307
+msgid "Set the IC-9700's CI-V port first (Settings > Transmitter)"
+msgstr ""
+
+#: ohsnb/rigsetup.py:750
+msgid "Stopped: the over ended before the level was found. Nothing was changed."
+msgstr ""
+
+#: ohsnb/radio.py:1108
+#, python-brace-format
+msgid "TX lock measured the IC-9700 {err:+.0f} Hz off, more than the {cap:.0f} Hz it may correct (Settings › Transmitter): not corrected. Check the radio's frequency reference"
+msgstr ""
+
+#: ohsnb/radio.py:1179
+#, python-brace-format
+msgid "TX lock stopped correcting the IC-9700: its {step:+.0f} Hz correction did not show on the downlink, so the signal it measured may not be yours. Correction put back to {corr:+.0f} Hz; switch TX lock off and on to try again"
+msgstr ""
+
+#: ohsnb/radio.py:1127
+#, python-brace-format
+msgid "TX lock: the IC-9700 landed {err:+.0f} Hz off; corrected by {step:+.0f} Hz for the next over, the most one over moves it (rigTxCorr {corr:+.0f} Hz)"
+msgstr ""
+
+#: ohsnb/radio.py:1131
+#, python-brace-format
+msgid "TX lock: the IC-9700 landed {err:+.0f} Hz off; corrected for the next over (rigTxCorr {corr:+.0f} Hz)"
+msgstr ""
+
+#: ohsnb/extrig.py:268
+msgid "The IC-9700 did not go to transmit when NB keyed it"
+msgstr ""
+
+#: ohsnb/rigsetup.py:520
+msgid "The IC-9700 did not select MAIN"
+msgstr ""
+
+#: ohsnb/extrig.py:434
+#, python-brace-format
+msgid "The IC-9700 is in FM and refused a change to {mode} ({error}): switch it to SSB on the radio"
+msgstr ""
+
+#: ohsnb/extrig.py:439
+#, python-brace-format
+msgid "The IC-9700 is now in {mode} for {nb}"
+msgstr ""
+
+#: ohsnb/rigsetup.py:505
+msgid "The IC-9700 is still in satellite mode after NB switched it off"
+msgstr ""
+
+#: ohsnb/rigsetup.py:461
+#: ohsnb/rigsetup.py:564
+msgid "The IC-9700 is transmitting: NB changes nothing on it while it does"
+msgstr ""
+
+#: ohsnb/extrig.py:460
+msgid "The IC-9700 link is back: NB unkeyed the radio"
+msgstr ""
+
+#: ohsnb/extrig.py:427
+#, python-brace-format
+msgid "The IC-9700 refused {mhz:.6f} MHz ({error}). Is the {band} band on MAIN?"
+msgstr ""
+
+#: ohsnb/extrig.py:443
+#, python-brace-format
+msgid "The IC-9700 refused {mode} ({error}): set it on the radio"
+msgstr ""
+
+#: ohsnb/rigsetup.py:492
+#, python-brace-format
+msgid "The IC-9700 started transmitting: NB stopped changing it ({done})"
+msgstr ""
+
+#: ohsnb/extrig.py:311
+msgid "The IC-9700 still says it is transmitting after NB unkeyed it: release it on the radio"
+msgstr ""
+
+#: ohsnb/extrig.py:225
+#, python-brace-format
+msgid "The IC-9700 takes USB-D audio from {src} (SET > Connectors > MOD Input > DATA MOD): set it to USB, or NB's audio will not reach the transmitter"
+msgstr ""
+
+#: ohsnb/extrig.py:431
+#, python-brace-format
+msgid "The IC-9700 was in FM, which the narrowband transponder does not carry: switched it to {mode}"
+msgstr ""
+
+#: ohsnb/extrig.py:260
+#, python-brace-format
+msgid "The IC-9700 was in {was}: NB put it back in {mode}-D for this over"
+msgstr ""
+
+#: ohsnb/rigsetup.py:758
+#, python-brace-format
+msgid "The IC-9700 was keyed but made no power at any of NB's levels, up to {hi:.0f} dB: the audio is not reaching it. Either the sound device is the wrong one - NB played into {device}, and with two radios there are two USB Audio CODECs - or DATA MOD is not USB (Check and set). {unchanged}"
+msgstr ""
+
+#: ohsnb/extrig.py:257
+#, python-brace-format
+msgid "The IC-9700 would not go to {mode}-D (it reports {got}{data}): not keyed"
+msgstr ""
+
+#: ohsnb/rigsetup.py:800
+#, python-brace-format
+msgid "The IC-9700's power stopped rising by {at:.0f} dB (Po {flat}). NB's digital level is now {level:.0f} dB, the lowest level that made nearly all of that power (Po {po}); the ALC read {alc} there and {base} at the bottom. Any lower gives away power, and any higher only drives the ALC harder. {why}"
+msgstr ""
+
+#: ohsnb/rigsetup.py:766
+#, python-brace-format
+msgid "The IC-9700's power was already flat at NB's quietest level ({lo:.0f} dB, Po {po}): the radio was at its RF POWER setting before NB's level could matter, so there is no level to find here. {unchanged}"
+msgstr ""
+
+#: ohsnb/rigsetup.py:819
+msgid "The IC-9700's power was still rising at NB's full level."
+msgstr ""
+
+#: ohsnb/rigsetup.py:808
+#, python-brace-format
+msgid "The IC-9700's power was still rising at {at:.0f} dB when the {secs:.0f} s were up. {unchanged} Run it again."
+msgstr ""
+
+#: ohsnb/rigsetup.py:465
+msgid "The IC-9700's settings changed since the check: check again"
+msgstr ""
+
+#: ohsnb/radio.py:1200
+#, python-brace-format
+msgid "The IC-9700's stored correction ({corr:+.0f} Hz) is more than the {cap:.0f} Hz TX lock may correct: reset to 0"
+msgstr ""
+
+#: ohsnb/rigdiag.py:388
+msgid "The keyed checks need your confirmation of the band and power first"
+msgstr ""
+
+#: ohsnb/radio.py:643
+msgid "The over-power watch is off (Settings › LNB & locks)"
+msgstr ""
+
+#: ohsnb/rigsetup.py:794
+#, python-brace-format
+msgid "The radio's USB MOD Level ({pct} %) was left as it is: it is in the usual range, and NB's level is the one you can see and move."
+msgstr ""
+
+#: ohsnb/rigsetup.py:783
+#, python-brace-format
+msgid "The radio's USB MOD Level is already low ({pct} %), so the audio reaching it is too hot: turn down the computer's volume for the IC-9700 sound device, then set the level again."
+msgstr ""
+
+#: ohsnb/rigsetup.py:797
+#, python-brace-format
+msgid "The radio's USB MOD Level is {pct} %, at an extreme: Check and set offers to put it at 50 %; run this again after it."
+msgstr ""
+
+#: ohsnb/rigsetup.py:812
+#: ohsnb/rigsetup.py:775
+#, python-brace-format
+msgid "The radio's USB MOD Level is {pct} %, at an extreme: use Check and set to put it at 50 %, then set the level again."
+msgstr ""
+
+#: ohsnb/rigsetup.py:815
+#, python-brace-format
+msgid "The radio's USB MOD Level is {pct} %: raise it on the radio (SET > Connectors > MOD Input > USB MOD Level), or the computer's volume for the IC-9700 sound device, then set the level again."
+msgstr ""
+
+#: ohsnb/state.py:360
+msgid "The transmit filter may be 2.7 kHz wide at most (QO-100 rule)"
+msgstr ""
+
+#: ohsnb/radio.py:1292
+#, python-brace-format
+msgid "The {name} setup assistant is using the radio: wait for it to finish"
+msgstr ""
+
+#: ohsnb/rigdiag.py:386
+msgid "Tick that the IC-9700 is into a dummy load first: the keyed checks transmit"
+msgstr ""
+
+#: ohsnb/rigsetup.py:639
+msgid "Tick that the IC-9700 is into a dummy load first: the level set transmits"
+msgstr ""
+
+#: ohsnb/rigsetup.py:369
+msgid "Tick that the IC-9700 is into a dummy load first: the sound device test transmits"
+msgstr ""
+
+#: ohsnb/state.py:366
+#, python-brace-format
+msgid "Transmit gain cannot exceed the ceiling of {ceiling:g} dB set in Settings"
+msgstr ""
+
+#: ohsnb/radio.py:306
+#, python-brace-format
+msgid "Transmit gain cannot exceed {cap:g} dB: more would overdrive {converter} (Settings › Converters)"
+msgstr ""
+
+#: ohsnb/radio.py:1376
+msgid "Transmitting: dish alignment opens once you are back on receive"
+msgstr ""
+
+#: ohsnb/overpower.py:114
+msgid "Turn on LEILA evidence capture first: nothing is kept until it is on"
+msgstr ""
+
+#: ohsnb/rigsetup.py:427
+msgid "USB MOD Level"
+msgstr ""
+
+#: ohsnb/rigsetup.py:575
+#, python-brace-format
+msgid "USB MOD Level back to {pct} %"
+msgstr ""
+
+#: ohsnb/rigsetup.py:531
+#, python-brace-format
+msgid "USB MOD Level reads {got} % after NB set it"
+msgstr ""
+
+#: ohsnb/rigsetup.py:532
+#, python-brace-format
+msgid "USB MOD Level set to {pct} %"
+msgstr ""
+
+#: ohsnb/radio.py:1692
+msgid "Unkeyed: lost the IC-9700 link mid-over. NB cannot confirm the radio stopped transmitting - check it, and release it there if it is still on the air"
+msgstr ""
+
+#: ohsnb/extrig.py:180
+#, python-brace-format
+msgid "With a {lo:.3f} MHz LO ({how} = uplink), the uplink {ul_lo}-{ul_hi} MHz needs the IC-9700 on {rig_lo:.3f}-{rig_hi:.3f} MHz, outside its {band} range ({band_lo:.0f}-{band_hi:.0f} MHz). Check the LO, and whether the mixer is low- or high-side"
+msgstr ""
+
+#: ohsnb/dsp/ao40.py:118
+#, python-brace-format
+msgid "a block is {block} bytes, not {got}"
+msgstr ""
+
+#: ohsnb/analyse_parallel.py:339
+msgid "a capture segment has no frequency: every section runs whole, unsliced"
+msgstr ""
+
+#: ohsnb/rigdiag.py:404
+msgid "a tone, stepped"
+msgstr ""
+
+#: ohsnb/analyse.py:1440
+#, python-brace-format
+msgid "analysis done in {secs:.1f} s"
+msgstr ""
+
+#: ohsnb/radio.py:696
+#, python-brace-format
+msgid "beacon must be one of {names}"
+msgstr ""
+
+#: ohsnb/rigsetup.py:443
+#, python-brace-format
+msgid "exchange MAIN and SUB, to put {band} on MAIN"
+msgstr ""
+
+#: ohsnb/rigdiag.py:403
+msgid "keyed, no audio"
+msgstr ""
+
+#: ohsnb/devices/sim.py:179
+#, python-brace-format
+msgid "kind must be one of {kinds}"
+msgstr ""
+
+#: ohsnb/rigsetup.py:432
+#: ohsnb/rigsetup.py:447
+#: ohsnb/rigsetup.py:439
+msgid "leave"
+msgstr ""
+
+#: ohsnb/rigsetup.py:428
+msgid "leave (NB's own level is set instead)"
+msgstr ""
+
+#: ohsnb/rigsetup.py:423
+msgid "leave (includes USB)"
+msgstr ""
+
+#: ohsnb/rigsetup.py:442
+#, python-brace-format
+msgid "not {band}"
+msgstr ""
+
+#: ohsnb/rigsetup.py:493
+msgid "nothing changed"
+msgstr ""
+
+#: ohsnb/rigsetup.py:431
+#: ohsnb/rigsetup.py:432
+msgid "off"
+msgstr ""
+
+#: ohsnb/rigsetup.py:431
+msgid "on"
+msgstr ""
+
+#: ohsnb/analyse_parallel.py:454
+#, python-brace-format
+msgid "over-power: {n} event across {lines} lines"
+msgid_plural "over-power: {n} events across {lines} lines"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ohsnb/ui/settings.py:31
+msgid "rigctld port: a number such as 4532"
+msgstr ""
+
+#: ohsnb/radio.py:718
+msgid "set from the click"
+msgstr ""
+
+#: ohsnb/radio.py:710
+#, python-brace-format
+msgid "snapped {offset:+.0f} Hz to {why}"
+msgstr ""
+
+#: ohsnb/rigdiag.py:428
+msgid "timing the key-up and unkey"
+msgstr ""
+
+#: ohsnb/rigsetup.py:422
+msgid "unknown"
+msgstr ""
+
+#: ohsnb/analyse_parallel.py:218
+#, python-brace-format
+msgid "unknown analysis task {kind}"
+msgstr ""
+
+#: ohsnb/rigsetup.py:435
+msgid "unknown in satellite mode"
+msgstr ""
+
+#: ohsnb/analyse.py:235
+#, python-brace-format
+msgid "unsupported SigMF datatype {datatype}"
+msgstr ""
+
+#: ohsnb/rigsetup.py:588
+#, python-brace-format
+msgid "{band} is no longer on MAIN, so NB left the bands as they are"
+msgstr ""
+
+#: ohsnb/rigsetup.py:515
+#, python-brace-format
+msgid "{band} is on neither MAIN nor SUB, so NB left the bands as they were: choose {band} on the radio"
+msgstr ""
+
+#: ohsnb/rigsetup.py:436
+#, python-brace-format
+msgid "{band} on MAIN (bands exchanged if it is on SUB)"
+msgstr ""
+
+#: ohsnb/rigsetup.py:509
+#, python-brace-format
+msgid "{band} was already on MAIN"
+msgstr ""
+
+#: ohsnb/extrig.py:174
+#, python-brace-format
+msgid "{converter} is receive only: mark it TX only or RX/TX in Settings > Converters to transmit through it"
+msgstr ""
+
+#: ohsnb/analyse.py:1404
+#, python-brace-format
+msgid "{file} has no usable core:sample_rate"
+msgstr ""
+
+#: ohsnb/analyse.py:1293
+#, python-brace-format
+msgid "{label}: done in {secs:.1f} s"
+msgstr ""
+
+#: ohsnb/analyse_parallel.py:317
+#, python-brace-format
+msgid "{label}: done in {secs:.1f} s ({finished}/{submitted} tasks)"
+msgstr ""
+
+#: ohsnb/analyse.py:1290
+#, python-brace-format
+msgid "{label}: started"
+msgstr ""
+
+#: ohsnb/ui/face.py:65
+#, python-brace-format
+msgid "{mhz:.4f} MHz is outside the narrowband transponder ({lo}-{hi} MHz)"
+msgstr ""
+
+#: ohsnb/dsp/ao40.py:192
+#, python-brace-format
+msgid "{rate:g} Hz is not a whole number (>= 4) of samples per bit at {baud:g} bit/s"
+msgstr ""
+
+#: ohsnb/dsp/ao40.py:147
+#, python-brace-format
+msgid "{rate:g} Hz is not a whole number of samples per half-bit at {baud:g} bit/s"
+msgstr ""
+
+#: ohsnb/analyse.py:1434
+#, python-brace-format
+msgid "{secs:.0f} s of IQ, one process"
+msgstr ""
+
+#: ohsnb/analyse.py:1427
+#, python-brace-format
+msgid "{secs:.0f} s of IQ, {jobs} worker process"
+msgid_plural "{secs:.0f} s of IQ, {jobs} worker processes"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ohsnb/ui/face.py:63
+#, python-brace-format
+msgid "{text} is not a QO-100 narrowband frequency"
+msgstr ""
+
+#: ohsnb/ui/face.py:49
+#, python-brace-format
+msgid "{text} is not a frequency"
+msgstr ""
+
+#: ohsnb/ui/status.py:312
+#, python-brace-format
+msgid "{text} is not a number of hertz"
+msgstr ""
+
+#: ohsnb/radio.py:733
+#, python-brace-format
+msgid "{title} set where you clicked ({how}): rxCorr {corr:+.0f} Hz; beacon lock is on Hold, so nothing follows the drift"
+msgstr ""
+
+#: ohsnb/radio.py:736
+#, python-brace-format
+msgid "{title} set where you clicked ({how}): rxCorr {corr:+.0f} Hz; beacon lock is on Manual, so nothing follows the drift"
+msgstr ""
+
+#: ohsnb/radio.py:730
+#, python-brace-format
+msgid "{title} set where you clicked ({how}): rxCorr {corr:+.0f} Hz; beacon lock is searching +-{span:g} kHz there"
+msgstr ""
+
+#: ohsnb/radio.py:717
+#, python-brace-format
+msgid "{why}, so the click itself was used"
+msgstr ""

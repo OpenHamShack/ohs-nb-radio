@@ -1,0 +1,23 @@
+#!/bin/sh
+# Launcher for OpenHamShack Radio.
+#
+# The same arrangement as openhamshack-nb's launcher (which explains it at
+# length): the ohsradio/ package and its private copy of ohscore/ live under
+# /usr/lib/openhamshack-radio/, found from this script's own real location so the
+# package works wherever dpkg extracts it. Plain POSIX sh: Debian's /bin/sh
+# is dash.
+set -e
+
+self=$(readlink -f "$0" 2>/dev/null) || self="$0"
+bindir=$(dirname "$self")
+root=$(dirname "$bindir")
+libdir="$root/lib/openhamshack-radio"
+
+if [ -n "$PYTHONPATH" ]; then
+    PYTHONPATH="$libdir:$PYTHONPATH"
+else
+    PYTHONPATH="$libdir"
+fi
+export PYTHONPATH
+
+exec python3 -m ohsradio "$@"

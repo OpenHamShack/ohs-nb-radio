@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenHamShack Radio: amateur-band SDR transceiver for Linux (preview)</title>
+<meta name="description" content="OpenHamShack Radio, a preview: an amateur-band SDR transceiver for Linux, so far tested mainly on its built-in simulator. Download, user guide and release notes.">
+{{HEAD}}
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+/* One self-contained page: no fonts or scripts from elsewhere, as the app
+   itself fetches nothing. The same tokens and structure as the OpenHamShack QO-100 NB
+   site (site/index.html), so the two read as one family: dark is the
+   resting state, as in the app, and light the override. The one change is
+   the version badge, amber rather than NB's green, because this release is
+   a preview that has not met a real radio. */
+:root {
+  --bg: #0a0d12; --card: #10141b; --ink: #e8edf4; --dim: #a3adbb; --line: #232a36;
+  --accent: #4fd1e8; --accent-ink: #041016; --ok: #3ddc84; --warn: #ffb547; --code: #171c25;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #eef1f5; --card: #ffffff; --ink: #0f1722; --dim: #4a5566; --line: #dde2e9;
+    --accent: #0a8fb0; --accent-ink: #ffffff; --ok: #12a35a; --warn: #d98a00; --code: #f3f5f8;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 17px/1.55 "DejaVu Sans", "Segoe UI", system-ui, -apple-system, sans-serif; }
+a { color: var(--accent); }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+header { padding: 40px 0 8px; }
+header h1 { margin: 0; font-size: 40px; letter-spacing: .5px; }
+header p.lede { margin: 8px 0 0; font-size: 20px; color: var(--dim); max-width: 760px; }
+header p.sibling { margin: 14px 0 0; font-size: 14px; color: var(--dim); }
+section { margin: 28px 0; }
+h2 { font-size: 24px; margin: 0 0 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.dl { display: flex; flex-direction: column; gap: 10px; }
+.btn { display: inline-block; background: var(--accent); color: var(--accent-ink); text-decoration: none;
+  font-weight: 700; padding: 12px 18px; border-radius: 10px; }
+.meta { color: var(--dim); font-size: 14px; word-break: break-all; }
+.note { color: var(--dim); font-size: 14px; margin: 0; }
+.dl h3 { margin: 10px 0 0; }
+.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.guide-nav { margin: 18px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+/* .meta breaks anywhere so a checksum fits a phone; the guide's one-line
+   summary is words, and broke mid-word ("saf ely") at 390 px. */
+.guide-nav .meta { word-break: normal; }
+code, .mono { font-family: "DejaVu Sans Mono", ui-monospace, monospace; font-size: 14px;
+  background: var(--code); padding: 1px 5px; border-radius: 5px; }
+pre.mono { background: var(--code); padding: 10px 12px; border-radius: 8px; margin: 0;
+  white-space: pre-wrap; word-break: break-all; }
+/* Read by screen readers and search engines, not drawn: the screenshots'
+   heading, which the screenshots themselves make obvious to everyone else. */
+.vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+figure { margin: 0; }
+figure a { display: block; }
+figure img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); display: block; }
+figcaption { color: var(--dim); font-size: 14px; margin-top: 6px; }
+figcaption a { color: var(--dim); text-decoration: underline; }
+ul.features { margin: 0; padding-left: 20px; }
+ul.features li { margin: 4px 0; }
+ol.steps li { margin: 6px 0; }
+.release h3 { margin: 18px 0 4px; font-size: 18px; }
+.release ul { margin: 0; padding-left: 20px; }
+.release li { margin: 2px 0; }
+.extras { margin: 8px 0 0; padding-left: 20px; }
+.extras li { margin: 3px 0; }
+footer { color: var(--dim); font-size: 14px; padding: 24px 0 48px; border-top: 1px solid var(--line); margin-top: 40px; }
+footer a { color: var(--dim); }
+footer p { margin: 4px 0; }
+.badge { display: inline-block; background: var(--warn); color: #241a00; border-radius: 999px; padding: 2px 10px;
+  font-size: 14px; font-weight: 700; vertical-align: middle; margin-left: 8px; }
+.status { border-color: var(--warn); }
+.status h2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.status .pill { display: inline-block; background: var(--warn); color: #241a00; border-radius: 999px;
+  padding: 2px 10px; font-size: 13px; font-weight: 700; }
+.status p.banner { font-size: 19px; font-weight: 700; margin: 0 0 8px; }
+.status ul { margin: 10px 0 0; padding-left: 20px; }
+.status li { margin: 4px 0; }
+.planned { border-top: 1px solid var(--line); padding-top: 10px; }
+@media (max-width: 600px) {
+  header h1 { font-size: 32px; }
+  header p.lede { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>OpenHamShack Radio <span class="badge">{{VERSION}} preview</span></h1>
+  <p class="lede">An all-band amateur transceiver for a Linux laptop: 160 m to 6 cm on a Pluto or a
+  Hermes-Lite 2, with your UK licence class and the RSGB band plan built in.</p>
+  <p class="sibling">The terrestrial sibling of <a href="https://openhamshack.com/desktop/nb/">OpenHamShack QO-100 NB</a>
+  (QO-100 narrowband), sharing its engine, and of <a href="https://openhamshack.com/apps/qo100-wb/">OpenHamShack QO-100 WB</a>
+  (DATV, in a box). Back to <a href="https://openhamshack.com/">openhamshack.com</a>.</p>
+  {{GUIDE_NAV}}
+</header>
+
+<section class="card status">
+  <h2>Status <span class="pill">Preview</span></h2>
+  <p class="banner">Preview — simulator-tested only; nothing tried on real radios or on air yet.</p>
+  <p>Every part of this release has been exercised against the program's own simulated bands, which is what it
+  starts on. That proves the program hangs together; it says nothing yet about real hardware.</p>
+  <ul>
+    <li><b>Pluto</b> receive and transmit on 2&nbsp;m and 70&nbsp;cm are <b>unproven</b>: no Pluto has been connected
+    to this program yet.</li>
+    <li>The <b>Hermes-Lite 2</b> driver has been tested only against a software emulator of the radio, never a
+    real one.</li>
+    <li><b>Power figures are estimates</b> from numbers you type in (the Pluto's ~4.5 mW is one published
+    measurement), not readings from a meter.</li>
+    <li>Transmit only within your own amateur licence. The program holds you to the class you set, but the
+    licence condition is yours to keep — and nothing should reach an antenna until it has been checked into a
+    dummy load and on a spectrum analyser.</li>
+  </ul>
+</section>
+
+<section class="grid">
+  <div class="card dl">
+    <h2>Download</h2>
+    <h3>Linux (Debian, Ubuntu, Mint)</h3>
+    {{DOWNLOAD}}
+    {{GUIDE_LINK}}
+  </div>
+  <div class="card dl">
+    <h2>Optional extras</h2>
+    <p class="note">Each one adds a feature; none is required to run the program, and the simulator needs
+    none of them.</p>
+    <ul class="extras">
+      <li><code>python3-libiio</code> — the Pluto family: ADALM-Pluto, Pluto+, LibreSDR, Pluto nano</li>
+      <li><code>wsjtx</code> — FT8 and FT4 (its <code>jt9</code> does the decoding)</li>
+      <li><code>libcodec2</code> — FreeDV</li>
+      <li><code>python3-soapysdr</code> — receive-only SDRs: RTL-SDR, Airspy, SDRplay-class</li>
+    </ul>
+    <p class="note">The Hermes-Lite 2 needs nothing extra: it is reached over your network.</p>
+  </div>
+</section>
+
+{{SHOTS}}
+
+<section class="card">
+  <h2>What it does</h2>
+  <ul class="features">
+    <li><b>Licence guard</b>: Foundation, Intermediate or Full — every transmission is held inside what your class
+    may use, at no more than its power there, per sub-allocation, from Ofcom's licence tables checked line by
+    line against the published PDF. Bands your class does not have are refused with the reason.</li>
+    <li><b>Band-plan guard</b>: the RSGB 2026 band plan is drawn on the scope and warns when a transmission leaves
+    what its segment is for (or refuses, if you choose). Beacon and satellite sub-bands are always refused.</li>
+    <li><b>Power chain</b>: per band, the radio's output, your amplifier's gain, feeder loss and antenna gain turn
+    the drive control into an estimate of watts at the antenna; the drive cannot pass your licence's limit.</li>
+    <li><b>Modes</b>: USB, LSB, CW, AM (transmit too), FM with CTCSS, repeater shift, reverse and the 1750 Hz
+    toneburst; FT8 and FT4 at each band's dial; PSK31/63/125, RTTY, FreeDV and SSTV.</li>
+    <li><b>Band bar and band stacks</b>: 160 m to 6 cm, three registers per band, VFO A/B, split, RIT and XIT.</li>
+    <li><b>Safety</b>: a PTT sequencer for a PA (USB-serial RTS/DTR), SWR and PA-temperature trips where the
+    radio measures them, a transmit time-out, dead-air and window watchdogs, and Esc always unkeys.</li>
+    <li><b>Logbook</b> with ADIF export, <b>memories</b> seeded from the band plan, a second display, and a light
+    theme.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Radios</h2>
+  <ul class="features">
+    <li><b>Simulator</b> (the default): busy simulated bands from 160 m to 6 cm with SSB, CW, FT8 and real UK
+    repeater pairs that open to the right CTCSS tone. Nothing it does reaches the air.</li>
+    <li><b>ADALM-Pluto, Pluto+, LibreSDR or Pluto nano</b> on 4 m (experimental), 2 m, 70 cm, 23 cm, 13 cm, 9 cm
+    and 6 cm. A few milliwatts out and <b>no output filter</b>: its output is checked into a dummy load on a
+    spectrum analyser before it drives any PA, and it never goes straight to an antenna. <i>Untested on
+    hardware.</i></li>
+    <li><b>Hermes-Lite 2</b> on 160 m to 10 m over Ethernet, about 5 W. <i>Tested against an emulator only.</i></li>
+    <li><b>Receive-only SDRs</b> through SoapySDR (RTL-SDR, Airspy, SDRplay-class).</li>
+  </ul>
+  <p class="note">6 m has no radio here yet: the Hermes-Lite 2 stops at 38.4 MHz and the Pluto cannot receive below
+  70 MHz.</p>
+</section>
+
+<section class="card">
+  <h2>Installing</h2>
+  <ol class="steps">
+    <li>Download the <code>.deb</code> above and check it against the SHA-256 shown: <span class="mono">sha256sum
+    openhamshack-radio_*_all.deb</span>.</li>
+    <li>Install it with <code>sudo apt install ./openhamshack-radio_&lt;version&gt;_all.deb</code> — apt pulls in what it
+    needs (<code>python3-numpy</code>, <code>python3-pyqt6</code>, <code>python3-pyaudio</code>) and the
+    recommended extras from your normal repositories. It installs beside OpenHamShack QO-100 NB without touching it.</li>
+    <li>Run <b>OpenHamShack Radio</b> from your applications menu, or <code>openhamshack-radio</code> from a terminal. It starts
+    on the simulator, receiving; nothing transmits until you have ticked the licence box and keyed it
+    yourself.</li>
+  </ol>
+</section>
+
+<section class="card release" id="notes">
+  <h2>Release notes</h2>
+  {{NOTES}}
+</section>
+
+<footer>
+  <p>Licence limits are Ofcom's (amateur licence conditions, 2024, checked against the PDF); the band plan is the
+  RSGB's 2026 plan. FT8/FT4 decoding uses WSJT-X's <code>jt9</code> (K1JT and the WSJT-X development group), FT8/FT4
+  encoding is OpenHamShack's own port of WSJT-X 2.7.0's (Joe Taylor K1JT, Steve Franke K9AN, Bill Somerville G4WJS et al.),
+  and
+  FreeDV uses <code>libcodec2</code> (David Rowe, VK5DGR, and contributors). OpenHamShack Radio is not affiliated with
+  Ofcom, the RSGB, IARU, Analog Devices or the Hermes-Lite project.</p>
+  <p>Transmitting needs an amateur radio licence; the program enforces your class's limits as it understands
+  them, but you are responsible for staying within yours. Licence: GPL-3.0-or-later. Built {{BUILT}}.</p>
+</footer>
+</div>
+</body>
+</html>

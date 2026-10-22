@@ -1,0 +1,94 @@
+.TH OPENHAMSHACK-NB 1 "2026-10-04" "openhamshack-nb" "User Commands"
+.SH NAME
+openhamshack-nb \- QO-100 narrowband transceiver
+.SH SYNOPSIS
+.B openhamshack-nb
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+OpenHamShack QO-100 NB is a native PyQt6 desktop transceiver for the QO-100 amateur
+satellite's narrowband segment (CW, SSB, FT8, FT4, PSK31/63/125, RTTY,
+FreeDV and SSTV receive). A radio engine owns the SDR and does all the
+signal processing; a Qt window is the whole user interface; both run in
+one process on the machine at the operator's desk.
+.PP
+It talks to the ADALM-Pluto family of SDRs (Pluto, Pluto+, LibreSDR,
+Pluto nano) over the network or USB for full transmit and receive, or to
+any SoapySDR-supported receiver (RTL-SDR, Airspy, SDRplay, HackRF, \&...)
+for receive only. With no hardware attached it runs against a simulated
+QO-100 downlink, which is enough to explore the program, run its test
+suite, or demonstrate it with no dish.
+.PP
+Run with no arguments to open the window. The window is the primary way
+to use the program; the options below exist for testing, benchmarking,
+and running the engine unattended.
+.SH OPTIONS
+.TP
+.B \-\-headless
+Run the engine without opening a window: print one status line a
+second to standard output instead. Intended for tests and benchmarking,
+not day-to-day operation \- there is no way to transmit from this mode
+and nothing here ever keys the transmitter.
+.TP
+.BI \-\-device " DEVICE"
+Override the configured device for this run only. One of
+.BR sim ", " pluto " or " soapy .
+.TP
+.BI \-\-seconds " N"
+Stop after
+.I N
+seconds instead of running until interrupted (Ctrl-C). A value of 0, the
+default, means run until interrupted.
+.TP
+.B \-\-no\-audio
+Run with the null audio backend: no sound card is opened. Useful
+wherever PortAudio has nothing to attach to, such as a headless build
+host or a CI runner.
+.TP
+.B \-v ", " \-\-verbose
+Log at INFO level instead of the default WARNING.
+.TP
+.B \-h ", " \-\-help
+Show the built-in usage summary and exit.
+.SH FILES
+.TP
+.I ~/.config/openhamshack-nb/config.json
+Persisted settings (frequency, mode, device, calibration). Overridden by
+the
+.B OHS_NB_CONF
+environment variable.
+.TP
+.I ~/.local/share/openhamshack-nb/
+Logs, recordings and received SSTV images. Overridden by the
+.B OHS_NB_DATA
+environment variable.
+.SH ENVIRONMENT
+.TP
+.B OHS_NB_CONF
+Path to the config file, in place of the default under
+.IR ~/.config .
+.TP
+.B OHS_NB_DATA
+Path to the data directory, in place of the default under
+.IR ~/.local/share .
+.TP
+.BR OHSNB_CONF ", " OHSNB_DATA
+The names these had before the OpenHamShack rename; still read when
+the OHS_NB_ ones are not set.
+.PP
+An installation from before the rename kept its files under
+.IR ~/.config/openhamshack-nb " and " ~/.local/share/openhamshack-nb .
+The first start of this version moves both to the new names and leaves
+a link at each old one; nothing is copied and nothing deleted.
+.SH EXIT STATUS
+.B 0
+on a clean stop (Ctrl-C, SIGTERM, or \-\-seconds elapsing);
+.B 1
+if the engine could not start (device or audio failure);
+.B 2
+if run with no mode of operation and no window is available (the
+message tells you to pass \-\-headless).
+.SH SEE ALSO
+Full engine API and design notes are installed with the source under
+.IR /usr/lib/openhamshack-nb/ohsnb .
+.SH AUTHOR
+Brian Henderson

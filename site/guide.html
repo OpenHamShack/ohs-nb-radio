@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenHamShack QO-100 NB user guide: install, set up and operate</title>
+<meta name="description" content="The OpenHamShack QO-100 NB user guide: installing on Linux and Windows, first run, choosing a radio, every control, transmitting safely on QO-100, and troubleshooting.">
+{{HEAD}}
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+{{BASE_STYLE}}
+/* The guide's own layout, on top of the front page's tokens. Generated from
+   docs/USERGUIDE.md by tools/site-build.py; nothing fetched from anywhere.
+   Wide screens: contents in a sticky column beside the text. Narrow: the
+   contents fold into one <details> above it, so a phone opens on the guide
+   and not on a screen of links. */
+.wrap { max-width: 1180px; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; padding: 28px 0 4px; }
+.top h1 { margin: 0; font-size: 34px; }
+.top a.home { font-size: 15px; }
+.layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 36px; align-items: start; margin-top: 18px; }
+nav.toc { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; font-size: 14px; }
+nav.toc summary { font-weight: 700; cursor: pointer; padding: 6px 0; list-style: none; }
+nav.toc summary::-webkit-details-marker { display: none; }
+nav.toc summary::before { content: "▸ "; color: var(--accent); }
+nav.toc details[open] summary::before { content: "▾ "; }
+nav.toc ol { margin: 6px 0 0; padding-left: 28px; }
+nav.toc li { margin: 4px 0; }
+nav.toc a { color: var(--dim); text-decoration: none; }
+nav.toc a:hover { color: var(--accent); text-decoration: underline; }
+article { min-width: 0; }
+article h2 { font-size: 26px; margin: 44px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); scroll-margin-top: 12px; }
+article h2:first-of-type { margin-top: 8px; }
+article h3 { font-size: 20px; margin: 28px 0 8px; scroll-margin-top: 12px; }
+article h4 { font-size: 17px; margin: 22px 0 6px; color: var(--dim); }
+article p, article li { max-width: 78ch; }
+article ul, article ol { padding-left: 22px; }
+article li { margin: 5px 0; }
+article li ul { margin: 4px 0; }
+article pre.mono { margin: 10px 0; overflow-x: auto; white-space: pre; word-break: normal; }
+article figure { margin: 18px 0; max-width: 960px; }
+.table { overflow-x: auto; margin: 12px 0; -webkit-overflow-scrolling: touch; }
+table { border-collapse: collapse; font-size: 15px; min-width: 100%; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+thead th { background: var(--card); font-size: 14px; color: var(--dim); white-space: nowrap; }
+tr.sub th { background: var(--code); color: var(--accent); font-size: 13px; letter-spacing: .4px; text-transform: uppercase; }
+td code, th code { white-space: nowrap; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  nav.toc { position: static; max-height: none; background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 6px 14px; }
+  .top h1 { font-size: 28px; }
+  article h2 { font-size: 23px; }
+  table { font-size: 14px; }
+  td code, th code { white-space: normal; word-break: break-word; }
+}
+/* A phone: a four-column table squeezed to 360 px is unreadable and a sideways
+   scroll hides half of it, so each row becomes a card with every cell under
+   its column's name. */
+@media (max-width: 600px) {
+  .table table, .table thead, .table tbody, .table tr, .table td, .table th { display: block; min-width: 0; }
+  .table thead { display: none; }
+  .table tr { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; padding: 4px 0; background: var(--card); }
+  .table tr.sub { border: 0; background: none; margin: 14px 0 2px; padding: 0; }
+  .table tr.sub th { border: 0; background: none; padding: 0 2px; }
+  .table td { border: 0; padding: 3px 12px; }
+  .table td:empty { display: none; }
+  .table td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--dim); }
+  .table td:first-child { font-weight: 700; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="top">
+  <h1>OpenHamShack QO-100 NB user guide</h1>
+  <span class="badge">{{VERSION}}</span>
+  <a class="home" href="index.html">‹ Downloads and release notes</a>
+</div>
+<div class="layout">
+  <nav class="toc" aria-label="Contents">
+    <details id="toc" open>
+      <summary>Contents</summary>
+      <ol>{{TOC}}</ol>
+    </details>
+  </nav>
+  <article>
+{{GUIDE}}
+  </article>
+</div>
+<footer>
+  <p>Generated from <code>docs/USERGUIDE.md</code> in the OpenHamShack QO-100 NB repository. Transmitting needs an amateur
+  radio licence; you are responsible for staying within yours, and for staying under the beacon's level.
+  Licence: GPL-3.0-or-later. Built {{BUILT}}.</p>
+  <p><a href="index.html">OpenHamShack QO-100 NB: downloads and release notes</a> ·
+  <a href="https://openhamshack.com/source/#openhamshack-nb">Source code</a> ·
+  <a href="https://openhamshack.com/">openhamshack.com</a></p>
+</footer>
+</div>
+<script>
+// The contents start folded on a phone, so the page opens on the guide; on a
+// wide screen they stay open beside it. Choosing a section folds them again.
+(function () {
+  var d = document.getElementById("toc");
+  if (!d || !window.matchMedia) return;
+  var narrow = window.matchMedia("(max-width: 900px)");
+  function fit() { d.open = !narrow.matches; }
+  fit();
+  if (narrow.addEventListener) narrow.addEventListener("change", fit);
+  d.addEventListener("click", function (e) {
+    if (narrow.matches && e.target.tagName === "A") d.open = false;
+  });
+})();
+</script>
+</body>
+</html>

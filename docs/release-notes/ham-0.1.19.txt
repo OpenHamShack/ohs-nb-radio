@@ -1,0 +1,1 @@
+Band buttons show only bands your radio covers, and a first visit lands somewhere sensible: FT8 in a digital mode, the SSB segment otherwise, the calling channel from FM on 2 m/70 cm. New "SDR Console-like" scope style. Optional diagnostics upload, off unless you turn it on.

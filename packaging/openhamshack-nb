@@ -1,0 +1,31 @@
+#!/bin/sh
+# Launcher for OpenHamShack QO-100 NB.
+#
+# Plain POSIX sh (no bashisms) because this runs on whatever /bin/sh the
+# target happens to point at, which on Debian is dash, not bash.
+#
+# The package puts the ohsnb/ Python package, and its private copy of the
+# ohscore/ package it is built on, under /usr/lib/openhamshack-nb/
+# rather than a site-packages directory (lintian's preferred spot for a
+# private Python app, and it keeps us off the distro's module path so we
+# can never shadow a system ohsnb of some other name). That means PYTHONPATH
+# has to be set by hand -- there is deliberately no install step that could
+# write an absolute path into this file, so the same launcher works both at
+# /usr/bin/openhamshack-nb and extracted anywhere else (the packaging test does
+# exactly that with `dpkg-deb -x` into a temp root): compute the install
+# root from this script's own real location instead of hard-coding it.
+set -e
+
+self=$(readlink -f "$0" 2>/dev/null) || self="$0"
+bindir=$(dirname "$self")
+root=$(dirname "$bindir")
+libdir="$root/lib/openhamshack-nb"
+
+if [ -n "$PYTHONPATH" ]; then
+    PYTHONPATH="$libdir:$PYTHONPATH"
+else
+    PYTHONPATH="$libdir"
+fi
+export PYTHONPATH
+
+exec python3 -m ohsnb "$@"

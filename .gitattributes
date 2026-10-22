@@ -1,0 +1,37 @@
+# What a published source tarball leaves out (tools/source-site.py tarball,
+# run by tools/release.sh for every release). The repository is private;
+# each release's tarball is public on https://openhamshack.com/source/.
+# Only notes that are internal and never needed to build anything go here:
+# the GPL's corresponding source is everything needed to rebuild what is
+# shipped, so a file the build, the tests or the packaging reads must
+# never be listed. The tarball tool applies this file to old commits too,
+# which is how the releases made before it existed were backfilled.
+#
+# HANDOVER.md: the working notes passed between sessions - the build
+# hosts' tailnet and LAN addresses and the account used on them, the web
+# host's package number and folders, test radios on the home network.
+# None of it is code, nothing reads it, and DESIGN.md and docs/ say
+# everything about the program that it does.
+HANDOVER.md export-ignore
+
+# The guides' screenshots (docs/screenshots, docs/ham/screenshots): about
+# 28 MB of every release's tarball from 0.1.3 on, more than the rest of
+# the tree. They are not source: ohsnb.ui.screenshots and
+# ohsradio.ui.screenshots render them from the simulator, and only
+# tools/site-build.py reads them, for the product sites' guide pages -
+# neither package nor installer carries one. The tarball's SOURCE-NOTES.txt
+# says how to make them again.
+docs/**/screenshots export-ignore
+
+# packaging/source-scrub.txt: the replacements the tarball tool makes in
+# every published tarball, and so a list of every internal name they
+# hide. The tool refuses to make a tarball that would carry it.
+packaging/source-scrub.txt export-ignore
+
+# ohscore/data/cty.dat and its notice: AD1C's files exactly as
+# country-files.com publishes them, CRLF line ends and all. -text stops git
+# turning those into LF on a checkout or commit, which would leave the
+# vendored copy no longer the one ohscore/data/cty-source.txt pins (and
+# tools/cty-refresh.py --check, run by the suite, would say so).
+ohscore/data/cty.dat -text
+ohscore/data/cty.dat-copyright.txt -text

@@ -1,0 +1,35 @@
+# What tools/build-windows.ps1 installs into its build virtualenv: the
+# program's own requirements (DESIGN.md: numpy, PyQt6, pyaudio) plus
+# PyInstaller. Pinned, so two builds of one version carry the same bytes;
+# move them deliberately, and rebuild and re-run the suite under Windows
+# when you do. PyAudio's Windows wheels carry PortAudio themselves.
+# pyserial is NB's CI-V link to an IC-9700 used as the transmitter (the
+# radio's USB port is a COM port); pure Python.
+# cryptography (with cffi) checks the update feed's Ed25519 signature
+# (ohscore/update.py) in both apps, from 07/10/2026.
+# paramiko is HAM's SSH client for the Pluto's AD9364 setting
+# (ohsradio/plutofix.py); pinned to the version Debian 13 ships and the suite
+# runs against. Its dependencies come as binary wheels for Windows; pinned
+# at what pip resolved on the Windows build machine (06/10/2026), because THIRD-PARTY.txt
+# names each one's version and licence file and must stay true.
+# (pycparser is cffi's build-time parser: installed, never bundled.)
+# hidapi and Pillow are the AKP03E controller pad's (shack_pad): hidapi
+# is how Windows reaches it (the wheel carries the hidapi C library
+# itself), Pillow draws its key pictures. Before 12/10/2026 neither was
+# here, so the pad could not work on Windows at all and nothing said so.
+paramiko==3.5.1
+cryptography==50.0.2
+bcrypt==5.0.0
+PyNaCl==1.6.2
+cffi==2.1.1
+pycparser==3.0
+numpy==2.5.3
+PyQt6==6.11.0
+PyQt6-Qt6==6.11.2
+PyQt6-sip==13.13.0
+PyAudio==0.2.14
+pyserial==3.5
+hidapi==0.15.0
+pillow==12.3.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.8

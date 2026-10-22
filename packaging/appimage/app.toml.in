@@ -1,0 +1,26 @@
+# The kit's descriptor for one app's AppImage (ohs-libs packaging/README.md),
+# filled in by tools/build-appimage.sh, which stages src/ beside it.
+[app]
+id = "com.openhamshack.@KIND@"
+kind = "@KIND@"
+name = "@NAME@"
+summary = "@SUMMARY@"
+executable = "@EXE@"
+version = "@VERSION@"
+entry = "@PKG@.__main__:main"
+icon = "@ICON@"
+categories = ["HamRadio", "Network"]
+license_file = "LICENSE"
+
+[python]
+paths = ["src"]
+requirements = [@REQUIREMENTS@]
+
+[linux]
+host_libs = "host-libs.txt"
+
+[windows]
+app_guid = "@GUID@"
+
+[pyinstaller]
+spec = "qt-app.spec"

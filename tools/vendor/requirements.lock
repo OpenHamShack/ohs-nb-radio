@@ -1,0 +1,54 @@
+# The shared OpenHamShack libraries these apps pin (REPO-LAYOUT 4): built by
+# ~/ohs-libs tools/build.sh at ohs-libs main 326d251 (dataset 2026.10.3; the
+# Store frees a dead thread's connection and has release_thread()), exact
+# files, one commit per bump.
+# A checkout imports them through ohscore/shacklibs.py; the packages unpack
+# them beside ohscore (tools/build-deb.sh, build-windows.ps1, build-macos.sh,
+# the store Containerfile), each checking these hashes first.
+# shack-i18n is the string check's wheel (tools/i18n.py), from M1; not shipped.
+# shack-cw alone was built from ohs-libs main 271b8e4: the CW decoder, Morse
+# tables and bench that moved there from ohscore (main 47be138), now shared
+# with Icom and Flex. The other wheels are unchanged since 326d251.
+# shack-cw again, from ohs-libs main 9b242d0 (feature/cw-decode-accuracy,
+# merged; its decoder is byte-identical to the branch's 14de87f, only
+# shack_cw.corpus changed since): the squelch that no longer
+# reads static or a neighbour's keying as Morse (Brian's 20 m report of
+# 13/10/2026), Decoder(polarity=False) for Radio, feed_frames for a
+# skimmer, and shack_cw.corpus, the decoder scored on real bands.
+# shack-cw again, from ohs-libs feature/cw-skimmer 4581251 (not yet main;
+# re-vendor from main when it merges): shack_cw.skim, the CW skimmer
+# Radio runs (ohsradio/cwskim.py), and shack_cw.amplitudes; the decoder
+# prints the same as 9b242d0's (its bench table is unchanged).
+# shack-cw again, from ohs-libs feature/cw-spacing 7f041af: a BRANCH PIN,
+# on top of feature/cw-skimmer (4581251 + the recovery tool and the
+# matcher's re-spacing, calls.segment()). Decoders print CQ/DE glued to a
+# call and split calls at letter gaps on real bands; the matcher now
+# re-spaces each channel's words before looking for calls.
+# Now ohs-libs main 7f041af: both branches fast-forwarded into main on
+# 13/10/2026, so this is no longer a branch pin. A wheel rebuilt from main
+# has the same files byte for byte (only the zip timestamps differ), so the
+# vendored wheel and its hash are kept rather than churned.
+# shack-rec, built from ohs-libs main b5937d9: recordings on the
+# controller (FLAC receive audio, the recordings folder, range requests).
+# Only the store form's server uses it, so only the store images carry it;
+# no desktop form has a server (packaging/shack_vendor.py RUNTIME).
+# shack-pad, built from ohs-libs feature/nb-pad-flicker ad23292
+# (main 373333d's pad plus one commit): the AKP03E found on Windows/macOS
+# by its vendor collection (usage page 0xFFA0), shack_pad.diagnose, test
+# mode and DesktopPad.status() for Settings › Control pad; and a keep-alive
+# every 10 s, without which the pad dropped every 39 s and every key
+# flickered. Now ohs-libs main ad23292: the branch fast-forwarded into main
+# on 16/10/2026, so this is no longer a branch pin. A wheel rebuilt from
+# main has the same files byte for byte (only the zip timestamps differ),
+# so the vendored wheel and its hash are kept rather than churned.
+# All six, from ohs-libs main 53aa362 (21/10/2026): the OpenHamShack rename
+# of ohs-libs itself (no former name is left inside any wheel - checked by
+# unzipping each and searching its strings).
+# No behaviour change, so every wheel's files are otherwise identical to
+# the ones they replace.
+shack-rec==0.1.0 --hash=sha256:fb8807781161f72b5768c685ca805d6eb14b983a6ec468b6744cf6f65ad8ec82
+shack-cw==0.1.0 --hash=sha256:458f3fa9f3f83dfda0031dbce453f40f89d95ae21a2716c7e005db04f52a877f
+shack-bandplan==0.1.0 --hash=sha256:591a1cb85f3ecd64af5d5c5f198d9aa47696436c9ee72fa66b106c16c75cc44d
+shack-client==0.1.0 --hash=sha256:3a7c9985151ec2c4c2fba253eb4f83ada065cc112675b7bdf8ee4145c0683b32
+shack-pad==0.1.0 --hash=sha256:682b9b3e69e371f9b146d7573589d94cbb2ea92d3ee7d156da4149326a156724
+shack-i18n==0.1.0 --hash=sha256:856e39f6ab83ffc8290975d791091678aa44c332f96ecec2576540f8fedb00e5

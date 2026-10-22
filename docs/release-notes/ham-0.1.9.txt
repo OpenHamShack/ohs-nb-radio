@@ -1,0 +1,1 @@
+SSB auto-tune and Best audio; IQ recording and playback; Q65 and JS8 receive; mode buttons tune to the band's usual frequency; TX-only transverters; no more receive drop-outs on scaled screens; automatic updates from this version on.

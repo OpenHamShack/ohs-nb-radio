@@ -1,0 +1,130 @@
+# OpenHamShack Radio, the store form: `python3 -m ohsradio --server`.
+#
+# Built by tools/build-store.sh from a staged copy of one commit (this
+# folder's files at the top, with ohscore/, ohsradio/ and tools/vendor/ beside
+# them), never from a working tree, and carried in the signed package so a
+# controller with no route out can install it (D12).
+#
+# Debian 13, as the .deb is tested on: Debian's numpy, libiio 0.26 and
+# libad9361 for the Pluto, codec2 for FreeDV, cryptography for nothing here
+# but kept because ohscore imports it lazily for update checks. No PyQt, no
+# PortAudio, no sound card: audio goes over the API (ohscore/server/audio.py).
+
+# The SDRplay receivers (an RSPdx on ohs-box, 12/10/2026), through SoapySDR
+# like any receive-only SDR (ohscore/devices/soapy.py). Debian has SoapySDR
+# but neither SDRplay's API nor SoapySDRPlay3, so this stage installs the
+# API from SDRplay's installer and builds the module against it; the image
+# below takes only the results. Both arrive in sdrplay/ beside this file,
+# copied by tools/build-store.sh and checked here against
+# tools/vendor/sdrplay.lock before anything is unpacked. The installer is
+# unpacked, never run: it wants sudo, systemd and udev, none of which a
+# container has, and all it would do is copy these same files.
+FROM docker.io/library/debian:13-slim AS sdrplay
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        g++ cmake make libsoapysdr-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY sdrplay/ /src/
+COPY tools/vendor/sdrplay.lock /src/
+RUN set -e; cd /src \
+    && grep -v '^#' sdrplay.lock | sha256sum -c - \
+    && case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) echo "no SDRplay API for $(uname -m)"; exit 1 ;; esac \
+    && sh ./SDRplay_RSP_API-Linux-*.run --noexec --target api >/dev/null \
+    && lib="$(cd api/$arch && ls libsdrplay_api.so.*)" \
+    && mkdir -p /out/usr/local/lib /out/usr/local/bin /out/usr/share/doc/sdrplay-api \
+    && install -m 0644 "api/$arch/$lib" /out/usr/local/lib/ \
+    && ln -s "$lib" /out/usr/local/lib/libsdrplay_api.so.3 \
+    && ln -s libsdrplay_api.so.3 /out/usr/local/lib/libsdrplay_api.so \
+    && install -m 0755 "api/$arch/sdrplay_apiService" /out/usr/local/bin/ \
+    && install -m 0644 api/sdrplay_license.txt /out/usr/share/doc/sdrplay-api/ \
+    && cp api/inc/sdrplay_api*.h /usr/local/include/ \
+    && cp -a /out/usr/local/lib/. /usr/local/lib/ \
+    && tar xzf SoapySDRPlay3-*.tar.gz \
+    && cmake -S SoapySDRPlay3-soapy-sdrplay3-* -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+    && cmake --build build -j"$(nproc)" \
+    && DESTDIR=/out cmake --install build \
+    && install -m 0644 SoapySDRPlay3-soapy-sdrplay3-*/LICENSE.txt /out/usr/share/doc/sdrplay-api/SoapySDRPlay3-LICENSE.txt
+
+FROM docker.io/library/debian:13-slim
+
+# python3-soapysdr and the SDRplay module built above, for the soapy device;
+# soapysdr-tools for SoapySDRUtil, which is how to see from a shell on the
+# controller what the container can find (podman exec ... SoapySDRUtil --find).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-numpy \
+        python3-paramiko \
+        python3-libiio \
+        python3-soapysdr \
+        soapysdr-tools \
+        libusb-1.0-0 \
+        libad9361-0 \
+        libcodec2-1.2 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=sdrplay /out/ /
+RUN ldconfig && SoapySDRUtil --info | grep -q sdrPlaySupport
+
+# The shared OpenHamShack libraries, exactly the pinned wheels: each one's
+# hash is checked against tools/vendor/requirements.lock before it is
+# unpacked into site-packages (no pip in the image; a wheel is a zip with
+# nothing to run at install).
+#
+# Then ohsdigi, the one decoder for FT8, FT4, Q65, JS8 and HSmodem (BETA-PLAN D9): the
+# wheel for this architecture, checked against tools/vendor/ohsdigi.lock,
+# and only its module kept, as ohscore/ohsdigi.abi3.so - where ohscore imports
+# it from (ohscore.ohsdigi), exactly where the .deb puts it. COPY ohscore/
+# below adds to that folder rather than replacing it. WSJT-X is not
+# installed: jt9 would only be the fallback and the per-slot shadow (a
+# second decode of every slot on the controller's CPU) and would bring Qt
+# with it. Q65 and JS8 need no program either since ohsdigi decodes them
+# (10/10/2026): the wheel must be one built since then, or the selftest
+# below fails the build on them.
+COPY tools/vendor/ /tmp/vendor/
+RUN cd /tmp/vendor \
+    && site="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
+    && mkdir -p "$site" \
+    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec; do \
+         f="$(ls ${w}-*.whl)"; \
+         want="$(sed -n "s/^$(echo $w | tr _ -)==.*--hash=sha256:\([0-9a-f]*\).*/\1/p" requirements.lock)"; \
+         echo "$want  $f" | sha256sum -c - || exit 1; \
+         python3 -m zipfile -e "$f" "$site"; \
+       done \
+    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec; shack_bandplan.load()" \
+    && arch="$(uname -m)" \
+    && f="$(ls ohs_ohsdigi-*-manylinux_*_${arch}.whl)" \
+    && want="$(sed -n "s/^ohs-ohsdigi==.*--hash=sha256:\([0-9a-f]*\).*# ${arch}$/\1/p" ohsdigi.lock)" \
+    && echo "$want  $f" | sha256sum -c - \
+    && python3 -m zipfile -e "$f" /tmp/ohsdigi \
+    && install -D -m 0644 /tmp/ohsdigi/ohsdigi/ohsdigi.abi3.so /opt/shack-radio/ohscore/ohsdigi.abi3.so \
+    && rm -rf /tmp/vendor /tmp/ohsdigi
+
+RUN useradd --uid 1000 --create-home --home-dir /data --shell /usr/sbin/nologin shack
+
+COPY ohscore/ /opt/shack-radio/ohscore/
+COPY ohsradio/ /opt/shack-radio/ohsradio/
+COPY LICENSE pad-actions.json pad-layout.json /opt/shack-radio/
+COPY entrypoint.sh /opt/shack-radio/entrypoint.sh
+
+# Everything the engine keeps is on the data volume (module.yaml), so the
+# read-only image is never written to.
+ENV SHACK_FORM=store \
+    OHS_RADIO_CONF=/data/config.json \
+    OHS_RADIO_DATA=/data \
+    OHS_RADIO_UI_CONF=/data/ui.json \
+    SHACK_STATION_DB=/data/shack/station.db \
+    HOME=/data \
+    XDG_CACHE_HOME=/tmp/cache \
+    SHACK_PORT=8080 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+USER shack
+WORKDIR /opt/shack-radio
+# The image proves, as the user it runs as, that every decoder the app
+# offers loads and that FT8 and FT4 decode a slot, before it can be
+# packaged: 0.1.10-beta.1 shipped with no FT8 decoder and nothing said so.
+# tools/store-check.sh runs the same check against a built image.
+RUN python3 -m ohscore.selftest ohsradio
+EXPOSE 8080
+# entrypoint.sh starts SDRplay's API service, then becomes the server.
+ENTRYPOINT ["/opt/shack-radio/entrypoint.sh"]

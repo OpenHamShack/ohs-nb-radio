@@ -1,0 +1,1 @@
+SSB auto-tune and Best audio; IQ playback and --analyse reports; Q65 and JS8 receive; dish-alignment meter with a phone page; steadier beacon lock on weak signals; mode buttons tune to the usual frequency; TX-only converters; automatic updates from this version on.

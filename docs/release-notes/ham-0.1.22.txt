@@ -1,0 +1,1 @@
+A fix for Icom radios: Radio never sends a tuning or mode change while the radio is transmitting.

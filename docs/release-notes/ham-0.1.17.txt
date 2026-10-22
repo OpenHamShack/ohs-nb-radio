@@ -1,0 +1,1 @@
+ON AIR now shows only while transmitting; between FT8 overs it reads ARMED. A fuller log for remote help. Ajazz AKP03E control pad: Settings > Control pad says whether it works, with a test and a report. The pad cannot transmit until you tick "The pad may transmit".

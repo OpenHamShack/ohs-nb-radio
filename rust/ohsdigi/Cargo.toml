@@ -1,0 +1,58 @@
+# ohsdigi: OpenHamShack's digital-mode signal processing, a Python extension
+# module (ohscore.ohsdigi) written in Rust. Named for what it covers rather
+# than for FT8: FT4 shares nearly all of it, and JS8 and other modes are
+# meant to join it (docs/digimodes-rust.md).
+[package]
+name = "ohsdigi"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.80"
+license = "GPL-3.0-or-later"
+description = "FT8/FT4 message packing, coding and waveforms for OpenHamShack NB and OpenHamShack HAM, ported from WSJT-X 2.7.0"
+publish = false
+
+[lib]
+name = "ohsdigi"
+# cdylib: the Python module. rlib: so `cargo test` and the integration
+# tests link the same code without Python.
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+# The Python binding. Off for `cargo test`, so the tests need no Python
+# to link against; tools/build-ohsdigi.sh turns it on.
+python = ["dep:pyo3"]
+
+[dependencies]
+# abi3-py311: one build loads into every CPython from 3.11 (Pi OS bookworm)
+# to 3.13 (Debian 13, the Windows bundle) and later, so each platform needs
+# one binary, not one per Python. PyO3 0.29 links the Windows build against
+# python3.dll by raw-dylib, so no Windows Python (or import library) is
+# needed on the Linux host that cross-compiles it.
+pyo3 = { version = "0.29", optional = true, default-features = false, features = ["macros", "abi3-py311"] }
+# The decoder (src/decode): FFTs of any length (WSJT-X uses FFTW, whose
+# lengths - 180 000, 192 000, 3 840 - are not powers of two), and candidates
+# decoded in parallel. Both pure Rust, MIT/Apache-2.0.
+rustfft = "6"
+rayon = "1"
+# JS8's word dictionary (src/js8/jsc.bin.gz) is stored gzipped: 2 MB in
+# the binary instead of 3.5. flate2's default backend is pure Rust.
+flate2 = "1"
+# JS8's message layer (src/js8/varicode.rs) parses operator text with
+# JS8Call's own regular expressions, copied verbatim; they use look-ahead
+# and look-behind, which the regex crate alone does not do. fancy-regex
+# adds those (by backtracking, as Qt's PCRE does) on top of it.
+fancy-regex = "0.14"
+
+[profile.release]
+# Small and fast, and the same bytes from the same source: one codegen
+# unit and LTO make the output independent of build parallelism.
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = "symbols"
+
+# The decoder's tests decode whole 15 s slots; unoptimised that is ~50x
+# slower and tests/jt9_golden.rs alone would take minutes.
+[profile.test]
+opt-level = 3

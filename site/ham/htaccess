@@ -1,0 +1,95 @@
+# OpenHamShack HAM's site, https://openhamshack.com/desktop/ham/ - Apache on
+# 20i, behind 20i's StackCDN. tools/site-build.py copies this file from
+# site/ham/htaccess in the openhamshack-nb repository into the release folder as
+# .htaccess on every build: edit it there, never on the server or in the
+# folder, or the next release puts it back.
+
+# No ErrorDocument. On openhamshack.com this folder carries only the
+# packages and the update feed (tools/publish.sh: the pages beside them in
+# the release folder name people, and the site publishes no personal
+# name), so there is no 404.html of its own to point at. A missing file
+# gets the server's plain 404.
+Options -Indexes
+AddDefaultCharset utf-8
+# x.deb.sha256 was served as a Debian package (mod_mime reads every
+# extension, and .deb came first), so a browser downloaded the checksum
+# instead of showing it. The last extension wins.
+AddType text/plain .sha256
+# The macOS preview's disk image (release.sh --macos): Apache's own table
+# may not know .dmg, and a guessed type can make a browser show it as text.
+AddType application/x-apple-diskimage .dmg
+# The update feed (docs/update-feed.md): JSON, and its detached signature
+# as raw bytes, never guessed at as text.
+AddType application/json .json
+AddType application/octet-stream .sig
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# The folder itself. It has no index page on openhamshack.com (only the
+# packages and the feed go up), so without this the address the installer
+# gives as its publisher's (Add or Remove Programs) and the source archive
+# gives as "downloads" would answer 403. The app's page on the website has
+# the downloads. Written out as https: Apache would build a relative
+# redirect from the plain-HTTP scheme the CDN reaches it by.
+RewriteRule ^$ https://%{HTTP_HOST}/apps/radio/ [R=302,L]
+
+# /source/ held the installers' third-party source until 06/10/2026, and
+# installers already out there name it in their THIRD-PARTY.txt. It all
+# lives on the shared source site now: a real 301 says so to people and
+# crawlers alike, where source/index.html's meta refresh only worked in a
+# browser (it stays, noindex, for a host that ignores this file). NE keeps
+# the "#" a "#" rather than escaping it to %23.
+RewriteRule ^source(/|/index\.html)?$ https://openhamshack.com/source/#openhamshack-ham [R=301,L,NE]
+
+# A directory asked for without its trailing slash. Apache's own fix-up
+# (mod_dir's DirectorySlash) builds its redirect from the scheme Apache
+# itself was reached by, and the CDN reaches it over plain HTTP, so
+# https://.../dir was sent to http://.../dir/ and only then back up to
+# https - a plaintext hop a scanner flags (the audit of 06/10/2026). Both
+# sites are HTTPS-only, so the redirect is made here, to https, before
+# mod_dir's fix-up runs (mod_rewrite's runs first). %{HTTP_HOST} rather
+# than the name written out: the CDN passes the public host through, and
+# the same file then works on 20i's preview address too. %{REQUEST_URI}
+# rather than $1: in a folder's .htaccess $1 is the path below the folder,
+# so the old rule sent /desktop/nb/shots to /shots/ once the site moved
+# into openhamshack.com. This is a trailing-slash fix only, never an HTTPS
+# redirect - one of those loops through the CDN.
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule [^/]$ https://%{HTTP_HOST}%{REQUEST_URI}/ [R=301,L]
+</IfModule>
+
+# Caching. Until now every response relied on revalidation alone (ETag,
+# Last-Modified): a round trip per file per visit, however unchanged.
+<IfModule mod_headers.c>
+# Pages change with every release and every guide edit: five minutes, so an
+# upload shows within that.
+<FilesMatch "\.html$">
+  Header set Cache-Control "public, max-age=300"
+</FilesMatch>
+# Packages, installers, disk images and their checksums carry their version in their
+# name, and release.sh refuses ever to publish different bytes under a
+# published name - so they may be kept for a year without asking again.
+<FilesMatch "\.(deb|exe|dmg|sha256)$">
+  Header set Cache-Control "public, max-age=31536000, immutable"
+</FilesMatch>
+# Screenshots are named after their own bytes (<name>-<12 hex>.jpg|png,
+# site-build.py): a new render is a new name, so the same holds. Only
+# shots/ has raster images; anything else matching would have to be named
+# the same way to be safe, which is why the pattern asks for the hash.
+<FilesMatch "-[0-9a-f]{12}\.(jpg|png)$">
+  Header set Cache-Control "public, max-age=31536000, immutable"
+</FilesMatch>
+# The update feed changes in place with every release: every client asks
+# again each time (no-cache still allows a cheap 304), so no copy - the
+# browser's, a proxy's or the CDN edge's - holds back a new version for
+# hours. Clients refuse a manifest older than one they have seen, so a
+# stale edge copy costs a day's delay, never a step backwards.
+<FilesMatch "^update\.json(\.sig)?$">
+  Header set Cache-Control "no-cache"
+</FilesMatch>
+# Unversioned and rarely changed: a day.
+<FilesMatch "^(favicon\.svg|robots\.txt|sitemap\.xml)$">
+  Header set Cache-Control "public, max-age=86400"
+</FilesMatch>
+</IfModule>

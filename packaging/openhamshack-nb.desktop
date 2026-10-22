@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=OpenHamShack QO-100 NB
+GenericName=QO-100 Narrowband Transceiver
+Comment=Receive and transmit CW, SSB, FT8, PSK31, RTTY, FreeDV and SSTV on the QO-100 narrowband segment
+Exec=openhamshack-nb
+Icon=openhamshack-nb
+Terminal=false
+NoDisplay=false
+StartupNotify=true
+Categories=HamRadio;Network;
+Keywords=QO-100;QO100;Es'hail-2;satellite;transponder;SDR;SDRplay;ADALM-Pluto;Pluto;LibreSDR;RTL-SDR;Airspy;FT8;FT4;WSJT-X;PSK31;PSK63;RTTY;CW;Morse;FreeDV;codec2;SSTV;amateur radio;ham radio;transceiver;narrowband;waterfall;bandscope;OpenHamShack;OpenHamShack NB;

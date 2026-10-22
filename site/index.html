@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenHamShack QO-100 NB: QO-100 narrowband transceiver for Linux &amp; Windows</title>
+<meta name="description" content="OpenHamShack QO-100 NB (early preview): a QO-100 narrowband transceiver for Linux or Raspberry Pi with an ADALM-Pluto, LibreSDR or Pluto nano. Download and user guide.">
+{{HEAD}}
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+/* One self-contained page: no fonts or scripts from elsewhere, as the app
+   itself fetches nothing. Same tokens as brian-henderson.co.uk and the
+   OpenHamShack site, but this project's identity is the app's own dark
+   "instrument" look, so dark is the resting state and light is the
+   override, not the other way round. */
+:root {
+  --bg: #0a0d12; --card: #10141b; --ink: #e8edf4; --dim: #a3adbb; --line: #232a36;
+  --accent: #4fd1e8; --accent-ink: #041016; --ok: #3ddc84; --warn: #ffb547; --code: #171c25;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #eef1f5; --card: #ffffff; --ink: #0f1722; --dim: #4a5566; --line: #dde2e9;
+    --accent: #0a8fb0; --accent-ink: #ffffff; --ok: #12a35a; --warn: #d98a00; --code: #f3f5f8;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 17px/1.55 "DejaVu Sans", "Segoe UI", system-ui, -apple-system, sans-serif; }
+a { color: var(--accent); }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+header { padding: 40px 0 8px; }
+header h1 { margin: 0; font-size: 40px; letter-spacing: .5px; }
+header p.lede { margin: 8px 0 0; font-size: 20px; color: var(--dim); max-width: 760px; }
+header p.sibling { margin: 14px 0 0; font-size: 14px; color: var(--dim); }
+section { margin: 28px 0; }
+h2 { font-size: 24px; margin: 0 0 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.dl { display: flex; flex-direction: column; gap: 10px; }
+.btn { display: inline-block; background: var(--accent); color: var(--accent-ink); text-decoration: none;
+  font-weight: 700; padding: 12px 18px; border-radius: 10px; }
+.meta { color: var(--dim); font-size: 14px; word-break: break-all; }
+.note { color: var(--dim); font-size: 14px; margin: 0; }
+.dl h3 { margin: 10px 0 0; }
+/* The guide link: a second, quieter button beside the download, so the
+   download stays the obvious first thing to press. */
+.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.guide-nav { margin: 18px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+code, .mono { font-family: "DejaVu Sans Mono", ui-monospace, monospace; font-size: 14px;
+  background: var(--code); padding: 1px 5px; border-radius: 5px; }
+pre.mono { background: var(--code); padding: 10px 12px; border-radius: 8px; margin: 0;
+  white-space: pre-wrap; word-break: break-all; }
+/* Read by screen readers and search engines, not drawn: the screenshots'
+   heading, which the screenshots themselves make obvious to everyone else. */
+.vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+figure { margin: 0; }
+figure a { display: block; }
+figure img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); display: block; }
+figcaption { color: var(--dim); font-size: 14px; margin-top: 6px; }
+figcaption a { color: var(--dim); text-decoration: underline; }
+ul.features { margin: 0; padding-left: 20px; }
+ul.features li { margin: 4px 0; }
+ol.steps li { margin: 6px 0; }
+.release h3 { margin: 18px 0 4px; font-size: 18px; }
+.release ul { margin: 0; padding-left: 20px; }
+.release li { margin: 2px 0; }
+.extras { margin: 8px 0 0; padding-left: 20px; }
+.extras li { margin: 3px 0; }
+footer { color: var(--dim); font-size: 14px; padding: 24px 0 48px; border-top: 1px solid var(--line); margin-top: 40px; }
+footer a { color: var(--dim); }
+footer p { margin: 4px 0; }
+.badge { display: inline-block; background: var(--ok); color: #06120b; border-radius: 999px; padding: 2px 10px;
+  font-size: 14px; font-weight: 700; vertical-align: middle; margin-left: 8px; }
+.status { border-color: var(--warn); }
+.status h2 { display: flex; align-items: center; gap: 10px; }
+.status .pill { display: inline-block; background: var(--warn); color: #241a00; border-radius: 999px;
+  padding: 2px 10px; font-size: 13px; font-weight: 700; }
+.status ul { margin: 10px 0 0; padding-left: 20px; }
+.status li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>OpenHamShack QO-100 NB <span class="badge">{{VERSION}}</span></h1>
+  <p class="lede">A QO-100 narrowband transceiver for a laptop or Raspberry Pi, with an ADALM-Pluto, LibreSDR or
+  Pluto nano.</p>
+  <p class="sibling">The sibling of <a href="https://openhamshack.com/apps/qo100-wb/">OpenHamShack QO-100 WB</a> (DATV, in a box) —
+  this one runs on your own machine. Back to <a href="https://openhamshack.com/">openhamshack.com</a>.</p>
+  {{GUIDE_NAV}}
+</header>
+
+<section class="card status">
+  <h2>Status <span class="pill">Early preview</span></h2>
+  <p>Proven end to end against the program's own simulated transponder: beacon lock, TX lock, and the FT8, CW and
+  SSTV paths are all exercised automatically by the test suite against the simulator's modelled signals.
+  <b>Received on air</b>: a tester's ADALM-Pluto, on Windows 11, locked to the middle beacon on the real
+  QO-100 downlink. <b>Not yet transmitted on air</b>: TX lock and transmitting are proven only against the
+  simulator, and no LibreSDR, Pluto nano or receive-only SDR has been tried yet. Raspberry Pi performance is a
+  design estimate (the DSP budget it was written to), not a measurement on a Pi.</p>
+  <ul>
+    <li>Transmit only within your own amateur radio licence, on the QO-100 narrowband uplink allocation.</li>
+    <li>Never above the beacon's level — the console's own guard helps, but the licence condition is yours to keep.</li>
+  </ul>
+</section>
+
+<section class="grid">
+  <div class="card dl">
+    <h2>Download</h2>
+    {{DOWNLOAD}}
+    {{GUIDE_LINK}}
+  </div>
+  <div class="card dl">
+    <h2>Optional extras</h2>
+    <span class="meta">Each one adds a feature; none is required to run the program.</span>
+    <ul class="extras">
+      <li><code>wsjtx</code> — FT8 and FT4 (its <code>jt9</code> does the decoding)</li>
+      <li><code>python3-libiio</code> — the Pluto family: ADALM-Pluto, Pluto+, LibreSDR, Pluto nano</li>
+      <li><code>python3-soapysdr</code> — receive-only SDRs: RTL-SDR, Airspy, SDRplay-class</li>
+    </ul>
+  </div>
+</section>
+
+{{SHOTS}}
+
+<section class="card">
+  <h2>What it does</h2>
+  <ul class="features">
+    <li><b>Modes</b>: USB/LSB voice; CW with a keyer and decoder; FT8 and FT4 (decoded by WSJT-X's <code>jt9</code>);
+    PSK31, PSK63, PSK125; RTTY 45.45 and 170 baud; FreeDV 700C, 700D, 1600 and 2020 (via <code>libcodec2</code>);
+    SSTV receive (Robot36, Martin M1, Scottie S1, PD120).</li>
+    <li><b>Beacon lock</b>: tracks the middle 400 bd BPSK beacon or the lower CW F1A beacon and corrects the
+    received frequency continuously, so signals sit where the bandplan says they should.</li>
+    <li><b>TX lock</b>: finds your own transmission in your own downlink and corrects the uplink to match, so what
+    you send lands where the VFO says — shown on the bandscope, not just claimed.</li>
+    <li><b>Beacon-level guard</b>: measures your downlink against the beacon's level and can trim the power
+    automatically to stay under it, on QO-100 NB's one hard etiquette rule.</li>
+    <li><b>Bandscope and waterfall</b> across the whole transponder, with the bandplan strip, beacon markers, your
+    own passband and where your signal actually landed.</li>
+    <li><b>Second display</b>: an optional window for another screen — a large waterfall with decodes on it, or the
+    mode panel, your choice.</li>
+    <li><b>Logbook</b>, exported as ADIF, and <b>memories</b> for frequencies and modes you come back to.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Hardware</h2>
+  <ul class="features">
+    <li><b>ADALM-Pluto, Pluto+, LibreSDR or Pluto nano</b> for full duplex transmit and receive, via
+    <code>libiio</code> — all AD936x-family devices under the same driver.</li>
+    <li><b>RTL-SDR, Airspy or an SDRplay-class receiver</b> for receive only, via <code>SoapySDR</code>: useful for
+    a second receiver, or for listening before you have a transmit-capable SDR.</li>
+    <li><b>An LNB</b> with a 9750 MHz local oscillator (the common consumer PLL LNB) — the program measures and
+    corrects for its drift against the beacons, rather than assuming it.</li>
+    <li><b>A Linux laptop</b> (Debian, Ubuntu, Mint) or a <b>Raspberry Pi 400/500</b> (Raspberry Pi OS). Nothing in
+    the design is Linux-only except packaging.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Installing</h2>
+  <ol class="steps">
+    <li>Download the <code>.deb</code> above and check it against the SHA-256 shown: <span class="mono">sha256sum
+    openhamshack-nb_*_all.deb</span>.</li>
+    <li>Install it with <code>sudo apt install ./openhamshack-nb_&lt;version&gt;_all.deb</code> — using
+    <code>apt install ./…</code> rather than <code>dpkg -i</code> lets apt pull in the required packages
+    (<code>python3-numpy</code>, <code>python3-pyqt6</code>, <code>python3-pyaudio</code>) from your normal
+    repositories in the same step, and installs the <b>Recommends</b> (<code>python3-libiio</code>,
+    <code>wsjtx</code>, <code>libcodec2</code>) by default.</li>
+    <li>Add anything from <b>Suggests</b> yourself if you want it: <code>soapysdr-module-rtlsdr</code> or
+    <code>soapysdr-module-airspy</code> for those receivers.</li>
+    <li>Run <b>OpenHamShack QO-100 NB</b> from your applications menu, or <code>openhamshack-nb</code> from a terminal. It starts
+    against the built-in simulator until you choose a real device in Settings, so there is always something to see
+    and nothing transmits by accident.</li>
+  </ol>
+  <p class="meta">A missing optional package disables just that one feature, with a sentence saying which package
+  to install — it never stops the program.</p>
+</section>
+
+<section class="card release" id="notes">
+  <h2>Release notes</h2>
+  {{NOTES}}
+</section>
+
+<footer>
+  <p>QO-100 is Es'hail-2's narrowband transponder, operated under AMSAT-DL's bandplan and etiquette. Receive and
+  decode use WSJT-X's <code>jt9</code> (K1JT and the WSJT-X development group) for FT8/FT4 - whose encoding is
+  OpenHamShack's own port of WSJT-X 2.7.0's (Joe Taylor K1JT, Steve Franke K9AN, Bill Somerville G4WJS et al.) - and
+  <code>libcodec2</code>/FreeDV (David Rowe, VK5DGR, and contributors) for FreeDV. OpenHamShack QO-100 NB is not affiliated
+  with AMSAT-DL, BATC or Analog Devices.</p>
+  <p>Transmitting needs an amateur radio licence; you are responsible for staying within yours, and for staying
+  under the beacon's level. Licence: GPL-3.0-or-later. Built {{BUILT}}.</p>
+</footer>
+</div>
+</body>
+</html>

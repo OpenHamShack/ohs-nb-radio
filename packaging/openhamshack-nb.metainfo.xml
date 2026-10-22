@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>openhamshack-nb.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>OpenHamShack QO-100 NB</name>
+  <summary>QO-100 narrowband transceiver</summary>
+  <description>
+    <p>
+      OpenHamShack QO-100 NB is a native desktop transceiver for the QO-100 amateur
+      satellite's narrowband segment. One process owns a software-defined
+      radio and the whole user interface: a bandscope and waterfall across
+      the transponder, beacon and transmit frequency locking, and CW, SSB,
+      FT8, FT4, PSK31/63/125, RTTY, FreeDV and SSTV receive modes.
+    </p>
+    <p>
+      It works with the ADALM-Pluto family (Pluto, Pluto+, LibreSDR, Pluto
+      nano) for full transmit and receive, or with any SoapySDR-supported
+      receiver for receive only. A simulated QO-100 downlink lets it run,
+      and be explored, with no radio attached.
+    </p>
+  </description>
+  <launchable type="desktop-id">openhamshack-nb.desktop</launchable>
+  <categories>
+    <category>HamRadio</category>
+    <category>Network</category>
+  </categories>
+  <provides>
+    <binary>openhamshack-nb</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <!-- @VERSION@ is substituted by tools/build-deb.sh at build time so
+         this never drifts from ohsnb/VERSION, the single source of truth. -->
+    <release version="@VERSION@" date="2026-10-04"/>
+  </releases>
+</component>

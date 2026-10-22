@@ -1,0 +1,35 @@
+# The ohs-ohsdigi wheel: ohsdigi packaged for pip, so every OpenHamShack app
+# (Icom, Digital Modes, NB/Radio) installs the one decoder the same way
+# instead of copying a bare module into its bundle (docs/OHSDIGI-PYTHON.md).
+#
+# The distribution is "ohs-ohsdigi" - "ohsdigi" alone is too generic a name
+# to claim - but the module inside is still `ohsdigi`, so code that imports
+# it today keeps working whether the module came from a wheel or was copied
+# in by tools/build-ohsdigi.sh. Built by tools/build-wheels.sh.
+[build-system]
+requires = ["maturin==1.15.0"]
+build-backend = "maturin"
+
+[project]
+name = "ohs-ohsdigi"
+# From Cargo.toml, so the wheel and ohsdigi.__version__ can never disagree.
+dynamic = ["version"]
+description = "FT8/FT4 encode and decode for OpenHamShack, ported from WSJT-X 2.7.0"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "LICENSE-THIRD-PARTY"]
+# abi3-py311 (Cargo.toml): one wheel per platform serves 3.11 and later.
+requires-python = ">=3.11"
+authors = [{ name = "Brian Henderson" }]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Communications :: Ham Radio",
+]
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "ohsdigi"
+features = ["python"]
+# The bare module and the wheel are the same build: --locked, as
+# tools/build-ohsdigi.sh builds.
+locked = true

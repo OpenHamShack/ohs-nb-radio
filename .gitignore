@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.claude/
+node_modules/
+rust/target/
+rust/dist/
+ohscore/ohsdigi.abi3.so
+ohscore/ohsdigi.pyd
+# The pseudo-locale is generated on demand (tools/i18n.py pseudo), never shipped.
+*_en_XA.ts
+*_en_XA.qm

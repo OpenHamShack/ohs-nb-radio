@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>openhamshack-radio.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>OpenHamShack Radio</name>
+  <summary>All-band amateur radio SDR transceiver</summary>
+  <description>
+    <p>
+      OpenHamShack Radio is a native desktop transceiver for the amateur bands,
+      160 m to 6 cm. One process owns a software-defined radio and the whole
+      user interface: a bandscope and waterfall with the band plan drawn on
+      it, band stacks, SSB, CW, AM, FM with CTCSS and repeater shifts, and
+      FT8, FT4, PSK, RTTY, FreeDV and SSTV.
+    </p>
+    <p>
+      It holds every transmission inside the UK licence class the operator
+      sets, at no more than that class's power there, and warns when a
+      transmission leaves what the RSGB band plan intends. It drives the
+      ADALM-Pluto family on VHF and up and the Hermes-Lite 2 on HF; a
+      simulated set of bands lets it run, and be explored, with no radio.
+    </p>
+  </description>
+  <launchable type="desktop-id">openhamshack-radio.desktop</launchable>
+  <categories>
+    <category>HamRadio</category>
+    <category>Network</category>
+  </categories>
+  <provides>
+    <binary>openhamshack-radio</binary>
+  </provides>
+  <!-- The id it had before the OpenHamShack rename (17/10/2026), so a
+       software centre that knew openhamshack-ham sees this as the same app. -->
+  <replaces>
+    <id>openhamshack-ham.desktop</id>
+  </replaces>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <!-- @VERSION@ is substituted by tools/build-deb.sh from ohsradio/VERSION. -->
+    <release version="@VERSION@" date="2026-10-04"/>
+  </releases>
+</component>

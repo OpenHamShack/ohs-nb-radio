@@ -1,0 +1,6 @@
+# Baseline for shack-i18n-check (docs/I18N.md): user-visible literals that
+# were in the code before the check arrived, one per file and literal. M3
+# moves each into a catalog and deletes its line; the check fails on any
+# literal not listed here or in i18n-allow.txt, and on a line here that no
+# longer matches. Rewrite with tools/i18n.py baseline, never by hand-adding.
+# path | "literal" | pending

@@ -1,0 +1,1 @@
+Control pad: every key, button and knob can now be reassigned in Settings › Control pad, with Reset to defaults. New pad actions: noise reduction, filter width, beacon Hold/Auto. PTT still keys only when "The pad may transmit" is on.

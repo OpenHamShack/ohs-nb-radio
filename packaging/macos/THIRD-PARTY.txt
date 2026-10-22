@@ -1,0 +1,121 @@
+OpenHamShack QO-100 NB / OpenHamShack Radio for macOS - what else is in this app
+================================================================================
+
+OpenHamShack QO-100 NB and OpenHamShack Radio are free software under the GNU General Public
+License, version 3 or later (LICENSE, beside this file in
+Contents/Resources). Each one's Mac build also carries the following,
+each under its own licence (the texts are in licences/, beside this file,
+under the names given below). Nothing here has been modified; the
+libraries built from source were built from the unmodified release
+tarballs named, by tools/build-macos.sh.
+
+Source code: the program's own source, from the commit this app was built
+from, and the exact source release of every GPL and LGPL component below
+are on the OpenHamShack projects' source site, in the Mac build's own section:
+
+    OpenHamShack QO-100 NB: https://openhamshack.com/source/#openhamshack-nb-macos
+    OpenHamShack Radio: https://openhamshack.com/source/#openhamshack-radio-macos
+
+They stay there for as long as this build is offered.
+
+Python 3.13.16 (Python Software Foundation License;
+licences/python-LICENSE.txt), as built by the python-build-standalone
+project (release 20261003), with the libraries linked into its
+libpython3.13.dylib, each under its own licence: OpenSSL 3.5.9
+(Apache-2.0), SQLite (public domain), libffi, expat, mpdecimal, zlib,
+bzip2, liblzma, libedit, ncurses and libuuid (MIT, BSD and similar)
+(licences/python-*)
+    https://www.python.org/  https://github.com/astral-sh/python-build-standalone
+
+PyInstaller 6.22.3 bootloader (GPL-2.0-or-later with the bootloader
+exception; licences/pyinstaller-COPYING.txt)
+    https://pyinstaller.org/
+
+NumPy 2.5.3 (BSD-3-Clause, and for parts it includes 0BSD, MIT, Zlib and
+CC0-1.0; licences/numpy-*)
+    https://numpy.org/
+
+Qt 6.11.2 and PyQt6 6.11.0 (Qt: LGPL-3.0, licences/PyQt6-Qt6-LICENSE;
+PyQt6: GPL-3.0, licences/PyQt6-LICENSE; its sip module PyQt6-sip 13.13.0:
+BSD-2-Clause, licences/PyQt6_sip-LICENSE)
+    Contents/Frameworks/PyQt6/Qt6: Qt's libraries and plugins as
+    Riverbank's PyQt6-Qt6 6.11.2 wheel ships them (no Qt PDF).
+    https://www.qt.io/  https://www.riverbankcomputing.com/software/pyqt/
+
+PyAudio 0.2.14 (MIT; licences/PyAudio-*) with PortAudio v19.7.0 linked
+in (MIT; licences/portaudio-LICENSE.txt)
+    PyAudio's PyPI release has no Mac wheel, so it is built from its
+    source release against PortAudio's pa_stable_v190700_20210406.tgz.
+    https://people.csail.mit.edu/hubert/pyaudio/  https://www.portaudio.com/
+
+pySerial 3.5 (BSD-3-Clause; licences/pyserial-LICENSE.txt)
+    https://github.com/pyserial/pyserial
+
+cryptography 50.0.2 (Apache-2.0 or BSD-3-Clause; licences/cryptography-*)
+and the cffi 2.1.1 module it loads (MIT-0; licences/cffi-LICENSE)
+    https://cryptography.io/  https://cffi.readthedocs.io/
+
+hidapi 0.15.0 (cython-hidapi with the HIDAPI C library built in; used
+here under the GPL-3.0, one of the three licences it offers - GPL-3.0,
+BSD-style or the original cython-hidapi licence; licences/hidapi-*)
+    How the program reaches the Ajazz AKP03E controller pad on this
+    system (shack_pad's HID transport).
+    https://github.com/trezor/cython-hidapi  https://github.com/libusb/hidapi
+
+Pillow 12.3.0 (MIT-CMU; licences/pillow-LICENSE, which also carries the
+licences of the libraries Pillow's wheel bundles: libjpeg-turbo, zlib,
+libpng, FreeType, LittleCMS, libwebp, OpenJPEG, libtiff, HarfBuzz and the
+rest it lists)
+    Draws the pictures on the controller pad's keys. Portions of this
+    software are copyright (C) The FreeType Project (www.freetype.org).
+    All rights reserved.
+    https://python-pillow.org/
+
+OpenHamShack Radio only: Paramiko 3.5.1 (LGPL-2.1; licences/paramiko-LICENSE),
+and what else it needs: bcrypt 5.0.0 (Apache-2.0; licences/bcrypt-LICENSE),
+PyNaCl 1.6.2 (Apache-2.0, with libsodium's ISC licence;
+licences/PyNaCl-*)
+    https://www.paramiko.org/
+
+codec2 1.2.0 - Contents/Frameworks/libcodec2.dylib (LGPL-2.1;
+licences/codec2-COPYING)
+    Built from codec2's 1.2.0 release (GitHub's archive of tag 1.2.0),
+    the version FreeDV-GUI 1.9.9.2 uses. You may replace it with your own
+    build of the same library. https://github.com/drowe67/codec2
+
+libiio 0.26 - iio.py and Contents/Frameworks/libiio/libiio.dylib
+    (LGPL-2.1-or-later; licences/libiio-COPYING.txt)
+    Built from libiio's v0.26 release with its network and XML backends
+    (no USB: a Pluto on USB is a network device to macOS); it links
+    against macOS's own libxml2. iio.py is that release's Python binding.
+    https://github.com/analogdevicesinc/libiio/releases/tag/v0.26
+libad9361-iio v0.3 - Contents/Frameworks/libad9361.dylib
+    (LGPL-2.1; licences/libad9361-LICENSE)
+    Built from its v0.3 tag; loads the FIR filter that lets a Pluto run
+    below 2.1 MS/s. https://github.com/analogdevicesinc/libad9361-iio
+    Each may be replaced with your own build of the same version.
+
+cty.dat - Contents/Resources/ohscore/data/cty.dat
+    (MIT; licences/cty.dat-copyright.txt, also beside it)
+    Jim Reisert AD1C's country file, for the FT8 Country column: Big CTY
+    as published on country-files.com, unmodified; the edition and the
+    sha256 of its download are in ohscore/data/cty-source.txt. The MIT
+    licence permits copying and redistribution with the notice included.
+    A newer cty.dat placed in
+    ~/Library/Application Support/openhamshack-nb/data (or openhamshack-radio) is
+    used instead. https://www.country-files.com/copyright/
+
+ohsdigi - ohscore/ohsdigi.abi3.so (GPL-3.0-or-later;
+licences/ohsdigi-LICENSE-THIRD-PARTY.txt)
+    The FT8, FT4, Q65 and JS8 decoders and encoders: OpenHamShack's own Rust code
+    (rust/ohsdigi), part of the program and under its GPL-3.0-or-later,
+    much of it ported from WSJT-X 2.7.0, with HSmodem (DJ0ABR, GPL-2.0-or-
+    later) and liquid-dsp (MIT). The Rust crates and standard library
+    compiled into it, and their MIT notices, are listed in
+    licences/ohsdigi-LICENSE-THIRD-PARTY.txt.
+
+WDSP noise reduction (GPL-2.0-or-later)
+    The receive noise reduction (NR2) is a port of emnr.c from WDSP 2.10 by
+    Warren Pratt, NR0V, with his GG/GGS gain tables (ohscore/dsp/nr.py,
+    nr_tables.npz); part of the program and under its GPL-3.0-or-later.
+    https://github.com/TAPR/OpenHPSDR-wdsp

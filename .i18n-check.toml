@@ -1,0 +1,45 @@
+# shack-i18n-check settings (docs/I18N.md; OpenHamShack I18N.md section 3).
+# Run it as the suite does: python3 tools/i18n.py check
+
+# What a person never reads in these apps: the tests' own fixtures, the
+# developer tools, the docs (translated as whole documents, not strings),
+# the Debian/Windows/macOS packaging, the websites (site/ is a separate
+# product with its own pages), ohsdigi's Rust tree, whose only Python is
+# the developer's comparison harness, and the two developer tools that live
+# inside the app packages because they drive the real window: the
+# screenshot makers (their example callsigns and test-card text are
+# fixtures for the guides) and NB's frame-cost bench.
+exclude = ["tests/**", "tools/**", "docs/**", "packaging/**", "site/**", "rust/**",
+           "ohsnb/ui/screenshots.py", "ohsradio/ui/screenshots.py", "ohsnb/ui/uibench.py"]
+
+[python]
+# The windows' own widgets and helpers (ohscore/ui, ohsnb/ui, ohsradio/ui),
+# beside Qt's built-in sinks: each was read to confirm it puts its text
+# argument on screen as a label, a button face, a tooltip, a placeholder, a
+# heading, a toast or a dialog line. Engine toasts (Engine.toast) and
+# Bridge.say are sinks too: their sentences land in the window's toasts.
+#
+# Left out on purpose:
+# - Field (ohscore/ui/settings.py) and Bridge.set: their first or keyword
+#   arguments are camelCase setting keys ("rxCorr"), which would read as
+#   text; a Field's label and help come from the settings registry.
+# - Chip.set, Toast and the scope's add_label/add_tag: what they are given
+#   is computed or is data (callsigns, spots), never a literal.
+# - The data tables: state.py's `_k` setting descriptions, the licence
+#   tables' `_k/_r/_m` and the band plans. They are M3's, extracted into a
+#   gettext domain in the engines, not Qt strings at a call.
+sinks = [
+    "Button", "IconButton", "Toggle", "Slider", "Card", "Caption", "Check", "check_row", "why_label",
+    "BarMeter", "Chip", "LockBadge", "RxBadge", "ToneWheel", "Spectrum", "TxEntry", "Choice", "ColourButton",
+    "TextDialog", "_label", "_caption", "add_button",
+    "say", "_say", "toast", "_section", "_scroll", "set_text", "set_state",
+    "drawText", "getOpenFileName", "getSaveFileName", "getExistingDirectory",
+    "setSuffix", "setSpecialValueText", "setHorizontalHeaderLabels",
+]
+# ohscore and the apps raise ValueError with whole sentences meant for the
+# operator, and the windows show them as they are (`str(e)` into a toast or
+# Bridge.say: the band picker, auto-tune, click-to-lock, the custom licence
+# editor's licences.clean_custom). So a ValueError's message is user text.
+# Some are only ever caught by code (parsers), and sit in the baseline with
+# the rest until M3 moves the engine sentences into gettext.
+user_facing_exceptions = ["ValueError"]

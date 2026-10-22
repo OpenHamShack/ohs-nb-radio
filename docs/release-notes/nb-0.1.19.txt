@@ -1,0 +1,1 @@
+IC-9700 TX lock no longer piles corrections on top of each other: it checks each one took, and stops if not. New setting: Largest TX lock correction (1 kHz). A runaway saved correction is reset at start. Beacon lock falls back to the lower beacon and says what it heard.

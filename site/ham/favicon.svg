@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Favicon: a variant of OpenHamShack NB's favicon.svg, so the two sites' tabs
+  are distinguishable at a glance while still reading as one family. Same
+  dark tile and hand-drawn link arc; the dish is replaced with a simple
+  multi-band aerial (three elements of different lengths, as a beam for
+  VHF/UHF reads at 16 px where a dish silhouette would not), and the arc
+  is amber (--warn from the NB palette) rather than cyan, matching this
+  site's "in development" status colour. Drawn by hand, no external
+  assets (house rule).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="#0a0d12"/>
+  <g stroke="#cdd6e3" stroke-width="3" stroke-linecap="round">
+    <line x1="19" y1="30" x2="19" y2="10"/>
+    <line x1="11" y1="18" x2="27" y2="18"/>
+    <line x1="13.5" y1="24" x2="24.5" y2="24"/>
+    <line x1="8" y1="12" x2="30" y2="12"/>
+  </g>
+  <path d="M 10 46 L 18 46 L 21 36 L 24 46 L 32 46 L 35 40 L 38 46 L 46 46 L 50 33 L 54 46"
+        stroke="#ffb547" stroke-width="3.2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

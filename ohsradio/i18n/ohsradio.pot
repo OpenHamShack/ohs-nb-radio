@@ -1,0 +1,318 @@
+# English template for the ohsradio gettext domain (docs/I18N.md).
+# Written by tools/i18n.py pot; do not edit.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+#: ohsradio/plutofix.py:482
+#, python-brace-format
+msgid "'{command}' failed on the radio (exit {status}: {output}). The radio was not restarted."
+msgstr ""
+
+#: ohsradio/radio.py:799
+msgid "A toneburst is an FM thing: switch to FM first"
+msgstr ""
+
+#: ohsradio/ui/settings.py:311
+#, python-brace-format
+msgid "Bands & power, {band}: not a number"
+msgstr ""
+
+#: ohsradio/plutofix.py:473
+msgid "Cancelled: nothing was changed."
+msgstr ""
+
+#: ohsradio/plutofix.py:589
+#: ohsradio/plutofix.py:591
+msgid "Chip identity"
+msgstr ""
+
+#: ohsradio/plutofix.py:460
+#, python-brace-format
+msgid "Connecting to {host}…"
+msgstr ""
+
+#: ohsradio/plutofix.py:544
+#, python-brace-format
+msgid "Done: the Pluto now runs as {chip}, which tunes {range}."
+msgstr ""
+
+#: ohsradio/state.py:217
+#, python-brace-format
+msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
+msgstr ""
+
+#: ohsradio/radio.py:538
+#, python-brace-format
+msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
+msgstr ""
+
+#: ohsradio/plutofix.py:602
+#: ohsradio/plutofix.py:595
+#: ohsradio/plutofix.py:600
+msgid "FIR / sample rate"
+msgstr ""
+
+#: ohsradio/plutofix.py:581
+msgid "Firmware"
+msgstr ""
+
+#: ohsradio/plutofix.py:225
+#, python-brace-format
+msgid "Firmware {version} is newer than any the program knows (v0.{newest}); ADI's steps below are expected to work, but check their page before using them."
+msgstr ""
+
+#: ohsradio/plutofix.py:221
+#, python-brace-format
+msgid "Firmware {version} is older than v0.{oldest}; update it from ADI first (the program will not change settings on firmware this old)."
+msgstr ""
+
+#: ohsradio/plutofix.py:230
+#, python-brace-format
+msgid "Firmware {version}: ADI's method for firmware before v0.32."
+msgstr ""
+
+#: ohsradio/plutofix.py:229
+#, python-brace-format
+msgid "Firmware {version}: ADI's method for v0.32 and later."
+msgstr ""
+
+#: ohsradio/plutofix.py:578
+msgid "Model"
+msgstr ""
+
+#: ohsradio/plutofix.py:573
+msgid "Reachable"
+msgstr ""
+
+#: ohsradio/plutofix.py:487
+msgid "Restarting the radio…"
+msgstr ""
+
+#: ohsradio/plutofix.py:477
+#, python-brace-format
+msgid "Running: {command}"
+msgstr ""
+
+#: ohsradio/plutofix.py:579
+msgid "Serial"
+msgstr ""
+
+#: ohsradio/cwskim.py:249
+#, python-brace-format
+msgid "The CW segment, {lo:.3f}-{hi:.3f} MHz, is outside what the receiver covers now, {slo:.3f}-{shi:.3f} MHz."
+msgstr ""
+
+#: ohsradio/cwskim.py:209
+#, python-brace-format
+msgid "The CW skimmer is running in a thread: its worker process could not start ({why})."
+msgstr ""
+
+#: ohsradio/cwskim.py:326
+msgid "The CW skimmer stopped."
+msgstr ""
+
+#: ohsradio/radio.py:584
+msgid "The PTT sequencer's output could not be opened (Settings)"
+msgstr ""
+
+#: ohsradio/plutofix.py:435
+#, python-brace-format
+msgid "The radio at {uri} did not answer ({error})."
+msgstr ""
+
+#: ohsradio/plutofix.py:429
+#, python-brace-format
+msgid "The radio is configured as {uri}. The change is made over the Pluto's network link (its USB Ethernet, normally ip:192.168.2.1), which this address does not use. Set the address to ip:192.168.2.1 in Settings › Radio (Find lists it) and try again, or follow the steps below."
+msgstr ""
+
+#: ohsradio/plutofix.py:465
+msgid "The radio refused the password, so nothing was changed."
+msgstr ""
+
+#: ohsradio/plutofix.py:551
+#, python-brace-format
+msgid "The radio restarted but still reports {chip}. Its firmware may not honour this setting; see the manual steps."
+msgstr ""
+
+#: ohsradio/plutofix.py:548
+msgid "The radio restarted, but its firmware does not report which chip it runs as, so the change could not be confirmed. Try 2 m once the radio is running again."
+msgstr ""
+
+#: ohsradio/plutofix.py:534
+#, python-brace-format
+msgid "The settings were written and the radio restarted, but it did not answer at {uri} within {secs:.0f} s. Unplug it, plug it back in, wait half a minute, then use Help › Check radio… to see which identity it runs as."
+msgstr ""
+
+#: ohsradio/plutofix.py:528
+#, python-brace-format
+msgid "The settings were written, but the radio did not restart within {secs:.0f} s and still runs as {chip}. Unplug it and plug it back in, wait half a minute, then use Help › Check radio…."
+msgstr ""
+
+#: ohsradio/radio.py:499
+#, python-brace-format
+msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz ({radio} MHz through {converter}) is outside it"
+msgstr ""
+
+#: ohsradio/radio.py:502
+#, python-brace-format
+msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
+msgstr ""
+
+#: ohsradio/cwskim.py:241
+msgid "There is no CW segment in the band plan here."
+msgstr ""
+
+#: ohsradio/radio.py:757
+#, python-brace-format
+msgid "There is no band called {name}"
+msgstr ""
+
+#: ohsradio/plutofix.py:441
+#, python-brace-format
+msgid "This Pluto already runs as {chip}; nothing to change."
+msgstr ""
+
+#: ohsradio/plutofix.py:215
+msgid "This Pluto runs firmware that does not report its version, not ADI's numbered firmware, so the program does not know what its environment commands do and will not run them. The steps below are ADI's."
+msgstr ""
+
+#: ohsradio/plutofix.py:211
+#, python-brace-format
+msgid "This Pluto runs firmware {version}, not ADI's numbered firmware, so the program does not know what its environment commands do and will not run them. The steps below are ADI's."
+msgstr ""
+
+#: ohsradio/plutofix.py:539
+#, python-brace-format
+msgid "Waiting for the radio to come back… ({why})"
+msgstr ""
+
+#: ohsradio/plutofix.py:515
+msgid "Waiting for the radio to restart…"
+msgstr ""
+
+#: ohsradio/xvtr.py:60
+#, python-brace-format
+msgid "bandConverters {band}: the converter must be named by its title"
+msgstr ""
+
+#: ohsradio/xvtr.py:58
+#, python-brace-format
+msgid "bandConverters: no band called {band}"
+msgstr ""
+
+#: ohsradio/power.py:56
+#, python-brace-format
+msgid "bandPower {band}: must be a set of numbers"
+msgstr ""
+
+#: ohsradio/power.py:60
+#, python-brace-format
+msgid "bandPower {band}: unknown field {field}"
+msgstr ""
+
+#: ohsradio/power.py:65
+#, python-brace-format
+msgid "bandPower {band}: {field} must be a number"
+msgstr ""
+
+#: ohsradio/power.py:68
+#, python-brace-format
+msgid "bandPower {band}: {field} must be between {lo:g} and {hi:g}"
+msgstr ""
+
+#: ohsradio/power.py:54
+#, python-brace-format
+msgid "bandPower: no band called {band}"
+msgstr ""
+
+#: ohsradio/plutofix.py:611
+msgid "in range"
+msgstr ""
+
+#: ohsradio/plutofix.py:602
+msgid "known once the radio is open"
+msgstr ""
+
+#: ohsradio/plutofix.py:607
+msgid "needs the AD9364 setting (out of reach as an AD9363)"
+msgstr ""
+
+#: ohsradio/plutofix.py:575
+msgid "no answer"
+msgstr ""
+
+#: ohsradio/plutofix.py:578
+#: ohsradio/plutofix.py:579
+#: ohsradio/plutofix.py:581
+msgid "not reported"
+msgstr ""
+
+#: ohsradio/plutofix.py:591
+msgid "not reported by this firmware"
+msgstr ""
+
+#: ohsradio/plutofix.py:540
+msgid "still restarting"
+msgstr ""
+
+#: ohsradio/plutofix.py:596
+#, python-brace-format
+msgid "the firmware refused the FIR: the radio runs at {radio:g} MS/s and the program converts to {program:g} MS/s"
+msgstr ""
+
+#: ohsradio/plutofix.py:586
+#, python-brace-format
+msgid "{chip}: tunes 325 MHz-3.8 GHz"
+msgstr ""
+
+#: ohsradio/plutofix.py:588
+#, python-brace-format
+msgid "{chip}: tunes 70 MHz-6 GHz (receive)"
+msgstr ""
+
+#: ohsradio/xvtr.py:137
+#, python-brace-format
+msgid "{converter} transmits ({use}), so it needs its most drive in dBm, from its manual, before {band} can use it: it is the one number here that, wrong, destroys hardware"
+msgstr ""
+
+#: ohsradio/plutofix.py:469
+#, python-brace-format
+msgid "{error}. Nothing was changed."
+msgstr ""
+
+#: ohsradio/plutofix.py:491
+#, python-brace-format
+msgid "{error}. The radio was not restarted."
+msgstr ""
+
+#: ohsradio/radio.py:582
+#, python-brace-format
+msgid "{error}. Transmit will be refused until it is fixed."
+msgstr ""
+
+#: ohsradio/ui/face.py:66
+#, python-brace-format
+msgid "{mhz:.4f} MHz is outside what OpenHamShack Radio tunes (0.1 MHz - 6 GHz)"
+msgstr ""
+
+#: ohsradio/plutofix.py:600
+#, python-brace-format
+msgid "{rate:g} MS/s, FIR as needed"
+msgstr ""
+
+#: ohsradio/ui/face.py:48
+#, python-brace-format
+msgid "{text} is not a frequency"
+msgstr ""
+
+#: ohsradio/plutofix.py:574
+#, python-brace-format
+msgid "{uri} answers"
+msgstr ""
+
+#: ohsradio/plutofix.py:575
+#, python-brace-format
+msgid "{uri}: {error}"
+msgstr ""

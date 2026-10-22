@@ -1,0 +1,1 @@
+Updates now come from openhamshack.com. Answering CQ DX or CQ POTA answers the station, not the modifier; JS8 and Q65 decoding; one CW decoder shared across OpenHamShack; band limits from the shared OpenHamShack dataset; the shared logbook and station profile; keypads.

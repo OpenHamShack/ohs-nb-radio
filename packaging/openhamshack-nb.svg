@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OpenHamShack QO-100 NB app icon - shared by the package (hicolor/scalable) and the
+  window (ohsnb/ui/appicon.py loads this same file), so there is one icon.
+
+  Drawn by hand, no external assets (house rule: nothing fetched at install
+  or runtime). It is the program's own main window in miniature: a dish
+  aimed up at the satellite, and beneath it the panadapter - a cyan trace
+  over a waterfall whose signals burn in the same "Ember" colours the
+  bandscope uses by default. Big solid shapes and no text, so it still
+  reads at 16 px in a window list; the gradients only add depth at 48 px+.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16213a"/>
+      <stop offset="1" stop-color="#070a12"/>
+    </linearGradient>
+    <linearGradient id="burn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff2c8"/>
+      <stop offset="0.25" stop-color="#fbb33a"/>
+      <stop offset="0.6" stop-color="#d23a4a"/>
+      <stop offset="1" stop-color="#5a1270" stop-opacity="0.35"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4fd1e8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#4fd1e8" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="dish" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#b9c6d8"/>
+    </linearGradient>
+    <clipPath id="wfclip"><rect x="8" y="41" width="48" height="16" rx="3.5"/></clipPath>
+  </defs>
+
+  <!-- tile -->
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="url(#bg)"/>
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="12.25" fill="none" stroke="#2a3a58" stroke-width="1.5"/>
+
+  <!-- dish: a bowl seen from the side, aimed up-right at the satellite,
+       feed on its axis, three arcs for the link -->
+  <g transform="rotate(50 19 19)">
+    <path d="M 6 19 A 13 6.5 0 0 0 32 19 Z" fill="url(#dish)"/>
+    <ellipse cx="19" cy="19" rx="13" ry="1.8" fill="#8a9bb4"/>
+    <line x1="19" y1="19" x2="19" y2="10.5" stroke="#cdd6e3" stroke-width="2.2" stroke-linecap="round"/>
+    <circle cx="19" cy="9" r="2.8" fill="#ffb547"/>
+    <path d="M 16.7 5.72 A 4 4 0 0 1 21.3 5.72" stroke="#4fd1e8" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <path d="M 14.69 2.86 A 7.5 7.5 0 0 1 23.31 2.86" stroke="#4fd1e8" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-opacity="0.7"/>
+    <path d="M 12.69 0 A 11 11 0 0 1 25.31 0" stroke="#4fd1e8" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-opacity="0.4"/>
+  </g>
+
+  <!-- waterfall well, with signals burning down it -->
+  <rect x="8" y="41" width="48" height="16" rx="3.5" fill="#05070c"/>
+  <g clip-path="url(#wfclip)">
+    <rect x="14.5" y="41" width="3" height="16" fill="url(#burn)"/>
+    <rect x="24" y="41" width="8" height="11" fill="url(#burn)" opacity="0.85"/>
+    <rect x="24" y="52" width="8" height="5" fill="#5a1270" opacity="0.5"/>
+    <rect x="39" y="41" width="2" height="16" fill="url(#burn)" opacity="0.8"/>
+    <rect x="46.5" y="45" width="4" height="12" fill="url(#burn)"/>
+  </g>
+
+  <!-- spectrum trace riding on top of the waterfall -->
+  <path d="M 8 40 L 13.5 40 L 16 32 L 18.5 40 L 23.5 40 L 25 35.5 L 28 34 L 31 35.5 L 32.5 40
+           L 38.5 40 L 40 36 L 41.5 40 L 46 40 L 48.5 33.5 L 51 40 L 56 40 L 56 41 L 8 41 Z"
+        fill="url(#glow)"/>
+  <path d="M 8 40 L 13.5 40 L 16 32 L 18.5 40 L 23.5 40 L 25 35.5 L 28 34 L 31 35.5 L 32.5 40
+           L 38.5 40 L 40 36 L 41.5 40 L 46 40 L 48.5 33.5 L 51 40 L 56 40"
+        stroke="#7fe6f5" stroke-width="1.8" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

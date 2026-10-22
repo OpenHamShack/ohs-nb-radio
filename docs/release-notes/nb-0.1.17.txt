@@ -1,0 +1,1 @@
+IC-9700 users: Find picks the 9700's own sound device and tries every baud rate; the level set works with real radios; new IC-9700 diagnostic. ON AIR shows only while transmitting (ARMED between overs). Fuller log for remote help. AKP03E pad support (no transmit until you allow it).

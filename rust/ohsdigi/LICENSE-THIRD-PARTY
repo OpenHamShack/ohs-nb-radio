@@ -1,0 +1,86 @@
+ohsdigi - third-party code linked into the built module
+=======================================================
+
+ohsdigi itself (rust/ohsdigi) is free software under the GNU General Public
+License, version 3 or later, as the rest of OpenHamShack NB and OpenHamShack HAM.
+Much of it is ported from WSJT-X 2.7.0 (GPL-3.0-or-later), copyright (C)
+2001-2023 Joe Taylor K1JT, Steve Franke K9AN, Bill Somerville G4WJS, Nico
+Palermo IV3NWV and the WSJT Development Group; each ported file names the
+WSJT-X files it follows. https://wsjt.sourceforge.io/
+
+Its JS8 module (src/js8) is ported from JS8Call 2.2.0 (GPL-3.0-or-later),
+copyright (C) 2018-2020 Jordan Sherer KN4CRD, itself a fork of WSJT-X 1.9
+by the authors above; https://github.com/js8call/js8call. src/js8/jsc.bin.gz
+is JS8Call's word-compression dictionary (jsc_map.cpp, jsc_list.cpp) in a
+compact form, made by harness/gen_js8_tables.py.
+
+Its HSmodem module (src/hsmodem, the QO-100 multimedia beacon's modem) is
+ported from HSmodem, copyright (C) Kurt Moraw DJ0ABR, GPL version 2 or
+later (its file headers; GPL-3.0 in its repository),
+https://github.com/amsat-dl/QO-100-Modem, and from liquid-dsp, whose
+notice follows; the MIT licence text below applies to it.
+
+    liquid-dsp
+        Copyright (c) 2007 - 2020 Joseph Gaeddert
+        https://github.com/jgaeddert/liquid-dsp (and DJ0ABR's fork,
+        https://github.com/dj0abr/liquid-dsp, which HSmodem ships)
+
+The built module (ohsdigi.abi3.so on Linux, ohsdigi.pyd on Windows) also
+contains, compiled in, the following Rust crates, each offered under the
+MIT licence or the Apache License 2.0 at the user's choice; they are used
+here under the MIT licence, whose text follows. Their exact versions are
+pinned in rust/ohsdigi/Cargo.lock.
+
+    PyO3 0.29.3, pyo3-ffi 0.29.3
+        Copyright (c) 2023-present PyO3 Project and Contributors.
+        https://github.com/PyO3/pyo3
+    libc 0.2.190
+        Copyright (c) The Rust Project Developers.
+        https://github.com/rust-lang/libc
+    once_cell 1.21.4
+        Copyright (c) Aleksey Kladov.
+        https://github.com/matklad/once_cell
+    flate2 1.1.10, miniz_oxide 0.9.1, crc32fast 1.5.2, adler2 2.0.1
+        (unpacking src/js8/jsc.bin.gz)
+        Copyright (c) Alex Crichton, Frommi, oyvindln, Sam Rijs and
+        contributors. https://github.com/rust-lang/flate2-rs
+    fancy-regex 0.14.0, regex-automata 0.4.18, regex-syntax 0.8.11,
+    aho-corasick 1.1.5, memchr 2.8.3, bit-set 0.8.0, bit-vec 0.8.0
+        (JS8Call's text patterns, src/js8/varicode.rs)
+        Copyright (c) The fancy-regex authors, The Rust Project
+        Developers, Andrew Gallant, Alexis Beingessner and contributors.
+        https://github.com/fancy-regex/fancy-regex,
+        https://github.com/rust-lang/regex
+    The Rust standard library (Rust 1.98.1)
+        Copyright (c) The Rust Project Contributors.
+        https://github.com/rust-lang/rust
+
+Other crates in Cargo.lock (proc-macro2, quote, syn, heck, unicode-ident,
+pyo3-macros, pyo3-build-config) run only while compiling and are not part
+of the built module.
+
+The MIT License (MIT)
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.

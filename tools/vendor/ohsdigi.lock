@@ -1,0 +1,19 @@
+# ohsdigi, the FT8/FT4, Q65 and JS8 decoder and encoder and HSmodem's modem, as the store
+# images carry it (BETA-PLAN D9 and decision 3: ohsdigi is the one decoder,
+# built here in rust/ohsdigi by tools/build-wheels.sh). The wheels are not
+# committed - binaries never are (tools/build-ohsdigi.sh) - so
+# tools/build-store.sh copies them into the staged tree from
+# ~/build/ohs-dist/ohsdigi (OHSDIGI_WHEELS), and both it and the store
+# Containerfile check them against these hashes, the ones
+# openhamshack-digimodes pins (ohs-libs carries no ohsdigi pin). Built from rust/ohsdigi at 53a3d1a (0.2.0:
+# JS8 and Q65 beside FT8/FT4), the last commit to touch the crate when
+# these were pinned; a crate change means new wheels, a new version (the
+# folder keeps old wheels that published builds reference, so a name must
+# never be reused) and new lines here, in one commit.
+#
+# The .deb, AppImage, Windows and Mac builds carry the bare module from
+# tools/build-ohsdigi.sh instead, as before; only the store form uses these.
+# The 0.2.0 macOS wheel is not built yet: Mac builds run only from Brian's
+# desktop-remote.sh, and the store form has no use for it.
+ohs-ohsdigi==0.2.0 --hash=sha256:53e3496af82b421a5c7e5750911fcb1472db1b122a2c09339effc347a450782e  # x86_64
+ohs-ohsdigi==0.2.0 --hash=sha256:774f600ac30b0ec028e3dbfa121707a54cca3a880e29787c30feaeed3e54ecc9  # aarch64

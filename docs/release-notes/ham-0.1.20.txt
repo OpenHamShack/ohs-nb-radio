@@ -1,0 +1,1 @@
+CW decoding no longer prints random letters from noise or nearby stations, and the speed readout clears when the signal goes.

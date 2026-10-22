@@ -1,0 +1,33 @@
+# Literals at a sink that are not language (OpenHamShack I18N.md section 3.3).
+# One per line, every entry with a reason; an entry that matches nothing
+# fails the check. Literals still waiting to be converted are not exceptions:
+# they are in i18n-pending.txt.
+#
+# Empty when the check arrived (09/10/2026): key sequences here are passed
+# to QKeySequence, which is not a sink, and the only callsigns at a sink
+# were the screenshot tools' fixtures, which the check excludes. Mode names
+# and QO-100 are on the check's own shared list.
+# glob | "literal" (JSON) | reason
+#
+# ValueErrors that guard a programming error, never an operator's input:
+# each fires only when code passes an argument no caller in these apps
+# passes, and reaches a developer as a traceback, never a window (I18N.md
+# section 1.8: an exception message that never reaches a person is not
+# user text). Translating them would hand translators sentences no
+# operator can see.
+ohscore/dsp/bank.py | "sample rate {fs} must be a multiple of 200 Hz" | filter-bank construction invariant; the engine only builds it at its own fixed rates
+ohscore/dsp/bank.py | "decimation {d} does not divide the frame geometry" | filter-bank construction invariant between two constants in code
+ohscore/modes/psk.py | "{FS} Hz / {baud} baud is not an integer symbol length" | invariant between the module's FS and its BAUDS table
+ohscore/rig/civ.py | "set_ssb takes usb or lsb, not {mode}" | the engine only ever asks for usb or lsb
+ohscore/rig/rigctl.py | "set_ssb takes usb or lsb, not {mode}" | the engine only ever asks for usb or lsb
+ohscore/rig/civ.py | "set_data_mode takes usb or lsb, not {mode}" | the engine only ever asks for usb or lsb
+ohscore/rig/rigctl.py | "set_data_mode takes usb or lsb, not {mode}" | the engine only ever asks for usb or lsb
+ohscore/rig/civ.py | "{hz} Hz does not fit {nbytes} BCD bytes" | CI-V encoder invariant; the dial is range-checked before it gets here
+ohscore/rig/civ.py | "{data.hex(' ')} is not BCD" | a corrupt CI-V reply; read_freq turns it into a RigError the rig link logs, like the untranslated RigError diagnostics beside it
+ohscore/rig/civ.py | "{v} is not a 0-255 level" | CI-V encoder invariant; the setup assistant only writes levels it has range-checked
+ohscore/rig/civ.py | "short level {data.hex(' ')}" | a corrupt CI-V reply; _read_level turns it into a RigError diagnostic like the ones beside it
+ohscore/rig/civ.py | "{data[:2].hex(' ')} is not BCD" | a corrupt CI-V reply; _read_level turns it into a RigError diagnostic like the ones beside it
+ohscore/update.py | "release key {_name} is not a 32-byte Ed25519 public key" | checks the release keys compiled into the program; a test fails before such a build exists
+ohscore/ui/** | "dBFS" | a meter's unit symbol (BarMeter unit=), the same in every language, like the slider readouts' units
+ohscore/ui/** | "dB" | a meter's unit symbol (BarMeter unit=), the same in every language, like the slider readouts' units
+ohscore/ui/panels/voice.py | "FreeDV" | the digital voice mode's name, the card heading over its controls; mode names are not translated

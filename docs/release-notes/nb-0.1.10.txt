@@ -1,0 +1,1 @@
+Band skimmer: every signal on the transponder, named, click to tune; KG-STV pictures and the middle beacon's text received in the background; IC-9700 switched from FM to SSB by itself; auto-tune listens until sure; voice keyer and CW memories on F1-F8; opt-in PSKReporter; licence by country.

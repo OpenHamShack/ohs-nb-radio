@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "app": "qo100nb",
+  "actions": [
+    {"id": "ptt", "kind": "press", "hold": true, "tx": true, "single": true, "label": "pad.ptt", "group": "transmit"},
+    {"id": "halt", "kind": "press", "label": "pad.halt", "group": "transmit", "short": ["HALT", "TX"]},
+    {"id": "tune", "kind": "turn", "label": "pad.tune", "group": "receive", "short": ["TUNE", "Hz"], "icon": "tune"},
+    {"id": "step", "kind": "press", "label": "pad.step", "group": "receive", "short": ["STEP", ""]},
+    {"id": "mode:next", "kind": "press", "label": "pad.mode_next", "group": "receive", "short": ["MODE", ""]},
+    {"id": "channel", "kind": "turn", "label": "pad.channel", "group": "receive", "short": ["MEM", ""]},
+    {"id": "auto-tune", "kind": "press", "label": "pad.auto_tune", "group": "receive", "short": ["AUTO", "TUNE"]},
+    {"id": "beacon-hold", "kind": "press", "label": "pad.beacon_hold", "group": "receive", "short": ["BEACON", ""]},
+    {"id": "mute", "kind": "press", "label": "pad.mute", "group": "audio"},
+    {"id": "volume", "kind": "turn", "label": "pad.volume", "group": "audio", "short": ["VOL", ""]},
+    {"id": "nr", "kind": "press", "label": "pad.nr", "group": "audio", "short": ["NR", ""]},
+    {"id": "filter", "kind": "turn", "label": "pad.filter", "group": "receive", "short": ["FILTER", "Hz"]},
+    {"id": "record", "kind": "press", "label": "pad.record", "group": "receive"},
+    {"id": "power", "kind": "turn", "label": "pad.power", "group": "transmit", "short": ["PWR", "dB"]}
+  ]
+}

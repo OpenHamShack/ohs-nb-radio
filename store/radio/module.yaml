@@ -1,0 +1,163 @@
+apiVersion: dock360/v1
+
+# The store form of OpenHamShack Radio (BETA-PLAN arch change 3, D8,
+# REPO-LAYOUT 4.1): the same engine as the desktop app, run headless behind
+# its HTTP/WebSocket API (`python3 -m ohsradio --server`, docs/SERVER-API.md) in a
+# rootless container on an OpenHamShack controller. OpenHamShack Remote is
+# its user interface; the base path shows a status page. Packaged by
+# tools/build-store.sh radio, which stages ohscore/, ohsradio/ and the pinned
+# shared libraries beside this file and signs the package with the image in it.
+id: shack-radio
+name: Radio
+version: 0.1.21-beta.1
+summary: The amateur bands, 160 m to 6 cm - SSB, CW, AM, FM and the digital modes with a Pluto or a Hermes-Lite 2, or listening with an SDRplay.
+description: >
+  OpenHamShack Radio on the controller: a bandscope and waterfall with the
+  band plan drawn on it, band stacks, SSB, CW, AM, FM with CTCSS and repeater
+  shifts, FT8, FT4, PSK, RTTY, FreeDV and SSTV, the shared logbook. Operate
+  it from OpenHamShack Remote.
+
+  The controller signs people in and lends the radio through its hardware
+  broker. Transmitting needs the Transmit level, a callsign and a licence
+  class in the station profile that covers the frequency and the power,
+  the transmit lease, and the broker's yes; losing any of them takes it off
+  the air. Simulator-tested only: no Radio transmission has been made on a
+  real radio.
+category: radio
+icon: 📻
+author: OpenHamShack
+license: GPL-3.0-or-later
+homepage: https://openhamshack.com/
+
+openhamshack:
+  kind: radio
+  tx_capable: true
+  anonymous_view: false
+  default_write_level: control
+  # The proxy's minimums (CONTROLLER-CONTRACT 5.2), first match wins; the
+  # app checks again (ohscore/server/app.py ROUTES), and holds the rules a
+  # glob cannot say (a settings change to a Settings-only key needs transmit).
+  levels:
+    # digital: a TV the administrator allowed digital transmit may keep
+    # its Enable TX arm alive (CONTROLLER-CONTRACT 5.5). Never api/ptt's
+    # key-up (the app refuses it) or api/audio/tx.
+    - {path: "/api/ptt/heartbeat", level: transmit, digital: true}
+    - {path: "/api/ptt", method: POST, level: control}
+    - {path: "/api/audio/tx", level: transmit}
+    - {path: "/api/halt", method: POST, level: control}
+  release_request: /api/shack/release
+  busy: /api/shack/busy
+  broker_devices: [pluto, hl2, sdrplay]
+  actions: pad-actions.json
+  controller_layout: pad-layout.json
+
+# Lent by the broker while the app uses it (claim: runtime); the name is the
+# rendezvous names every OpenHamShack app that uses that radio declares.
+exclusive_devices:
+  - name: pluto-1
+    label: Pluto
+    address: 192.168.2.1
+    claim: runtime
+  - name: hl2-1
+    label: Hermes-Lite 2
+    claim: runtime
+  # An SDRplay RSP, receive only, through SoapySDR (device "soapy"). The
+  # id is the RSPdx's (an RSPdx-R2 is 1df7:3060); it only puts the claim on
+  # the right row of the Hardware page.
+  - name: sdrplay-1
+    label: SDRplay RSP
+    usb_id: 1df7:3030
+    claim: runtime
+
+# Recordings (ohscore/server/recording.py, shack_rec): receive audio and IQ,
+# kept in /data/recordings on the data volume. Each setting is one number
+# (a setting cannot hold a line break); junk or 0 keeps the default.
+env:
+  - key: RECORDINGS_LIMIT_GB
+    label: Recordings may use (GB)
+    type: int
+    default: 10
+    help: >
+      The most the recordings may take on the controller's disk. Past it the
+      oldest recordings are deleted, never one being made. IQ is large: at
+      1.2 MS/s a minute takes about 290 MB.
+  - key: RECORDINGS_MIN_FREE_GB
+    label: Keep free for everything else (GB)
+    type: int
+    default: 2
+    help: >
+      Nothing records while the disk has less than this free, and a
+      recording in progress stops when free space falls below it, so a
+      recording can never fill the disk.
+  - key: RECORDINGS_AUDIO_MAX_HOURS
+    label: Longest audio recording (hours)
+    type: int
+    default: 4
+    help: >
+      An audio recording stops by itself after this long. Receive audio
+      takes about 30 to 45 MB an hour (FLAC, 12 kHz).
+  - key: RECORDINGS_IQ_MAX_MINUTES
+    label: Longest IQ recording (minutes)
+    type: int
+    default: 10
+    help: >
+      An IQ recording stops by itself after this long, or sooner if the
+      recordings limit or the free space would be passed.
+
+runtime:
+  build:
+    context: .
+    containerfile: Containerfile
+  user: "1000:1000"
+  # The whole USB bus, for the SDRplay: an RSP has no tty to pass, its
+  # node moves on every replug, and only a bound /dev/bus/usb shows the
+  # container a node the kernel makes later. The cost: Radio can see every
+  # USB device on the controller; it opens only what the broker lent it,
+  # and the udev rule for the RSP (Host -> Hardware) is what lets it open
+  # that one. keep-groups (which the platform adds with usb_bus) carries
+  # plugdev through to user 1000: checked on ohs-box, 12/10/2026.
+  usb_bus: true
+  read_only_rootfs: true
+  no_new_privileges: true
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp
+  stop_timeout: 15
+
+web:
+  enabled: true
+  container_port: 8080
+  subdomain: radio
+  strip_prefix: true
+  websockets: true
+
+health:
+  type: http
+  # 401 proxy_required is healthy: the server is up and refusing a request
+  # the platform's proxy did not vouch for.
+  path: /api/status
+  expect_status: [200, 401]
+  interval: 30
+  timeout: 5
+  retries: 3
+  start_period: 20
+
+resources:
+  memory_max: 1G
+  memory_high: 768M
+  cpu_quota: 200%
+  pids_max: 512
+
+volumes:
+  - name: data
+    container_path: /data
+    description: >
+      Settings, band stacks, memories, recordings and the station's shared logbook and
+      profile (shack/station.db), which sync with the controller.
+    backup: true
+
+backup:
+  strategy: hot
+
+min_dock360: "0.12.25"

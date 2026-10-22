@@ -1,0 +1,1 @@
+IC-9700 users: NB can now key the radio by CAT for its own digital overs (off by default; Settings > Transmitter), puts it in USB-D and sends the audio to its USB sound device; never for voice. Answering CQ DX or CQ POTA answers the station. Also JS8 and Q65, shared CW decoder, logbook.

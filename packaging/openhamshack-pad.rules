@@ -1,0 +1,18 @@
+# The Ajazz AKP03E controller for the person at this computer.
+#
+# Installed by the QO-100 NB and Radio .debs as
+# /usr/lib/udev/rules.d/60-<package>-pad.rules (tools/build-deb.sh). Each
+# package carries its own copy under its own name, so the two install side
+# by side; two identical rules do no harm.
+#
+# Why not shack_pad's own rule (91-openhamshack-pad.rules): that one gives
+# the pad to group shack-input, for the controller's input host service. On
+# a desktop there is no such service and nobody is in that group; the pad
+# belongs to whoever is logged in at the seat, which is what uaccess does
+# (an ACL for the active session's user, dropped when they log out).
+# uaccess must be tagged before 73-seat-late.rules applies it, hence 60-.
+#
+# Only the hidraw nodes of USB 0300:3002, the one model the apps drive.
+# Both of its nodes match: input0 is the pad; input1 is its keyboard face,
+# which the apps never open (shack_pad picks input0).
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0300", ATTRS{idProduct}=="3002", MODE="0660", TAG+="uaccess"

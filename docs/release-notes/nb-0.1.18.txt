@@ -1,0 +1,1 @@
+IC-9700: NB now corrects the radio's transmit frequency itself on FT8/FT4 overs, so if you set XIT by hand, switch it off. Send KG-STV pictures (Beacon › KG-STV). New "SDR Console-like" scope style. Optional diagnostics upload, off unless you turn it on.

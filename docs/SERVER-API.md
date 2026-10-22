@@ -1,0 +1,238 @@
+# The store form's API (QO-100 NB and Radio)
+
+`python3 -m ohsnb --server` and `python3 -m ohsradio --server` run the engine
+headless in a container on an OpenHamShack controller, as the store apps
+`shack-qo100nb` (kind `qo100nb`) and `shack-radio` (kind `radio`). This is
+their wire contract, for OpenHamShack Remote and anyone else who builds a
+client (BETA-PLAN D8: "API first for Qt apps, the remote app as the UI").
+It is the engine's own API (docs/ENGINE-API.md) over HTTP and WebSocket;
+where this file is silent, ENGINE-API.md says what a call does.
+
+The code is `ohscore/server/` (shared), `ohsnb/server.py` and
+`ohsradio/server.py` (each app's facts), tested by `tests/test_server.py`. The
+desktop window never imports any of it (also tested): no servers inside
+the desktop apps.
+
+## Reaching it
+
+- Through the controller only: `<controller>/shack-qo100nb/…`,
+  `<controller>/shack-radio/…`. Paths below are relative to that base;
+  build no absolute URLs (`X-Forwarded-Prefix` is the controller's).
+- The controller's proxy signs the person in and sends the identity
+  headers (CONTROLLER-CONTRACT 5.3). The app believes them only when
+  `X-OpenHamShack-Proxy-Secret` equals its own `DOCK360_SHACK_PROXY_SECRET`
+  (constant-time). Anything else is `401 {"code": "proxy_required"}` - also
+  when no secret is configured at all, so the manifest's health check
+  accepts 401 as healthy.
+- Levels: `view` reads, `control` changes the receiver, `transmit` keys
+  and changes Settings-only keys. The proxy enforces the manifest's
+  minimums; the app checks again. A refusal is `403 {"code":
+  "level_too_low", "level", "needs"}`. `X-OpenHamShack-Transmit` (`full`,
+  `digital`, `none`) says what the request may transmit; `digital` admits
+  only Enable TX (below).
+- Errors are `{"error": "<one sentence>", "code": "<snake_case>"}`.
+
+## Endpoints
+
+| Method, path | Level | Does |
+|---|---|---|
+| `GET /` | view | a status page and the Recordings (record, play, download, delete); nothing fetched from elsewhere, one small script that posts to `api/recordings` |
+| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog` |
+| `GET api/state` | view | `Radio.state()`: every key |
+| `GET api/spec` | view | the settings registry (type, limits, choices, help, auth, restart) |
+| `POST api/set` | control (transmit for `auth` keys) | `{key: value, …}` or `{"changes": {…}}` through `Radio.set()`, all or nothing; answers `{"changed": {…}}`. The station profile's keys (callsign, locator, country, licence, class, own licence, conditions) are refused: they are set on the controller. So are the device addresses and audio devices (the broker and the API own those). |
+| `POST api/start`, `api/stop` | control | start or stop the radio (stop releases the broker's claim) |
+| `POST api/ptt` | control to unkey, transmit to key | `{"on": true, "remote": "<client id>"}` keys under that client's lease; `{"on": false}` unkeys. Always `200` with the status: a refused key-up has `onAir` false and `txError` saying why. |
+| `POST api/ptt/heartbeat` | transmit | `{"remote": …}` every 1 s once keyed, and while automatic transmit is armed by that client (keyed or not); `409 not_lease_holder` when that client holds neither |
+| `POST api/autotx` | transmit to arm, control to disarm | automatic transmit in the digital modes (below). `{"on": true, "remote", …}` arms and chooses; `{"on": false}` disarms and ends any over on the air. `200` with the status; a refusal is `409`/`400` `{"error", "code", "autoTx", "txError"}` |
+| `POST api/halt` | control | stop transmitting now, whoever keyed |
+| `GET api/memories`, `POST api/recall {"name"}` | view, control | memories |
+| `GET api/log`, `POST api/log`, `GET api/log.adi` | view, control, view | the station's shared logbook as this app shows it (ENGINE-API `log_qso`), and ADIF |
+| `GET api/events?kinds=state,toast,meter,lock,events` | view | WebSocket: one JSON message per feed item, `{"kind": …, …item}`; first `{"kind": "hello", "status": …}`. `wide` and `zoom` only when asked: `{"kind", "t", "startHz", "binHz", "n", "cdb"}`, `cdb` the bins as little-endian int16 centi-dB in base64. A decode (`events`) that names a sender (`call`) also carries its DXCC entity when cty.dat can place it: `country` (cty.dat's name), `dxcc` (primary prefix), `continent`; absent otherwise. |
+| `GET api/events` (state resync) | view | A `state` item is a diff, published once, and a client too slow to drain its queue loses the oldest. When that has happened the server sends the whole state before any later diff: a `state` message in the usual shape, `{"kind": "state", "changes": {…every key…}, "full": true}`. `full` is new and optional (absent on ordinary diffs); a client that merges `changes` as it always has needs no change, and one that wants to can replace its copy instead. Diffs it had not yet received are folded into the snapshot, not sent after it. Other kinds (meter, spectrum, events) still drop oldest-first. |
+| `GET api/events?kinds=…,cwskim,cwspot` | view | Radio's CW skimmer (ENGINE-API `cwskim`, `cwspot`). Neither kind is in the default set, so a client that does not ask never gets them. `cwskim` comes once a second, at most `cwSkimMax` channels (about 8 kB/s at 64). `cwspot` is coalesced to at most 5 items a second. A slow client loses snapshots, which do no harm, and spots, which it recovers through `rev`. |
+| `GET api/cwskim` | view | Radio only: `{"state", "why"?, "band", "segment", "cover", "channels", "carriers", "spotsRev", "spots": [...]}`. That is the `cwskim` item, plus every spot of the last 30 minutes (at most 500, newest first, each a `cwspot` `spot`). Fetch it when a view opens, and after a gap in `rev`. It is `{"state": "off", ...}` with empty lists while `cwSkim` is false. A tap on a spot or channel only tunes: one `POST api/set {"mode": "cw", "vfo": dial}` at Control level, never a reply and never Enable TX (Brian, 13/10/2026). |
+| `GET api/overpower` | view | QO-100 NB only (404 `not_found` elsewhere): `{"state", "beacon", "marginDb", "capture", "lastCapture", "events": [...]}` - signals over the middle beacon and LEILA sirens of the last 30 minutes, open ones first, each as ENGINE-API `overpower` describes. The same list comes as `overpower` items on `api/events?kinds=…,overpower` (not in the default set) on every change and once a second while anything is active. A `leila` entry is the siren pattern measured on six real sirens; why LEILA marks a station is unknown, so show it as "LEILA?". Tapping an entry only tunes: `POST api/set {"vfo": …}` at Control level, never TX. |
+| `POST api/overpower/capture` | control | save the last 20 s of receive IQ now (the LEILA evidence ring; `leilaCapture` must be on): `202 {"ok": true}`, the file then appears in Recordings as `…-LEILA`; `409 nothing_to_save` with the sentence why not. Receive only. |
+| `GET api/audio/rx` | view | receive audio, raw PCM over a long-lived response: `Content-Type: audio/L16; rate=12000; channels=1`, and `X-Audio-Format: {"encoding": "s16le", "rate": 12000, "channels": 1}` |
+| `GET api/audio/tx` | transmit | WebSocket: binary frames of PCM in the same format are the microphone while it is open (voice modes; keying is still `api/ptt`) |
+| `POST api/shack/pad/action` | control (transmit for `power`) | the controller's input host: `{"action", "kind", "step"}` from `<app>/pad-actions.json`; answers the pad faces. `ptt` is refused here: a pad keys through `api/ptt` like any client. |
+| `GET api/shack/busy` | the platform | `{"busy": <on air>, "why"}` for the update gate |
+| `POST api/shack/release` | the platform | the broker asks for the radio back: `409 {"onAir": true}` while keyed (unless `"stop": true`), else `202` and the radio stops |
+| `GET api/recordings` | view | the recordings, newest first, and the status below (Recordings) |
+| `GET api/recordings/status` | view | what is recording now, the last that ended, disk use and limits |
+| `POST api/recordings/start {"kind": "audio" \| "iq"}` | control | start recording; `400 bad_kind`, `409 already_recording`/`not_running`/`cannot_record`, `507 low_disk` |
+| `POST api/recordings/stop {"kind"?}` | control | stop that kind, or both; the status with `stopped` |
+| `GET api/recordings/file?id=&part=data\|meta[&download=1]` | view | one file of a recording; `Range: bytes=…` answers `206` |
+| `POST api/recordings/delete {"id"}` | control | delete a recording (`409 recording_active` while it records) |
+
+## Recordings
+
+Made and kept on the controller, in `/data/recordings` on the module's data
+volume (`/var/lib/dock360/modules/<id>/data/recordings/`), which survives
+updates (Brian, 12/10/2026). Receive only: nothing here keys. The API and
+the JSON shapes are ohs-libs' `shack_rec` (python/shack_rec/README.md), the
+same on Icom and Flex; what is this app's own:
+
+- **`kinds`: `["audio", "iq"]`.** Both may run at once, one of each.
+- **Audio** is what `api/audio/rx` sends - demodulated, after the engine's
+  noise reduction when `nr` is on - as **FLAC**, 12 kHz mono 16-bit: lossless
+  (a recording can be decoded again later), played by every browser,
+  ExoPlayer and AVPlayer, about 30-45 MB an hour. The sidecar `<id>.json`
+  has `station` (the callsign), `freqHz` (the receive dial), `mode`,
+  `radio` (the device), `processing` (`nr`, `nb`, `agc`), and `changes`
+  (frequency and mode as they changed, seconds in). The radio stopping
+  ends it (`stopped`: "the radio stopped").
+- **IQ** is the engine's SigMF recording (ENGINE-API "IQ recording"):
+  `.sigmf-data` (ci16_le at the device rate, `sampleRate`) and
+  `.sigmf-meta`, exactly what the desktop app writes, so it plays back
+  through the `file` device and the `ohsnb.analyse_*` tools read it. It is
+  large - 290 MB a minute at 1.2 MS/s - so it stops by itself at
+  `RECORDINGS_IQ_MAX_MINUTES` (10) or sooner if the limit or the free space
+  would be passed, and the radio stopping ends it.
+- **Settings** (module settings, one number each): `RECORDINGS_LIMIT_GB`
+  (10: past it the oldest go, never one recording), `RECORDINGS_MIN_FREE_GB`
+  (2: nothing starts below it, `507 low_disk`, and a recording stops there),
+  `RECORDINGS_AUDIO_MAX_HOURS` (4), `RECORDINGS_IQ_MAX_MINUTES` (10).
+- `api/status` carries `recordings: {"kinds", "active"}` (no disk scan),
+  so a client knows to show a Record button and whether it is lit.
+- The status page at the base path lists them with a player, downloads
+  and delete, and has Record audio / Record IQ / Stop.
+
+Status, from `api/recordings/status` (and inside `api/recordings`):
+
+```json
+{"recording": true, "kinds": ["audio", "iq"],
+ "active": [{"id": "shackqo100nb-20261012-100000Z-10489.750000MHz-USB", "kind": "audio",
+             "format": "flac", "startUtc": "2026-10-12T10:00:00Z", "seconds": 12.4,
+             "bytes": 98304, "maxSeconds": 14400, "maxBytes": 10000000000,
+             "droppedSeconds": 0.0, "freqHz": 10489750000, "mode": "USB"}],
+ "last": {"id": "…", "kind": "iq", "stopped": "the time limit", "error": ""},
+ "usage": {"bytes": 1234567, "limitBytes": 10000000000, "freeBytes": 80000000000,
+           "floorBytes": 2000000000},
+ "limits": {"limitBytes": 10000000000, "floorBytes": 2000000000,
+            "audioMaxSeconds": 14400, "iqMaxSeconds": 600}}
+```
+
+A recording in `api/recordings`'s `recordings` list:
+
+```json
+{"id": "shackqo100nb-20261012-100000Z-10489.750000MHz-USB", "kind": "audio", "format": "flac",
+ "startUtc": "2026-10-12T10:00:00Z", "endUtc": "2026-10-12T10:05:00Z", "seconds": 300.0,
+ "sampleRate": 12000, "channels": 1, "freqHz": 10489750000, "mode": "USB",
+ "station": "GM4BRI", "radio": "pluto", "app": "shack-qo100nb", "complete": true,
+ "stopped": "by the operator", "recording": false, "bytes": 1601234,
+ "parts": {"data": {"name": "….flac", "bytes": 1600000, "type": "audio/flac"},
+           "meta": {"name": "….json", "bytes": 1234, "type": "application/json"}}}
+```
+
+An IQ one has `"kind": "iq"`, `"format": "sigmf-ci16_le"`, `sampleRate` the
+IQ rate, no `channels`, and parts `….sigmf-data`
+(`application/octet-stream`) and `….sigmf-meta` (`application/json`).
+To play: `api/recordings/file?id=<id>&part=data` (FLAC); to save:
+add `&download=1`.
+
+## Transmitting
+
+In this order, and nothing keys otherwise (CONTROLLER-CONTRACT 6.2):
+
+1. the Transmit level;
+2. the engine's key-up check - the licence and band plan from the station
+   profile and the shared dataset (`ohscore/txguard.py`), the radio's
+   range, the gain ceiling, the app's own rules;
+3. a broker claim in `tx` mode on the radio and the broker's `onair` yes,
+   told the signal: NB the uplink (with TX lock's correction) and the
+   occupied width; Radio the occupied signal and the power chain's estimate;
+4. the key-up, held under the client's lease: unkeyed 5 s after its last
+   heartbeat (`txError` "Transmit stopped: remote controller lost …").
+
+Unkeying runs the other way: RF off, then the broker told and the claim
+back to `rx`. A claim the broker takes back unkeys at once and stops the
+radio. While the radio is still wanted the server then re-claims it for
+receive with `{"reclaim": true}` (CONTROLLER-CONTRACT 7.2: a broker restart
+loses every claim), backing off from 1 s to 30 s or waiting the broker's
+`retryAfter`; transmitting never resumes by itself. Only `api/stop` or a
+hand-over (`api/shack/release`, or `releaseRequested` on a heartbeat) ends
+wanting the radio. The engine's own unkeys (time-out, dead air, a refusal on re-check)
+end the lease and put the engine's reason in `txError`.
+
+## Automatic transmit (digital modes)
+
+WSJT-X's Enable TX with CAT PTT: the operator arms it, chooses what to
+send, and the server keys the radio itself for each over and unkeys at its
+end. Code `ohscore/server/autotx.py`, tests `tests/test_server_autotx.py`.
+
+- **Arm:** `POST api/autotx {"on": true, "remote": "<client id>"}`, at
+  the Transmit level, in `ft8`, `ft4`, `q65` (sequenced) or `psk31`,
+  `psk63`, `psk125`, `rtty`, `cw` (a line at a time), with a callsign in
+  the station profile. Arming sends nothing. One client at a time
+  (`409 armed_elsewhere`); while armed, no other client may key PTT.
+  Never armed after a restart: it lives only in memory.
+- **Choose**, in the same body (arming again first if need be):
+  - `"cq": true` (optional `"period": "even"|"odd"`, `"offset"` audio Hz
+    200-2900, default 1500): call CQ in the slot that can start soonest,
+    then every slot of that parity;
+  - `"reply": <a decode as api/events sent it>` (`text`, `slot`, `snr`,
+    `df`, and `call`/`grid` when the event has them): answer it as the
+    desktop's double-click does - the other parity, on its frequency,
+    our report from its SNR;
+  - `"text": "<line>"` in a text mode: sent now, keyed for its length.
+- **Sequencing** is the desktop FT8 panel's (`ohscore/ft8seq.py`): each
+  decode addressed to us moves the QSO on; each over is handed to the
+  engine just before our slot starts, so the slot before has decoded.
+  After 73 (Tx5), or on hearing the other station's 73 once reports are
+  exchanged, the QSO is logged and automatic transmit turns itself off.
+- **Every over keys through PTT's path** (Transmitting, above): the
+  engine's key-up check on the occupied band measured from the rendered
+  message, the broker's tx claim and on-air answer, and the lease held
+  under the arming client's id. The engine's time-out and watchdog apply.
+- **The arm is a lease.** The arming client heartbeats it every 1 s with
+  `api/ptt/heartbeat`, between overs as well as during them; 5 s without
+  one disarms and ends any over. Also off, and any over ended: `api/halt`,
+  `api/ptt {"on": false}`, `api/autotx {"on": false}`, `api/stop`, a lost
+  broker claim, a hand-over, a change of mode, and six minutes with no
+  operator choice and no answer from the other station (WSJT-X's Tx
+  watchdog; heartbeats do not count). Off once an over has ended: a
+  refused or cut-short over (its reason in `txError` and `autoTx.why`),
+  and the QSO complete. It never re-arms by itself.
+- **Each over sent** is published on `api/events` as `{"mode", "t", "dial",
+  "tx": {"slot", "df", "text"}}` (`slot` the slot's start, as decodes name
+  theirs), for a remote's decode list to show beside what it heard. It has
+  no top-level `text` or `slot` on purpose: a reader of decodes (an older
+  Remote, the sequencer, the desktop panel) never takes it for a station
+  heard. It goes straight to the feed, so no spot or skimmer entry is made.
+- `status.autoTx`: `{"armed", "remote", "mode", "active", "dx", "next"
+  (the next over's message), "period", "offset", "sequenced", "text",
+  "why" (why it last went off)}`.
+- **TVs:** the controller caps a TV at Control, so a TV cannot arm -
+  unless the controller's administrator has allowed that TV digital-mode
+  transmit (Brian, 11/10/2026, openhamshack `docs/REMOTE-KEYS.md`;
+  CONTROLLER-CONTRACT 5.5). Such a TV arrives at Control with
+  `X-OpenHamShack-Transmit: digital` and may arm this, and heartbeat its
+  own arm on `api/ptt/heartbeat` (the manifest marks that route
+  `digital: true`); never `api/ptt` on, `api/audio/tx`, or a heartbeat for
+  anything but its arm. Each over it sends asks the broker with
+  `"digital": true`, and the broker admits that TV for nothing else. With
+  no Transmit header (a controller older than 5.5) the level alone decides.
+
+Tested only into the simulator: nothing in this server has keyed a radio.
+
+## What it is not (yet)
+
+- No web console: Remote is the UI. The status page only says how it is.
+- No IC-9700 external transmitter or serial PTT sequencer in the store
+  form: a container is given no serial devices for them.
+- The one SoapySDR receiver in the store form is Radio's SDRplay RSP
+  (since 12/10/2026; QO-100 NB's image has none): `device` soapy is the
+  broker's `sdrplay-1`, claimed for receive only. The claim sets
+  `soapyArgs` (`driver=sdrplay`, plus the broker device's serial if it has
+  one) and keeps any other `key=value` the configured soapyArgs carries,
+  which is how the driver's own settings reach it (`rfgain_sel`, the LNA
+  state). `soapyAntenna` picks the input (`Antenna C` is an RSPdx's HF
+  socket), and status shows `antenna`/`antennas` under the device. A
+  key-up through a receiver is refused with "This radio can only receive"
+  before the broker is asked. The image runs SDRplay's API service beside
+  the server (store/radio/entrypoint.sh) and asks for the USB bus; the
+  controller needs a udev rule for the RSP (Host -> Hardware, plugdev).
+- Hermes-Lite 2 discovery uses a LAN broadcast the container's network may
+  not pass; give its address in the broker's device instead.

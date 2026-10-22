@@ -1,0 +1,95 @@
+.TH OPENHAMSHACK-RADIO 1 "2026-10-04" "openhamshack-radio" "User Commands"
+.SH NAME
+openhamshack-radio \- all-band amateur radio SDR transceiver
+.SH SYNOPSIS
+.B openhamshack-radio
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+OpenHamShack Radio is a native PyQt6 desktop transceiver for the amateur bands,
+160 m to 6 cm: SSB, CW, AM, FM with CTCSS, repeater shifts and the 1750 Hz
+toneburst, FT8, FT4, PSK31/63/125, RTTY, FreeDV and SSTV. A radio engine
+owns the SDR and does all the signal processing; a Qt window is the whole
+user interface; both run in one process.
+.PP
+It holds every transmission inside the UK licence class set in Settings
+(Foundation, Intermediate or Full), at no more than that class's power
+there as estimated from the power chain entered per band, refuses the
+beacon and satellite sub-bands, and warns when a transmission leaves what
+the RSGB band plan intends.
+.PP
+It drives the ADALM-Pluto family (Pluto, Pluto+, LibreSDR, Pluto nano) on
+VHF and up and the Hermes-Lite 2 on HF; any SoapySDR receiver for receive
+only. With no hardware attached it runs against simulated bands.
+.SH OPTIONS
+.TP
+.B \-\-headless
+Run the engine without opening a window: print one status line a second
+to standard output instead. Nothing in this mode ever keys the
+transmitter.
+.TP
+.BI \-\-device " DEVICE"
+Override the configured device for this run only. One of
+.BR sim ", " pluto ", " hl2 " or " soapy .
+.TP
+.BI \-\-band " BAND"
+Start on this band (160m ... 10m, 4m, 2m, 70cm, 23cm, 13cm, 9cm, 6cm).
+.TP
+.BI \-\-rf " MHZ"
+Start on this frequency.
+.TP
+.BI \-\-mode " MODE"
+Start in this mode (usb, lsb, cw, am, fm, ft8 ...).
+.TP
+.BI \-\-seconds " N"
+Stop after
+.I N
+seconds (0, the default: run until interrupted).
+.TP
+.B \-\-no\-audio
+Run with the null audio backend: no sound card is opened.
+.TP
+.B \-v ", " \-\-verbose
+Log at INFO level instead of the default WARNING.
+.TP
+.B \-h ", " \-\-help
+Show the built-in usage summary and exit.
+.SH FILES
+.TP
+.I ~/.config/openhamshack-radio/config.json
+Persisted settings. Overridden by the
+.B OHS_RADIO_CONF
+environment variable.
+.TP
+.I ~/.local/share/openhamshack-radio/
+The log and received SSTV images. Overridden by the
+.B OHS_RADIO_DATA
+environment variable.
+.SH ENVIRONMENT
+.TP
+.B OHS_RADIO_CONF
+Path to the config file, in place of the default under
+.IR ~/.config .
+.TP
+.B OHS_RADIO_DATA
+Path to the data directory, in place of the default under
+.IR ~/.local/share .
+.TP
+.BR OHSRADIO_CONF ", " OHSRADIO_DATA
+The names these had before the OpenHamShack rename; still read when
+the OHS_RADIO_ ones are not set.
+.PP
+An installation from before the rename kept its files under
+.IR ~/.config/openhamshack-ham " and " ~/.local/share/openhamshack-ham .
+The first start of this version moves both to the new names and leaves
+a link at each old one; nothing is copied and nothing deleted.
+.SH EXIT STATUS
+.B 0
+on a clean stop;
+.B 1
+if the engine could not start;
+.B 2
+if no window is available (the message says to pass \-\-headless).
+.SH SEE ALSO
+.BR openhamshack-nb (1)
+.SH AUTHOR
+Brian Henderson
