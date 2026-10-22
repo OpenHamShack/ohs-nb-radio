@@ -58,10 +58,11 @@ datas += [(str(ROOT / "ohsradio" / n), "ohsradio") for n in ("pad-actions.json",
 # libiio 0.26's DLLs into _internal\libiio, as data: see openhamshack-nb.spec for why.
 datas += [(str(p), "libiio") for p in sorted((VENDOR / "libiio").glob("*.dll"))]
 # No WSJT-X since 17/10/2026: see openhamshack-nb.spec.
-# librtlsdr for the RTL-SDR receiver, into _internal\rtlsdr (the RTL-SDR
-# Blog's rtlsdr.dll and the VC++ 2010 runtime it links, build-windows.ps1),
-# where ohscore/devices/rtlsdr.py points shack_sdr's binding. As data, like
-# libiio's: loaded by full path at run time, never imported.
+# librtlsdr for the RTL-SDR receiver, into _internal\rtlsdr: rtlsdr.dll
+# built from the RTL-SDR Blog's v1.3.6 source with libusb linked in, against
+# the UCRT (tools/build-rtlsdr-windows.sh, passed by build-windows.ps1 -RtlSdr),
+# where ohscore/devices/sdrsource.py points shack_sdr's binding. As data,
+# like libiio's: loaded by full path at run time, never imported.
 datas += [(str(p), "rtlsdr") for p in sorted((VENDOR / "rtlsdr").glob("*.dll"))]
 
 # The same unmodified codec2/LPCNet DLLs as NB's bundle (FreeDV).

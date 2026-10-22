@@ -6,7 +6,7 @@ Build openhamshack-nb-<version>-setup.exe or openhamshack-radio-<version>-setup.
 .DESCRIPTION
 Run on a Windows 10/11 x64 machine, from a checkout of the repository:
 
-    powershell -ExecutionPolicy Bypass -File tools\build-windows.ps1 [-App nb|ham] [-Work C:\ohsnb-build] [-Ohsdigi <path>\ohsdigi.pyd] [-NoTests] [-NoSign]
+    powershell -ExecutionPolicy Bypass -File tools\build-windows.ps1 [-App nb|ham] [-Work C:\ohsnb-build] [-Ohsdigi <path>\ohsdigi.pyd] [-RtlSdr <path>\rtlsdr.dll] [-NoTests] [-NoSign]
 
 -App picks the program: nb (OpenHamShack QO-100 NB, the default, as the script has
 always built) or ham (OpenHamShack Radio). The two differ only in their package,
@@ -31,7 +31,8 @@ made, so a bundle missing a module fails here rather than on someone's PC.
 What a Pluto needs is inside the installer too: libiio 0.26's DLLs in the
 bundle (_internal\libiio), and ADI's PlutoSDR USB driver installer, which
 the setup program runs as an option (packaging\windows\pluto-drivers.iss).
-Radio's carries librtlsdr for an RTL-SDR (_internal\rtlsdr). Neither
+Radio's carries librtlsdr for an RTL-SDR (_internal\rtlsdr), cross-built
+on Linux by tools/build-rtlsdr-windows.sh and passed as -RtlSdr. Neither
 carries SDRplay's API, which is the operator's own install, ever.
 The Country column's cty.dat is ohscore's own (ohscore\data, from the
 repository). The licences for all of these are in
@@ -68,6 +69,9 @@ param(
     [string]$App = "nb",
     [string]$Work = "C:\ohsnb-build",
     [string]$Ohsdigi = "",
+    # Radio only: rtlsdr.dll from tools/build-rtlsdr-windows.sh (default
+    # <Work>\rtlsdr\rtlsdr.dll), its SHA256SUMS beside it.
+    [string]$RtlSdr = "",
     [switch]$NoTests,
     # An unsigned build, for trying something locally. Never for release:
     # tools/release.sh --windows refuses an installer that is not signed.
@@ -166,16 +170,8 @@ $Pins = @{
     innosetup = @{ url = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe"
                   file = "innosetup-6.7.3.exe"
                   sha  = "9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732" }
-    # Radio's RTL-SDR receiver (shack_sdr.sources.rtlsdr, over ctypes): the
-    # RTL-SDR Blog's v1.3.6 Windows build of librtlsdr, its own fork of
-    # osmocom's with the Blog V4 dongle's tuner, which is the one most
-    # Windows guides send people to. rtlsdr.dll has libusb 1.0.26 linked in
-    # (its libusb_get_version() table reads 1.0.26.11724) and needs only
-    # msvcr100.dll, the Visual C++ 2010 runtime, which the zip carries
-    # beside it; both are shipped unmodified, in _internal\rtlsdr.
-    rtlsdr   = @{ url  = "https://github.com/rtlsdrblog/rtl-sdr-blog/releases/download/v1.3.6/Release.zip"
-                  file = "rtl-sdr-blog-1.3.6-Release.zip"
-                  sha  = "a331691535fc99cfe21bc83b825c7b03f9f71022f93bc3f85254eb1d49fa77ab" }
+    # The licence of Radio's rtlsdr.dll (built from the RTL-SDR Blog's v1.3.6
+    # source by tools/build-rtlsdr-windows.sh; below), from that tag.
     rtlsdr_copying = @{ url = "https://raw.githubusercontent.com/rtlsdrblog/rtl-sdr-blog/v1.3.6/COPYING"
                   file = "rtl-sdr-COPYING"
                   sha  = "ab15fd526bd8dd18a9e77ebc139656bf4d33e97fc7238cd11bf60e2b9b8666c6" }
@@ -428,21 +424,33 @@ Copy-Item (Fetch "lpcnet_copying") (Join-Path $Lic "lpcnet-COPYING")
 
 # ---------------------------------------------------------------- librtlsdr
 if ($App -eq "ham") {
-    Step "librtlsdr from the RTL-SDR Blog's v1.3.6 release"
-    # The dongle also needs the WinUSB driver in place of Windows' own DVB-T
-    # one, once per dongle per USB port (Zadig); Radio's Settings › Radio
-    # says how when the dongle is busy or not found. Nothing here installs
-    # a driver.
-    $Rtl = Join-Path $Vendor "rtlsdr"
-    if (-not (Test-Path (Join-Path $Rtl "rtlsdr.dll"))) {
-        New-Item -ItemType Directory -Force -Path $Rtl | Out-Null
-        $zip = Fetch "rtlsdr"
-        $tmp = Join-Path $Work "rtlsdr-unzip"
-        if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
-        Expand-Archive -Path $zip -DestinationPath $tmp
-        foreach ($f in @("rtlsdr.dll", "msvcr100.dll")) { Copy-Item (Join-Path $tmp "x64\$f") (Join-Path $Rtl $f) }
-        Remove-Item -Recurse -Force $tmp
+    Step "librtlsdr, cross-built on Linux"
+    # Radio's RTL-SDR receiver (shack_sdr.sources.rtlsdr, over ctypes).
+    # Built from the RTL-SDR Blog's v1.3.6 source with libusb 1.0.26 linked
+    # in, against the UCRT (tools/build-rtlsdr-windows.sh), not taken from
+    # their Release.zip, whose DLL needs the VC++ 2010 runtime (no security
+    # updates for years). Not built here, as ohsdigi.pyd is not: the
+    # cross toolchain is Linux's. The dongle also needs the WinUSB driver in
+    # place of Windows' own DVB-T one, once (Zadig); nothing here installs a
+    # driver.
+    if (-not $RtlSdr) { $RtlSdr = Join-Path $Work "rtlsdr\rtlsdr.dll" }
+    if (-not (Test-Path $RtlSdr)) {
+        throw "no rtlsdr.dll at $RtlSdr. Build it on Linux from this same commit (tools/build-rtlsdr-windows.sh), " +
+              "copy it here with its SHA256SUMS and pass -RtlSdr. Without it Radio cannot open an RTL-SDR."
     }
+    $sums = Join-Path (Split-Path -Parent $RtlSdr) "SHA256SUMS"
+    if (Test-Path $sums) {
+        $want = (Get-Content $sums | Where-Object { $_ -match "\srtlsdr\.dll$" } | Select-Object -First 1) -split "\s+" | Select-Object -First 1
+        $got = (Get-FileHash $RtlSdr -Algorithm SHA256).Hash.ToLower()
+        if ($want -ne $got) { throw "$RtlSdr does not match its SHA256SUMS (got $got, expected $want): damaged on the way here?" }
+        Write-Host "   SHA-256 $got matches SHA256SUMS"
+    } else {
+        Write-Host "   (no SHA256SUMS beside it to check against)"
+    }
+    $Rtl = Join-Path $Vendor "rtlsdr"
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Rtl     # an older build's Release.zip copy, msvcr100.dll with it
+    New-Item -ItemType Directory -Force -Path $Rtl | Out-Null
+    Copy-Item $RtlSdr (Join-Path $Rtl "rtlsdr.dll")
     Copy-Item (Fetch "rtlsdr_copying") (Join-Path $Lic "rtl-sdr-COPYING")
     # Loaded by full path from its own folder, as the frozen program will:
     # the binding's own probe (no dongle needed) must find every function.
@@ -564,7 +572,7 @@ if ((Get-FileHash $pyd).Hash -ne (Get-FileHash $Ohsdigi).Hash) { throw "the bund
 Write-Host "   $pyd"
 
 if (-not $NoSign) {
-    Step "Sign our own binaries: $Pkg.exe, $Pkg-console.exe, ohsdigi.pyd"
+    Step "Sign our own binaries: $Pkg.exe, $Pkg-console.exe, ohsdigi.pyd (and Radio's rtlsdr.dll)"
     # Before the smoke tests, so the program they run is byte for byte the
     # one that ships (a signature is appended to the file, and PyInstaller's
     # bootloader must still find its archive past it). Only these three: the
@@ -573,6 +581,11 @@ if (-not $NoSign) {
     # checked against SHA256SUMS above; signed, it no longer matches that
     # file, which describes the unsigned build output.
     $ours = @((Join-Path $Bundle "$Pkg.exe"), (Join-Path $Bundle "$Pkg-console.exe"), $pyd)
+    # Radio's rtlsdr.dll is our own build too (tools/build-rtlsdr-windows.sh),
+    # so it is signed with the rest: Smart App Control and Defender treat an
+    # unsigned DLL loaded by a signed program with suspicion.
+    $rtlBundled = Join-Path $Bundle "_internal\rtlsdr\rtlsdr.dll"
+    if (Test-Path $rtlBundled) { $ours += $rtlBundled }
     Sign $ours
     foreach ($f in $ours) { AssertSigned $f }
 }

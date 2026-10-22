@@ -28,7 +28,7 @@ foreach ($old in ($others | Select-Object -Skip ([math]::Max($Keep - 1, 1)))) {
 
 if (Test-Path -LiteralPath $W) {
     "reusing $W (this version was built here before)"
-    foreach ($d in "repo", "ohsdigi", "checks") {
+    foreach ($d in "repo", "ohsdigi", "rtlsdr", "checks") {
         if (Test-Path -LiteralPath "$W\$d") { Remove-Item -LiteralPath "$W\$d" -Recurse -Force }
     }
     Get-ChildItem -LiteralPath "$W\out" -Filter "*-$V-setup.exe*" -ErrorAction SilentlyContinue | Remove-Item -Force
@@ -46,6 +46,13 @@ tar -xzf "$In\rel-$V-$App-src.tar.gz" -C "$W\repo"
 if ($LASTEXITCODE -ne 0) { throw "tar failed" }
 Move-Item -LiteralPath "$In\rel-$V-$App-ohsdigi.pyd" -Destination "$W\ohsdigi\ohsdigi.pyd" -Force
 Move-Item -LiteralPath "$In\rel-$V-$App-SHA256SUMS" -Destination "$W\ohsdigi\SHA256SUMS" -Force
+# Radio's rtlsdr.dll (tools/build-rtlsdr-windows.sh, built by windows.sh),
+# where build-windows.ps1 looks for it by default.
+if (Test-Path -LiteralPath "$In\rel-$V-$App-rtlsdr.dll") {
+    New-Item -ItemType Directory -Force -Path "$W\rtlsdr" | Out-Null
+    Move-Item -LiteralPath "$In\rel-$V-$App-rtlsdr.dll" -Destination "$W\rtlsdr\rtlsdr.dll" -Force
+    Move-Item -LiteralPath "$In\rel-$V-$App-rtlsdr-SHA256SUMS" -Destination "$W\rtlsdr\SHA256SUMS" -Force
+}
 Remove-Item -LiteralPath "$In\rel-$V-$App-src.tar.gz"
 $have = (Get-Content "$W\repo\$PyDir\VERSION" -Raw).Trim()
 if ($have -ne $V) { throw "$PyDir\VERSION in the source is $have, not $V" }

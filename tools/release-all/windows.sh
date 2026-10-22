@@ -34,6 +34,9 @@ step "windows: ohsdigi.pyd from the release commit"
 pyd=$W/ohsdigi/windows-amd64/ohsdigi.pyd
 sha256sum < "$pyd" | cut -d' ' -f1 > "$W/ohsdigi.sha256"
 
+step "windows: rtlsdr.dll for Radio from the release commit"
+"$TREE/tools/build-rtlsdr-windows.sh" --out "$W/rtlsdr"
+
 step "windows: the scripts to the VM"
 ra_ssh "$WIN_HOST" "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force -Path '$wroot/release-all' | Out-Null\""
 ra_scp "$TREE/tools/release-all/win-prep.ps1" "$TREE/tools/release-all/win-build.ps1" \
@@ -46,6 +49,10 @@ for a in $APPS; do
     ra_scp "$W/$a-src.tar.gz" "$WIN_HOST:$wroot/release-all/rel-$v-$a-src.tar.gz"
     ra_scp "$pyd" "$WIN_HOST:$wroot/release-all/rel-$v-$a-ohsdigi.pyd"
     ra_scp "$W/ohsdigi/windows-amd64/SHA256SUMS" "$WIN_HOST:$wroot/release-all/rel-$v-$a-SHA256SUMS"
+    if [ "$a" = ham ]; then
+        ra_scp "$W/rtlsdr/rtlsdr.dll" "$WIN_HOST:$wroot/release-all/rel-$v-$a-rtlsdr.dll"
+        ra_scp "$W/rtlsdr/SHA256SUMS" "$WIN_HOST:$wroot/release-all/rel-$v-$a-rtlsdr-SHA256SUMS"
+    fi
 
     step "windows $a $v: prepare the build folder"
     ps win-prep.ps1 -Root "$wroot" -App "$a" -V "$v" | tee "$W/$a-prep.out"
