@@ -4,8 +4,7 @@ has its lock badges, HAM's transmit card on the rail, its mode keys, steps
 and shortcuts, and its Settings, Welcome and About dialogs."""
 from __future__ import annotations
 
-from PyQt6.QtCore import QT_TRANSLATE_NOOP
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QT_TRANSLATE_NOOP, Qt, QTimer
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import QVBoxLayout
 
@@ -63,6 +62,7 @@ SHORTCUTS = [
         ("Ctrl + L", QT_TRANSLATE_NOOP("Shortcuts", "Logbook")),
         ("Ctrl + B", QT_TRANSLATE_NOOP("Shortcuts", "Memories")),
         ("Ctrl + K", QT_TRANSLATE_NOOP("Shortcuts", "CW Activity")),
+        ("Ctrl + Shift + D", QT_TRANSLATE_NOOP("Shortcuts", "Decoders")),
         ("Ctrl + D", QT_TRANSLATE_NOOP("Shortcuts", "Second display")),
         ("Ctrl + ,", QT_TRANSLATE_NOOP("Shortcuts", "Settings")),
         ("Ctrl + Shift + R", QT_TRANSLATE_NOOP("Shortcuts", "Record receive IQ / stop")),
@@ -80,8 +80,17 @@ class MainWindow(BaseWindow):
     SHORTCUTS = SHORTCUTS
     STEPS = STEPS
     # The CW skimmer's view beside Mode / Logbook / Memories (ohscore/ui/
-    # cwskimview.py). Ctrl+K, as NB's band skimmer's Band view.
-    EXTRA_VIEWS = [("cwskim", "CW Activity", "Ctrl+K")]
+    # cwskimview.py). Ctrl+K, as NB's band skimmer's Band view. Then the
+    # decoders running on frequencies of their own (ohscore/ui/
+    # decodersview.py, RADIO-SDR-PLAN §4.5), Ctrl+Shift+D. The labels are
+    # translated where the window shows them, under MainWindow.
+    EXTRA_VIEWS = [("cwskim", QT_TRANSLATE_NOOP("MainWindow", "CW Activity"), "Ctrl+K"),
+                   ("decoders", QT_TRANSLATE_NOOP("MainWindow", "Decoders"), "Ctrl+Shift+D")]
+    TIGHT_MENU_VIEWS = ("decoders",)
+
+    def watch_view(self) -> str:
+        """Watch opens on CW Activity, the band view; Decoders came after it."""
+        return "cwskim"
 
     # Diagnostics (ohsradio/ui/diagnostics.py). The two hooks are what tests
     # replace with fakes: nothing here may reach a real radio in a test.
@@ -188,6 +197,8 @@ class MainWindow(BaseWindow):
 
     # ------------------------------------------------------------- CW Activity
     def make_extra_view(self, key: str):
+        if key == "decoders":
+            return self._make_decoders_view()
         from ohscore.ui.cwskimview import CwSkimStore, CwSkimView
         # The store outlives the view (a theme change rebuilds the window):
         # made once, on the first build.
@@ -200,6 +211,52 @@ class MainWindow(BaseWindow):
             old.detach()
         self.cwskim_view = CwSkimView(self.bridge, self.prefs, self.cwskim_store, self.cwskim_tune)
         return self.cwskim_view
+
+    # ------------------------------------------------------------- Decoders
+    def _make_decoders_view(self):
+        from ohscore.ui.decodersview import DecodersStore, DecodersView
+        if getattr(self, "decoders_store", None) is None:
+            self.decoders_store = DecodersStore(self.bridge)
+        old = getattr(self, "decoders_view", None)
+        if old is not None:
+            old.detach()
+        self.decoders_view = DecodersView(self.bridge, self.prefs, self.decoders_store, self.decoder_tune)
+        return self.decoders_view
+
+    def decoder_tune(self, f: float, decoder: str):
+        """Put the dial on a decoder session's signal, in that mode where
+        Radio has it (RTTY's dial is its tones' middle less the mode's
+        1000 Hz offset, as a click on the scope would put it). Only tunes."""
+        from ohscore.ui.tuning import click_to_dial
+        st = self.bridge.st
+        mode = decoder if decoder in self.bridge.radio.STATE.modes else st.get("mode", "usb")
+        target = click_to_dial(mode, float(f), st)
+        if st.get("ritOn"):
+            target -= float(st.get("rit") or 0)
+        sp = self.bridge.spec("vfo")
+        self.bridge.set(mode=mode, vfo=max(sp["min"], min(sp["max"], target)))
+
+    def scope_menu_items(self, f: float):
+        """The core's entries, then "Decode here as": a decoder session on
+        the signal under the mouse, in any mode, whatever the dial is on."""
+        items = list(super().scope_menu_items(f))
+        if getattr(self, "decoders_store", None) is None:
+            self._make_decoders_view()
+        from ohscore.ui.decodersview import scope_menu_entries
+        entries = scope_menu_entries(self.decoders_store)
+        if entries:
+            items.append((self.tr("Decode here as"),
+                          [(label, lambda did=did: self.decode_here(did, f)) for label, did in entries], False))
+        return items
+
+    def decode_here(self, decoder: str, f: float):
+        try:
+            self.decoders_store.start(decoder, float(f), {})
+        except ValueError as e:
+            self.on_toast({"level": "warn", "text": str(e)})
+            return
+        self.on_toast({"level": "info", "text": self.tr("{decoder} decoding at {freq} (Decoders view)").format(
+            decoder=decoder.upper(), freq=f"{float(f) / 1e6:.4f} MHz")})
 
     def _cwskim_marks(self):
         """The spots along the foot of the wide scope (set_band_marks); a

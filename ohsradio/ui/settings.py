@@ -5,7 +5,8 @@ Hermes-Lite 2 and reference calibration on the Radio page, the band
 simulator's settings, and HAM's words for its keys."""
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QComboBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QWidget
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QComboBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from ohscore.devices import hl2
 from ohscore.ui import settings as core
@@ -20,6 +21,7 @@ from ..guard import watts
 
 class SettingsDialog(core.SettingsDialog):
     PAGES = [("star", "Station", "page_station"), ("antenna", "Radio", "page_radio"),
+             ("waves", "Decoders", "page_decoders"),
              ("lock", "Licence & plan", "page_licence"), ("waves", "Bands & power", "page_power"),
              ("antenna", "Converters", "page_converters"),
              ("lock", "Transmit & safety", "page_transmit"), ("antenna", "PTT sequencer", "page_sequencer"),
@@ -28,6 +30,7 @@ class SettingsDialog(core.SettingsDialog):
              ("gear", "Simulator", "page_simulator")]
     LABELS = {**core.LABELS,
               "sdrSerial": "Receiver serial", "sdrplayLna": "RSP LNA state",
+              "decodersMax": "Decoders at once", "decodeCpuMax": "Processor share for decoders",
               "hl2Address": "Hermes-Lite 2 address", "hl2Rate": "Hermes-Lite 2 rate", "hl2Lna": "HL2 receiver gain",
               "hl2Pa": "HL2 power amplifier", "hl2TxSwapIQ": "Swap HL2 transmit I/Q",
               "ppm": "Reference error", "plan": "Band plan", "planGuard": "Band-plan guard",
@@ -49,7 +52,7 @@ class SettingsDialog(core.SettingsDialog):
                      "seqLine": {"rts": "RTS", "dtr": "DTR", "both": "Both"}}
     STEPS = {**core.STEPS, "hl2Lna": 1, "ppm": 0.05, "tuneDrive": 0.05, "swrLimit": 0.1, "paTempLimit": 1,
              "toneburstMs": 50, "ctcssLevel": 0.01, "seqDelayMs": 5, "simHourUtc": 0.5, "simAntSwr": 0.1,
-             "cwSkimSquelch": 0.5, "cwSkimMax": 8}
+             "cwSkimSquelch": 0.5, "cwSkimMax": 8, "decodeCpuMax": 0.05}
     SIM_KEYS = ("simSignals", "simHourUtc", "simAntSwr")
     SIM_TEXT = ("The simulated bands used when Radio is 'Simulator': 160 m to 6 cm with stations that come and go "
                 "with the time of day, FM repeaters that open to the right tone, and a simulated antenna for the "
@@ -64,6 +67,8 @@ class SettingsDialog(core.SettingsDialog):
             return lambda v: self.tr("real time") if v < 0 else f"{int(v):02d}:{int(round((v % 1) * 60)):02d}"
         if key == "simAntSwr":
             return lambda v: f"{v:.1f}:1"
+        if key == "decodeCpuMax":
+            return lambda v: self.tr("{pct} % of a core").format(pct=f"{v * 100:.0f}")
         return super().unit_fmt(key)
 
     def page_station(self) -> QWidget:
@@ -131,6 +136,81 @@ class SettingsDialog(core.SettingsDialog):
         self._add(box, "ppm")
         lay.insertWidget(at, tmp)
         return sc
+
+    def page_decoders(self) -> QWidget:
+        """Settings › Decoders (RADIO-SDR-PLAN §4.5): how many decoders may
+        run beside the mode's and the processor share they may use, and
+        the codecs: which this computer has, which were refused and why,
+        the folder to put one in, and Look again."""
+        sc, lay = self._scroll(self.tr("Decoders"), self.tr(
+            "Decoders that listen on frequencies of their own, beside the mode's (View › Decoders), and the "
+            "codecs some decoders need. A change here applies when the radio next starts."))
+        self._add(lay, "decodersMax")
+        self._add(lay, "decodeCpuMax")
+        self._section(lay, self.tr("Codecs"))
+        note = QLabel(self.tr("codec2, for FreeDV, comes with Radio on Windows and macOS and with your system on "
+                              "Linux. Radio never includes the codecs whose patents or licences keep them out of "
+                              "free software (faad2 and fdk-aac for DAB+ and DRM sound, mbelib for digital voice): "
+                              "it uses them only if you install them, or put them in the codecs folder. Nothing in "
+                              "this version needs them yet."))
+        note.setWordWrap(True)
+        note.setObjectName("Muted")
+        lay.addWidget(note)
+        self.codec_rows = QVBoxLayout()
+        lay.addLayout(self.codec_rows)
+        r = QHBoxLayout()
+        self.codecs_folder_btn = Button(self.tr("Open codecs folder"), small=True)
+        self.codecs_folder_btn.clicked.connect(self.open_codecs_folder)
+        r.addWidget(self.codecs_folder_btn)
+        again = Button(self.tr("Look again"), small=True)
+        again.clicked.connect(lambda: self._fill_codecs(rescan=True))
+        r.addWidget(again)
+        r.addStretch(1)
+        lay.addLayout(r)
+        self._fill_codecs(rescan=False)
+        lay.addStretch(1)
+        return sc
+
+    def _fill_codecs(self, rescan: bool) -> None:
+        while self.codec_rows.count():
+            w = self.codec_rows.takeAt(0).widget()
+            if w is not None:
+                w.deleteLater()
+        dec = getattr(self.bridge.radio, "decoders", None)
+        try:
+            rows = dec.codecs(rescan=rescan) if dec is not None else []
+        except Exception as e:  # noqa: BLE001 - a loader that fails is said, never a broken dialog
+            rows = []
+            self._say(self.tr("Could not look for codecs: {error}").format(error=e))
+        if not rows:
+            lab = QLabel(self.tr("This installation has no codec loader (shack-sdr)."))
+            lab.setObjectName("Muted")
+            self.codec_rows.addWidget(lab)
+        for c in rows:
+            lab = QLabel(f"{c['id']}: {c.get('whyText') or c.get('state')}")
+            lab.setWordWrap(True)
+            lab.setTextFormat(Qt.TextFormat.PlainText)
+            self.codec_rows.addWidget(lab)
+        from ohscore import sdr
+        codecs = sdr.codecs()
+        self.codecs_folder_btn.setEnabled(codecs is not None and codecs.folder() is not None)
+
+    def open_codecs_folder(self) -> None:
+        """The codecs folder, made if it is not there yet, in the system's
+        file manager."""
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        from ohscore import sdr
+        codecs = sdr.codecs()
+        folder = codecs.folder() if codecs is not None else None
+        if folder is None:
+            return
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            self._say(self.tr("Could not make {folder}: {error}").format(folder=folder, error=e))
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     def _show_sdr_why(self, device: str) -> None:
         """Under the RTL-SDR and SDRplay settings: whether the radio picked

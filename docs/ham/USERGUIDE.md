@@ -163,7 +163,13 @@ What a Pluto reaches depends on how its firmware identifies the chip:
 
 **Sample rate** is 1.2 MS/s (the default) or 2.4 MS/s, shared by receive and transmit. 2.4 MS/s shows all of 2 m's busy part at once and is the Pluto nano's own rate; at 1.2 MS/s a nano runs at 2.4 and the program converts.
 
-**LibreSDR** is a Pluto as far as OpenHamShack Radio is concerned: choose **Pluto family** and give it its Ethernet address (`ip:<address>`, from your router's device list).
+**LibreSDR** is a Pluto as far as OpenHamShack Radio is concerned: choose **Pluto family** (or **LibreSDR**, the same driver under its own name, which a controller lends by that name) and give it its Ethernet address (`ip:<address>`, from your router's device list).
+
+**RTL-SDR (receive only)** and **SDRplay RSP (receive only)** are reached directly, without SoapySDR, on Linux, Windows and macOS. **Not yet tried on a real dongle or RSP.** The TX button stays locked with either: *This radio can only receive*.
+
+- **RTL-SDR**: Linux needs `librtlsdr0` (the package recommends it; it also keeps the kernel's TV driver off the dongle). The Windows installer carries the library; the dongle itself needs the WinUSB driver once, fitted with Zadig (zadig.akeo.ie: Options › List All Devices, pick *Bulk-In, Interface (Interface 0)*, WinUSB, Replace Driver), or it reads as busy. It runs at 1.2 or 2.4 MS/s; automatic gain is the tuner's own, and a manual gain picks the tuner's nearest step.
+- **SDRplay RSP**: needs **SDRplay's own API**, from SDRplay's installer at sdrplay.com - OpenHamShack Radio never includes it. Without it, Settings › Radio says *Install SDRplay's API to use this radio* under the choice. It runs at 2.4 MS/s whatever the sample rate says. Automatic gain is the API's AGC; a manual **Receiver gain** of G dB asks the RSP for 79 - G dB of gain reduction (held to 20-59). **RSP LNA state** is the RSP's own input attenuation, higher attenuating more (4 by default).
+- **Receiver serial** picks one of several alike; empty takes the first found.
 
 **Hermes-Lite 2** - 160 m to 10 m, about 5 W, over Ethernet. **Tested only against an emulator of the radio, never a real one.** With **Hermes-Lite 2 address** empty it is found by a broadcast on UDP port 1024 when the radio starts; a radio on another subnet needs its address (ip or ip:port). **Find**, under the address, sends the same broadcast now (and asks a typed address directly) and lists every radio that answered, with its gateware and MAC, and whether it is busy streaming to another program; picking one fixes the address to it. Leaving the address empty is usually better: a fixed address stops working when DHCP moves the radio. A radio that answers but cannot be used (gateware too old, not a Hermes-Lite 2) is listed with the reason. Nothing answering gets a sentence on what to check - power, the network, a firewall dropping UDP 1024 and 1025. Its receiver covers 0-38.4 MHz; it transmits only on 1.8-30 MHz, the range its N2ADR filters cover. **Hermes-Lite 2 rate** (192 kS/s by default) is its receive rate; 384 kS/s shows more of a band but costs twice the processor. **HL2 power amplifier** on gives about 5 W; off, the low-level RF1 output (up to 17 dBm - still enough to destroy a transverter input that wants 0 dBm). **Swap HL2 transmit I/Q** exists because whether the HL2 wants its transmit I and Q swapped is not documented: a wrong choice mirrors your signal, so USB comes out as LSB. Settle it on the first key-up with a known tone into a dummy load, watched on another receiver.
 
@@ -175,7 +181,7 @@ PYTHONPATH=/usr/lib/openhamshack-radio python3 -m ohscore.devices.hl2sim --port 
 
 then set **Hermes-Lite 2 address** to `127.0.0.1:11024` and the radio to **Hermes-Lite 2**. It sends a test tone on 14.1 MHz.
 
-**SoapySDR (receive only)**: RTL-SDR, Airspy, SDRplay, HackRF and anything else with a SoapySDR module. **SoapySDR device** takes its arguments (`driver=rtlsdr`, `driver=airspy`); **Detect** lists what is plugged in. The TX button stays locked with this radio: *This device is receive-only*.
+**SoapySDR (receive only)**, Linux only: Airspy, HackRF and anything else with a SoapySDR module, and an RTL-SDR or RSP through theirs. **SoapySDR device** takes its arguments (`driver=rtlsdr`, `driver=airspy`); **Detect** lists what is plugged in. The TX button stays locked with this radio: *This device is receive-only*.
 
 **Reference error** (ppm, Settings › Radio › Calibration) is your radio's crystal error, measured once against a signal you trust - a beacon, or a GPS-locked source - and applied to every tune. There is no automatic correction as there is on QO-100.
 
@@ -202,7 +208,7 @@ From the top:
 
 **The zoom scope**, below on the left, is the few kHz around your frequency: your passband, its edges (drag them to set the filter), and in the digital modes the receive and transmit offsets (the transmit one gold while receiving, red on the air).
 
-**The lower panel**, under a row of tabs that never moves: **Operate** (the panel for the current mode - see [Modes](#modes)), **Logbook**, **Memories** and **CW Activity** (see [The CW skimmer](#the-cw-skimmer-cw-activity)). The mode's name and one line about it (*FT8 · 15 s periods*, or, in amber, what the mode is missing on this computer) are the first line inside Operate. The **Workspace** button sits at the right end of the tab row (below).
+**The lower panel**, under a row of tabs that never moves: **Operate** (the panel for the current mode - see [Modes](#modes)), **Logbook**, **Memories**, **CW Activity** (see [The CW skimmer](#the-cw-skimmer-cw-activity)) and **Decoders** (see [Decoders on frequencies of their own](#decoders-on-frequencies-of-their-own); not on the tab row of the smallest window). The mode's name and one line about it (*FT8 · 15 s periods*, or, in amber, what the mode is missing on this computer) are the first line inside Operate. The **Workspace** button sits at the right end of the tab row (below).
 
 **The rail** on the right: **Mode**, **Transmit** (drive, the power estimate, ALC/peak, forward power and SWR, PA temperature once the radio has reported one, the Tune button, and a warning line under the power estimate while there is something to warn about) and **Receive** (signal, SNR in the passband, volume and mute, AGC, gain with AGC off, the filter, the noise blanker and noise reduction, and the **Auto-tune** and **Best audio** buttons). How much of each card shows depends on the workspace. A compact **Receive** card is the signal, SNR, volume and mute and AGC, with a **▸ More receive controls** line that opens the rest in place (remembered for the workspace); a compact **Transmit** card is the drive, the power estimate and any warning, and the rest comes back while you are on the air.
 
@@ -440,7 +446,13 @@ Type in the line under the terminal and press **Enter**: the keyer sends it at *
 
 ### PSK31, PSK63, PSK125 and RTTY
 
-The same terminal, typing line, queue and macros as CW. The decoder listens at 1000 Hz in the audio; **Signals** lists the carriers in your passband and clicking one tunes it onto the decoder. Clicking a signal on a scope does the same. RTTY is 45.45 baud, 170 Hz shift.
+The same terminal, typing line, queue and macros as CW. The decoder listens at 1000 Hz in the audio; **Signals** lists the carriers in your passband and clicking one tunes it onto the decoder. Clicking a signal on a scope does the same. The RTTY mode is 45.45 baud, 170 Hz shift; other speeds and shifts are a decoder's in the Decoders view (below).
+
+### Decoders on frequencies of their own
+
+**Decoders** in the lower panel (Ctrl + Shift + D; on a small window, View › Decoders) runs decoders that each listen on a frequency of their own, whatever the dial and the mode are doing - several RTTY stations at once beside the one you are working, say. **Add** starts one: the decoder, its frequency in MHz (for RTTY the middle of its two tones; empty takes the dial's), and RTTY's speed (45.45, 50 or 75 baud), shift (170, 425, 450 or 850 Hz) and reversed. **Right-click a signal on a scope › Decode here as** starts one on it without the view. Each gets a card with what it copies; **Tune** puts the dial on it in that mode, **Stop** ends it. They only listen.
+
+A decoder carries on only while the receiver's span covers its frequency: tune far enough away and its card says *out of view*, and it picks up again when you tune back. They start again with the radio. Up to four run at once, sharing at most a quarter of one processor core; past that the newest pauses until there is room (Settings › Decoders). The mode's own decoder is never paused, and shows in the view too while the mode is RTTY.
 
 ### FT8 and FT4
 
@@ -736,6 +748,13 @@ The table below is generated from the Settings window itself (`tools/settings-re
 | Receiver serial | text | (empty) | The RTL-SDR's or SDRplay RSP's serial number, to pick one of several alike. Empty: the first found. *Restarts the radio when saved.* |
 | RSP LNA state | 0 – 27 | 4 | The SDRplay RSP's LNA state: higher attenuates more. 4 suits an HF dipole in the evening; the range each band allows is in SDRplay's API notes. *Restarts the radio when saved.* |
 | Reference error | -50.00 ppm – 50.00 ppm | 0.00 ppm | The device's reference error, measured once against a known signal; applied to every tune. |
+
+#### Decoders
+
+| Setting | Range or choices | Default | What it does |
+| --- | --- | --- | --- |
+| Decoders at once | 0 – 16 | 4 | How many decoders may run on frequencies of their own, beside the mode's decoder. *Restarts the radio when saved.* |
+| Processor share for decoders | 5 % of a core – 100 % of a core | 25 % of a core | The share of one processor core the decoders may use between them. Past it the newest is paused until there is room; the mode's own decoder is never paused. *Restarts the radio when saved.* |
 
 #### Licence & plan
 

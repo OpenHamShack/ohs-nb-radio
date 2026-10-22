@@ -151,6 +151,8 @@ class BaseWindow(QMainWindow):
     # (key, label, shortcut); make_extra_view(key) builds each (NB: its
     # multimedia beacon).
     EXTRA_VIEWS: list = []
+    # Extra views the tab row leaves out in the Tight tier (View menu only).
+    TIGHT_MENU_VIEWS: tuple = ()
     # The least rail that shows the full mode grid's labels whole.
     GRID_RAIL = 320
     # The screen's available (width, height) when a test says what screen
@@ -284,7 +286,8 @@ class BaseWindow(QMainWindow):
         for name, key, view in ((QCoreApplication.translate("BaseWindow", "Operate"), "Ctrl+J", "mode"),
                                 (QCoreApplication.translate("BaseWindow", "Logbook"), "Ctrl+L", "log"),
                                 (QCoreApplication.translate("BaseWindow", "Memories"), "Ctrl+B", "mem"),
-                                *((label, sc, k) for k, label, sc in self.EXTRA_VIEWS)):
+                                *((QCoreApplication.translate("MainWindow", label), sc, k)
+                                  for k, label, sc in self.EXTRA_VIEWS)):
             a = QAction(name, self)
             a.setShortcut(QKeySequence(key))
             a.triggered.connect(lambda _=False, vv=view: self.show_view(vv))
@@ -450,7 +453,9 @@ class BaseWindow(QMainWindow):
         self.views = Segmented([("mode", QCoreApplication.translate("BaseWindow", "Operate")),
                                 ("log", QCoreApplication.translate("BaseWindow", "Logbook")),
                                 ("mem", QCoreApplication.translate("BaseWindow", "Memories")),
-                                *((k, label) for k, label, _ in self.EXTRA_VIEWS)], "mode", compact=True)
+                                *((k, QCoreApplication.translate("MainWindow", label))
+                                  for k, label, _ in self.EXTRA_VIEWS)], "mode", compact=True)
+        self.view_options = list(self.views.options)
         self.views.picked.connect(self.show_view)
         tabs.addWidget(self.views)
         tabs.addStretch(1)
@@ -964,9 +969,17 @@ class BaseWindow(QMainWindow):
             return
         # popup(), not exec(): exec() would run a nested event loop inside
         # the scope's mouse handler. Kept on self so it is not collected
-        # while open (and so a test can find it).
+        # while open (and so a test can find it). An entry whose second
+        # field is a list of (text, callable) is a submenu (Radio's "Decode
+        # here as").
         self.scope_menu_open = menu = QMenu(self)
         for text, fn, likeliest in items:
+            if isinstance(fn, list):
+                sub = menu.addMenu(text)
+                for sub_text, sub_fn in fn:
+                    a = sub.addAction(sub_text)
+                    a.triggered.connect(lambda _=False, fn=sub_fn: fn())
+                continue
             act = menu.addAction(text)
             act.triggered.connect(lambda _=False, fn=fn: fn())
             if likeliest:
@@ -1619,6 +1632,12 @@ class BaseWindow(QMainWindow):
         self.mode_btn.setVisible(tight)
         self._sync_mode_btn()
         self.controls_btn.setVisible(tight)
+        # Views the tab row drops in Tight (TIGHT_MENU_VIEWS): still on the
+        # View menu and their shortcut there. Each tab is as wide as the
+        # longest label, so a sixth tab cost Radio's 1024 x 600 window its
+        # last few pixels in a longer language (en-XA).
+        self.views.options = [o for o in self.view_options if not (tight and o[0] in self.TIGHT_MENU_VIEWS)]
+        self.views.update()
         self._fit_views()
         if tight:
             self._rail_to_drawer()

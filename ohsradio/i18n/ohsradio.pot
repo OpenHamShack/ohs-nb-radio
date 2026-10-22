@@ -14,7 +14,7 @@ msgstr ""
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
-#: ohsradio/ui/settings.py:345
+#: ohsradio/ui/settings.py:425
 #, python-brace-format
 msgid "Bands & power, {band}: not a number"
 msgstr ""
