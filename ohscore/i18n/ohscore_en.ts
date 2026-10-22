@@ -2255,7 +2255,7 @@ from an HSmodem station at the same speed</source>
 </context><context>
     <name>Nav</name>
     <message>
-        <location filename="../ui/settings.py" line="216" />
+        <location filename="../ui/settings.py" line="217" />
         <source>Settings</source>
         <translation type="unfinished" />
     </message>
@@ -3283,362 +3283,402 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../ui/settings.py" line="267" />
+        <location filename="../ui/settings.py" line="268" />
         <source>Settings</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="298" />
+        <location filename="../ui/settings.py" line="299" />
         <source>Cancel</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="300" />
+        <location filename="../ui/settings.py" line="301" />
         <source>Save</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="363" />
+        <location filename="../ui/settings.py" line="364" />
         <source>Station</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="364" />
+        <location filename="../ui/settings.py" line="365" />
         <source>Who you are, and how the transmit controls behave.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="377" />
+        <location filename="../ui/settings.py" line="378" />
         <source>Station's country</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="398" />
+        <location filename="../ui/settings.py" line="399" />
         <source>Tuning</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="402" />
+        <location filename="../ui/settings.py" line="403" />
         <source>Digital modes</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="404" />
+        <location filename="../ui/settings.py" line="405" />
         <source>Licence</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="410" />
+        <location filename="../ui/settings.py" line="411" />
         <source>Until this is ticked, {app} receives only: the TX button and every send button stay locked.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="414" />
+        <location filename="../ui/settings.py" line="415" />
         <source>Until this is ticked, {app} receives only: the TX button and every send button stay locked. The simulator is the exception: nothing it transmits leaves this computer.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="423" />
+        <location filename="../ui/settings.py" line="424" />
         <source>Updates</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="428" />
+        <location filename="../ui/settings.py" line="429" />
         <source>Spotting</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="440" />
+        <location filename="../ui/settings.py" line="441" />
         <source>Diagnostics</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="443" />
+        <location filename="../ui/settings.py" line="444" />
         <source>Send diagnostics to OpenHamShack automatically</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="446" />
+        <location filename="../ui/settings.py" line="447" />
         <source>Off unless you turn it on. When on, {app} sends its diagnostics after a fault (an over that failed or was stopped, no power out, a lost radio link, a sound card failure, a crash), after the IC-9700 diagnostic or level set, and once a day if anything new was logged; at most one fault report every 30 minutes. Each one gets a reference code, shown in Help › Send diagnostics….</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="482" />
+        <location filename="../ui/settings.py" line="483" />
         <source>Controller</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="482" />
+        <location filename="../ui/settings.py" line="483" />
         <source>An OpenHamShack controller on your network shares one logbook and station profile with every app paired to it. This app works the same without one: unpairing keeps everything on this computer.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="493" />
+        <location filename="../ui/settings.py" line="494" />
         <source>Control pad</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="493" />
+        <location filename="../ui/settings.py" line="494" />
         <source>The Ajazz AKP03E: six keys with pictures, three buttons and three knobs that tune, change mode and mute without the mouse. This app works the same without one.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="504" />
+        <location filename="../ui/settings.py" line="505" />
         <source>Radio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="505" />
+        <location filename="../ui/settings.py" line="506" />
         <source>Which SDR, and how it is reached. A change of radio, address or sample rate restarts the radio (it comes back receiving, never transmitting); the receiver gain applies at once.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="511" />
+        <location filename="../ui/settings.py" line="512" />
         <source>Find</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="522" />
+        <location filename="../ui/settings.py" line="523" />
         <source>Detect</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="532" />
+        <location filename="../ui/settings.py" line="534" />
         <source>Receiver</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="541" />
-        <source>Transmit &amp; safety</source>
+        <location filename="../ui/settings.py" line="562" />
+        <source>Antenna</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="542" />
-        <source>Limits that only this dialog can change.</source>
+        <location filename="../ui/settings.py" line="563" />
+        <source>Antenna input</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="544" />
-        <source>Timers</source>
+        <location filename="../ui/settings.py" line="567" />
+        <source>Driver default</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="548" />
-        <source>Transmit audio</source>
+        <location filename="../ui/settings.py" line="581" />
+        <source>In use now: {antenna}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="558" />
-        <source>Audio</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="559" />
-        <source>Sound devices are remembered by name, so a USB headset is found on any port.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="582" />
-        <source>Look again</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="583" />
-        <source>List the sound devices again, after plugging one in or changing the system's default</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="596" />
-        <source>Receive noise reduction</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="599" />
-        <source>Check</source>
+        <location filename="../ui/settings.py" line="584" />
+        <source>Last known, radio not open: {antenna}</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="600" />
-        <source>Microphone level</source>
+        <source>Input</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="601" />
+        <source>Label</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="605" />
-        <source>Listen to the microphone</source>
+        <source>e.g. 80 m dipole</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="607" />
-        <source>Play a test tone</source>
+        <location filename="../ui/settings.py" line="630" />
+        <source>Transmit &amp; safety</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="631" />
-        <source>System default</source>
+        <source>Limits that only this dialog can change.</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="633" />
-        <source>System default ({name})</source>
+        <source>Timers</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="634" />
-        <source>System default (none found)</source>
+        <location filename="../ui/settings.py" line="637" />
+        <source>Transmit audio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="657" />
-        <source>None</source>
+        <location filename="../ui/settings.py" line="647" />
+        <source>Audio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="665" />
-        <source>{device} (not connected)</source>
+        <location filename="../ui/settings.py" line="648" />
+        <source>Sound devices are remembered by name, so a USB headset is found on any port.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="670" />
-        <source>No sound devices: {error}.</source>
+        <location filename="../ui/settings.py" line="671" />
+        <source>Look again</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="673" />
-        <source>No sound devices found.</source>
+        <location filename="../ui/settings.py" line="672" />
+        <source>List the sound devices again, after plugging one in or changing the system's default</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="685" />
+        <source>Receive noise reduction</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="688" />
+        <source>Check</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="689" />
-        <source>Display</source>
+        <source>Microphone level</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="690" />
-        <source>Theme, text size, the scopes' colours, waterfall colours and levels, scope speed.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="693" />
-        <source>Theme</source>
+        <location filename="../ui/settings.py" line="694" />
+        <source>Listen to the microphone</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="696" />
-        <source>Dark instrument</source>
+        <source>Play a test tone</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="697" />
-        <source>Light</source>
+        <location filename="../ui/settings.py" line="720" />
+        <source>System default</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="703" />
-        <source>Text size</source>
+        <location filename="../ui/settings.py" line="722" />
+        <source>System default ({name})</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="714" />
-        <source>Needs a screen of at least {w} x {h}; this one has {rw} x {rh} to spare.</source>
+        <location filename="../ui/settings.py" line="723" />
+        <source>System default (none found)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="718" />
-        <source>The size of the text throughout the window, the decode list's own size (Ctrl and the wheel over it) on top.</source>
+        <location filename="../ui/settings.py" line="746" />
+        <source>None</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="725" />
-        <source>Waterfall palette</source>
+        <location filename="../ui/settings.py" line="754" />
+        <source>{device} (not connected)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="738" />
-        <source>Waterfall levels</source>
+        <location filename="../ui/settings.py" line="759" />
+        <source>No sound devices: {error}.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="739" />
-        <source>Automatic floor and contrast</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="743" />
-        <source>Floor (manual)</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="745" />
-        <source>Contrast range (manual)</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="753" />
-        <source>Waterfall speed</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="760" />
-        <source>Scope colours</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="761" />
-        <source>The trace, its fill, the peak ghost and markers, the grid and the background, for every scope. Classic is the original look.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/settings.py" line="770" />
-        <source>Scopes</source>
+        <location filename="../ui/settings.py" line="762" />
+        <source>No sound devices found.</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="778" />
-        <source>Second display</source>
+        <source>Display</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="779" />
-        <source>A separate window for another screen - a big waterfall across the room, or the mode panel at reading size.</source>
+        <source>Theme, text size, the scopes' colours, waterfall colours and levels, scope speed.</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="782" />
-        <source>Open the second display</source>
+        <source>Theme</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="785" />
+        <source>Dark instrument</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/settings.py" line="786" />
+        <source>Light</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="792" />
+        <source>Text size</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="803" />
+        <source>Needs a screen of at least {w} x {h}; this one has {rw} x {rh} to spare.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="807" />
+        <source>The size of the text throughout the window, the decode list's own size (Ctrl and the wheel over it) on top.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="814" />
+        <source>Waterfall palette</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="827" />
+        <source>Waterfall levels</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="828" />
+        <source>Automatic floor and contrast</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="832" />
+        <source>Floor (manual)</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="834" />
+        <source>Contrast range (manual)</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="842" />
+        <source>Waterfall speed</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="849" />
+        <source>Scope colours</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="850" />
+        <source>The trace, its fill, the peak ghost and markers, the grid and the background, for every scope. Classic is the original look.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="859" />
+        <source>Scopes</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="867" />
+        <source>Second display</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="868" />
+        <source>A separate window for another screen - a big waterfall across the room, or the mode panel at reading size.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="871" />
+        <source>Open the second display</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="875" />
         <source>Screen</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="790" />
+        <location filename="../ui/settings.py" line="879" />
         <source>Automatic (any screen but the main window's)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="798" />
+        <location filename="../ui/settings.py" line="887" />
         <source>Full screen on that screen</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="802" />
+        <location filename="../ui/settings.py" line="891" />
         <source>Show</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="805" />
+        <location filename="../ui/settings.py" line="894" />
         <source>Big waterfall + decodes</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="806" />
+        <location filename="../ui/settings.py" line="895" />
         <source>Mode panel</source>
         <translation type="unfinished" />
     </message>
     <message numerus="yes">
-        <location filename="../ui/settings.py" line="810" />
+        <location filename="../ui/settings.py" line="899" />
         <source>%n screen(s) connected. With one screen the second display is simply another window.</source>
         <translation>
             <numerusform>%n screen connected. With one screen the second display is simply another window.</numerusform>
@@ -3646,47 +3686,47 @@ Tune to an SSTV signal</source>
         </translation>
     </message>
     <message>
-        <location filename="../ui/settings.py" line="829" />
+        <location filename="../ui/settings.py" line="918" />
         <source>Converters</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="872" />
+        <location filename="../ui/settings.py" line="961" />
         <source>{converter} (not in the list)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="889" />
+        <location filename="../ui/settings.py" line="978" />
         <source>Simulator</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="914" />
+        <location filename="../ui/settings.py" line="1003" />
         <source>No Pluto found. Tried a full scan, USB, and ip:192.168.2.1 / ip:pluto.local directly. If it's connected by USB, try entering ip:192.168.2.1 above by hand - that works without any USB permissions.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="936" />
+        <location filename="../ui/settings.py" line="1025" />
         <source>Search failed: {error}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="944" />
+        <location filename="../ui/settings.py" line="1033" />
         <source>No SoapySDR device found. Is the SDR plugged in, and its Soapy module installed?</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="967" />
+        <location filename="../ui/settings.py" line="1056" />
         <source>Speak normally: peaks should reach the amber, never the red.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="981" />
+        <location filename="../ui/settings.py" line="1070" />
         <source>Playing a 700 Hz tone for one second.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="997" />
+        <location filename="../ui/settings.py" line="1086" />
         <source>{setting}: not a number</source>
         <translation type="unfinished" />
     </message>
@@ -3963,167 +4003,167 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>UpdateController</name>
     <message>
-        <location filename="../ui/update.py" line="277" />
+        <location filename="../ui/update.py" line="291" />
         <source>Not while {activity}: an update never interrupts that.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="289" />
+        <location filename="../ui/update.py" line="303" />
         <source>this build has no update feed</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="328" />
+        <location filename="../ui/update.py" line="342" />
         <source>Checking…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="331" />
+        <location filename="../ui/update.py" line="345" />
         <source>Not checked yet.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="338" />
+        <location filename="../ui/update.py" line="352" />
         <source>{app} {version} is recommended instead of this version (released {date}).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="340" />
+        <location filename="../ui/update.py" line="354" />
         <source>{app} {version} is available (released {date}).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="343" />
+        <location filename="../ui/update.py" line="357" />
         <source>What's new: {notes}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="345" />
+        <location filename="../ui/update.py" line="359" />
         <source>This copy runs from source, so update it the way it was put there.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="348" />
+        <location filename="../ui/update.py" line="362" />
         <source>Up to date: {app} {version} is the newest (checked {when}).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="351" />
+        <location filename="../ui/update.py" line="365" />
         <source>Could not check at {when}: {why}. It is tried again later.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="354" />
+        <location filename="../ui/update.py" line="368" />
         <source>Checked at {when}: {why}.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="355" />
+        <location filename="../ui/update.py" line="369" />
         <source>An update was found at {when} but refused, because it could not be proved genuine: {why}.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="390" />
+        <location filename="../ui/update.py" line="404" />
         <source>This copy runs from source, so it cannot install an update itself.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="420" />
+        <location filename="../ui/update.py" line="434" />
         <source>The update was not installed: {error}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="445" />
+        <location filename="../ui/update.py" line="459" />
         <source>Installing {app} {version}; it starts again by itself.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="457" />
+        <location filename="../ui/update.py" line="471" />
         <source>{app} {version} is downloaded and checked, but could not be opened ({why}): open {file} in Finder</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="467" />
+        <location filename="../ui/update.py" line="481" />
         <source>{app} {version} is downloaded and checked. Install it from a terminal with: {command}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="470" />
+        <location filename="../ui/update.py" line="484" />
         <source>Installing {app} {version}: your system asks for your password…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="486" />
+        <location filename="../ui/update.py" line="500" />
         <source>The password prompt was closed, so nothing was installed.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="489" />
+        <location filename="../ui/update.py" line="503" />
         <source>Installing {version} failed (exit {code}). From a terminal: {command}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="502" />
+        <location filename="../ui/update.py" line="516" />
         <source>Close and start {app} again to use the new version.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="532" />
+        <location filename="../ui/update.py" line="546" />
         <source>Download</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="532" />
+        <location filename="../ui/update.py" line="546" />
         <source>Install and restart</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="534" />
+        <location filename="../ui/update.py" line="548" />
         <source>{name} is recommended instead of {version}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="535" />
+        <location filename="../ui/update.py" line="549" />
         <source>{name} is available</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="538" />
+        <location filename="../ui/update.py" line="552" />
         <source>Downloading {name}… {percent} %</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="541" />
+        <location filename="../ui/update.py" line="555" />
         <source>{name} is downloaded and checked</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="543" />
+        <location filename="../ui/update.py" line="557" />
         <source>{text} - install it when you have finished {activity}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="549" />
+        <location filename="../ui/update.py" line="563" />
         <source>{name} is open in Finder: quit {app}, drag the new one onto Applications (replacing this one), then start it again.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="551" />
+        <location filename="../ui/update.py" line="565" />
         <source>Show it again</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="553" />
+        <location filename="../ui/update.py" line="567" />
         <source>{name} is installed. Restart to use it.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="554" />
+        <location filename="../ui/update.py" line="568" />
         <source>Restart now</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/update.py" line="556" />
+        <location filename="../ui/update.py" line="570" />
         <source>Close</source>
         <translation type="unfinished" />
     </message>
