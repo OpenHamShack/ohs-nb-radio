@@ -2911,7 +2911,6 @@ class Engine:
         for r in list(self.rec_closing):
             if not r.done.is_set():
                 continue
-            self.rec_closing.remove(r)
             self._status(recSeconds=round(r.seconds, 1), recBytes=int(r.nbytes), recDropped=int(r.dropped),
                          recRxLost=int(r.rx_lost))
             m, sec = divmod(int(round(r.written / r.fs)), 60)
@@ -2933,6 +2932,7 @@ class Engine:
             if r.error:
                 self.toast(_("{error}. {took} were saved as {file}.").format(
                     error=r.error, took=took, file=r.data_path.name) + lost, "error")
+                self.rec_closing.remove(r)
                 continue
             reason = _("time limit") if r.reason == "time limit" else r.reason
             msg = (_("Recording saved ({reason}): {name}, {took}, {size}. Send both files, .sigmf-data and .sigmf-meta.")
@@ -2940,6 +2940,13 @@ class Engine:
                    _("Recording saved: {name}, {took}, {size}. Send both files, .sigmf-data and .sigmf-meta."))
             self.toast(msg.format(reason=reason, name=r.data_path.stem, took=took, size=sigmf.size_text(r.nbytes))
                        + lost, "warn" if r.dropped or r.rx_lost else "info")
+            # Off the list only once the operator has been told: whatever
+            # waits for rec_closing to empty (a test, or anything that says
+            # "saved" after it) must find the toast already published. It
+            # was removed first until 22/10/2026, and a supervisor
+            # preempted between the two let a loaded test runner see the
+            # list empty and no toast yet.
+            self.rec_closing.remove(r)
             self.log.info("recording %s saved: %d samples, %d dropped, %d clipped", r.data_path, r.written,
                           r.dropped, r.clipped)
 

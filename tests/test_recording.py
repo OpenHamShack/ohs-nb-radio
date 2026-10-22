@@ -317,6 +317,32 @@ class EngineRecording(unittest.TestCase):
         self.assertGreaterEqual(m["global"]["openhamshack:dropped_samples"], dropped)
         self.assertTrue(any("openhamshack:gap_samples" in c for c in m["captures"]))
 
+    def test_a_recording_leaves_the_closing_list_only_once_its_toast_is_out(self):
+        # Everything that waits for a recording to be saved waits for
+        # rec_closing to empty, then reads the toast. Removed before the
+        # toast, a supervisor preempted between the two (a loaded machine)
+        # let the waiter find the list empty and nothing said yet.
+        r = make_radio(self.dir)
+        seen = []
+        toast = r.toast
+
+        def watched(text, level="info"):
+            if "Recording saved" in text:
+                seen.append(len(r.rec_closing))
+            toast(text, level)
+        r.toast = watched
+        r.start()
+        try:
+            run_sim(r, 0.5)
+            r.start_recording()
+            run_sim(r, 1.0)
+            r.stop_recording()
+            wait_saved(r)
+        finally:
+            r.stop()
+        self.assertEqual(seen, [1])
+        self.assertEqual(r.rec_closing, [])
+
     def test_stopping_the_radio_finishes_the_recording(self):
         r = make_radio(self.dir)
         r.start()

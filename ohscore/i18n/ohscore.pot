@@ -387,7 +387,7 @@ msgstr ""
 msgid "Paused: the decoders are using all the processor time they are allowed (Settings › Decoders)."
 msgstr ""
 
-#: ohscore/engine.py:3047
+#: ohscore/engine.py:3054
 #, python-brace-format
 msgid "Playing {name}, recorded {when}. Transmit is off until you go back to the radio."
 msgstr ""
@@ -542,7 +542,7 @@ msgstr ""
 msgid "Stop"
 msgstr ""
 
-#: ohscore/engine.py:3016
+#: ohscore/engine.py:3023
 msgid "Stop recording before playing a recording"
 msgstr ""
 
@@ -1130,7 +1130,7 @@ msgstr ""
 msgid "{device} is not held for transmitting"
 msgstr ""
 
-#: ohscore/engine.py:2934
+#: ohscore/engine.py:2933
 #, python-brace-format
 msgid "{error}. {took} were saved as {file}."
 msgstr ""
@@ -1251,22 +1251,22 @@ msgstr ""
 msgid "{mode} cannot transmit here: {missing}"
 msgstr ""
 
-#: ohscore/engine.py:3230
+#: ohscore/engine.py:3237
 #, python-brace-format
 msgid "{mode}: tuned to {mhz:.3f}"
 msgstr ""
 
-#: ohscore/engine.py:2918
+#: ohscore/engine.py:2917
 #, python-brace-format
 msgid "{m} min {s:02d} s"
 msgstr ""
 
-#: ohscore/engine.py:3044
+#: ohscore/engine.py:3051
 #, python-brace-format
 msgid "{name} cannot be played: {error}"
 msgstr ""
 
-#: ohscore/engine.py:3119
+#: ohscore/engine.py:3126
 #, python-brace-format
 msgid "{name} has played to its end. File › Back to the radio, or Loop playback to hear it again."
 msgstr ""
@@ -1287,12 +1287,12 @@ msgstr ""
 msgid "{rate:g} Hz is not a whole number of samples per bit"
 msgstr ""
 
-#: ohscore/engine.py:2930
+#: ohscore/engine.py:2929
 #, python-brace-format
 msgid "{seconds:.1f} s of samples never arrived from the radio: its stream had gaps, usually the link to it (network or USB) stalling (the file says where)."
 msgstr ""
 
-#: ohscore/engine.py:2927
+#: ohscore/engine.py:2926
 #, python-brace-format
 msgid "{seconds:.1f} s of samples were dropped because the disk could not keep up (the file says where)."
 msgstr ""
@@ -1323,7 +1323,7 @@ msgstr ""
 msgid "{shift:+d} Hz, the next best fit, not measured for sure"
 msgstr ""
 
-#: ohscore/engine.py:2918
+#: ohscore/engine.py:2917
 #, python-brace-format
 msgid "{s} s"
 msgstr ""
