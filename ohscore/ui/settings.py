@@ -11,9 +11,10 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QCoreApplication, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QGuiApplication, QPainter, QPen
-from PyQt6.QtWidgets import (QApplication, QComboBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QScrollArea,
-                             QStackedWidget, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QApplication, QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+                             QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
+from .. import antennas as antenna_labels
 from ..devices.pluto import discover as discover_pluto
 from . import icons, layoutrules, palettes, theme
 from .audiotest import AudioTester
@@ -529,6 +530,7 @@ class SettingsDialog(QDialog):
         r.addWidget(self.soapy_found, 1)
         r.addStretch(1)
         lay.addLayout(r)
+        self._antenna_section(lay)
         self._section(lay, QCoreApplication.translate("SettingsDialog", "Receiver"))
         self._add(lay, "sampleRate")
         self._add(lay, "rxGainMode")
@@ -536,6 +538,93 @@ class SettingsDialog(QDialog):
         smeter.settings_section(self, lay)
         lay.addStretch(1)
         return sc
+
+    def _antenna_section(self, lay) -> None:
+        """soapyAntenna as a drop-down of what the open radio actually
+        reports, plus "Driver default" (soapy.py's `antennas`, folded into
+        `deviceStatus` by the engine's supervisor) - never the fixed list
+        the generic enum Field expects, since no two SoapySDR drivers name
+        their inputs alike. With no radio open this still shows the saved
+        choice and the last list the engine reported (state.deviceStatus
+        is left as it was at the last close, GUIDE.md "Antenna"), so the
+        page is useful before the first Start too. Below it, one row per
+        input to give it a label, kept in soapyAntennaLabels (ohscore/
+        antennas.py); both are plain Field-less entries in self.fields,
+        collected and compared like licence_ui.Value's country combo."""
+        dev_status = self.st.get("deviceStatus") or {}
+        reported = [str(a) for a in (dev_status.get("antennas") or [])]
+        cur_value = str(self.st.get("soapyAntenna", "") or "")
+        labels = antenna_labels.parse_labels(str(self.st.get("soapyAntennaLabels", "") or ""))
+        self.st["soapyAntennaLabels"] = antenna_labels.format_labels(labels)      # the baseline collect() diffs against
+        choices = list(reported)
+        if cur_value and cur_value not in choices:
+            choices.append(cur_value)          # a saved choice the radio no longer lists: kept, not hidden
+        self._section(lay, QCoreApplication.translate("SettingsDialog", "Antenna"))
+        cap = QLabel(QCoreApplication.translate("SettingsDialog", "Antenna input"))
+        cap.setObjectName("Muted")
+        lay.addWidget(cap)
+        self.antenna_combo = QComboBox()
+        self.antenna_combo.addItem(QCoreApplication.translate("SettingsDialog", "Driver default"), "")
+        for a in choices:
+            self.antenna_combo.addItem(antenna_labels.display_name(a, labels), a)
+        i = self.antenna_combo.findData(cur_value)
+        self.antenna_combo.setCurrentIndex(max(0, i))
+        lay.addWidget(self.antenna_combo)
+        self.fields["soapyAntenna"] = licence_ui.Value(lambda: self.antenna_combo.currentData() or "",
+                                                        self.antenna_combo)
+        now = str(dev_status.get("antenna", "") or "")
+        status = QLabel("")
+        status.setObjectName("Faint")
+        status.setWordWrap(True)
+        status.setTextFormat(Qt.TextFormat.PlainText)
+        if self.st.get("running") and now:
+            status.setText(QCoreApplication.translate("SettingsDialog", "In use now: {antenna}").format(
+                antenna=antenna_labels.display_name(now, labels)))
+        elif now:
+            status.setText(QCoreApplication.translate("SettingsDialog", "Last known, radio not open: {antenna}")
+                            .format(antenna=antenna_labels.display_name(now, labels)))
+        lay.addWidget(status)
+        self._antenna_status = status
+        h = QLabel(self.spec["soapyAntenna"]["help"])
+        h.setTextFormat(Qt.TextFormat.PlainText)
+        h.setObjectName("Faint")
+        h.setWordWrap(True)
+        lay.addWidget(h)
+        self.antenna_label_edits: dict[str, QLineEdit] = {}
+        if choices:
+            tbl = QWidget()
+            grid = QGridLayout(tbl)
+            grid.setContentsMargins(0, 10, 0, 0)
+            grid.setHorizontalSpacing(12)
+            grid.setVerticalSpacing(4)
+            grid.addWidget(QLabel(QCoreApplication.translate("SettingsDialog", "Input")), 0, 0)
+            grid.addWidget(QLabel(QCoreApplication.translate("SettingsDialog", "Label")), 0, 1)
+            for row, a in enumerate(choices, start=1):
+                grid.addWidget(QLabel(a), row, 0)
+                e = QLineEdit(labels.get(a, ""))
+                e.setPlaceholderText(QCoreApplication.translate("SettingsDialog", "e.g. 80 m dipole"))
+                e.textChanged.connect(self._antenna_relabelled)
+                self.antenna_label_edits[a] = e
+                grid.addWidget(e, row, 1)
+            lay.addWidget(tbl)
+        self.fields["soapyAntennaLabels"] = licence_ui.Value(self._collect_antenna_labels, None)
+
+    def _collect_antenna_labels(self) -> str:
+        return antenna_labels.format_labels({a: e.text().strip() for a, e in self.antenna_label_edits.items()})
+
+    def _antenna_relabelled(self, _text: str = "") -> None:
+        """Keeps the drop-down's own text current as the table is typed,
+        so "Antenna C" becomes "Antenna C — 80 m dipole" without closing
+        and reopening Settings."""
+        labels = {a: e.text().strip() for a, e in self.antenna_label_edits.items()}
+        cur = self.antenna_combo.currentData()
+        for i in range(self.antenna_combo.count()):
+            a = self.antenna_combo.itemData(i)
+            if a:
+                self.antenna_combo.setItemText(i, antenna_labels.display_name(a, labels))
+        idx = self.antenna_combo.findData(cur)
+        if idx >= 0:
+            self.antenna_combo.setCurrentIndex(idx)
 
     def page_transmit(self) -> QWidget:
         sc, lay = self._scroll(QCoreApplication.translate("SettingsDialog", "Transmit & safety"),
