@@ -260,8 +260,13 @@ class EngineRecording(unittest.TestCase):
         g = m["global"]
         self.assertGreater(len(y), 1.5 * FS)
         # The file is the device's own blocks, back to back, at ci16 resolution.
+        # Every block start the file could begin at, the last one included:
+        # on a busy machine the engine may read nothing more between the
+        # recording's end and r.stop(), so the file ends on the device's
+        # last block - and a search that stopped one block short picked
+        # the wrong start and failed the whole comparison.
         dev = np.concatenate(r.dev.kept)
-        k = int(np.argmin([np.abs(dev[i:i + 64] - y[:64]).max() for i in range(0, len(dev) - len(y), 90_000)]))
+        k = int(np.argmin([np.abs(dev[i:i + 64] - y[:64]).max() for i in range(0, len(dev) - len(y) + 1, 90_000)]))
         start = k * 90_000
         np.testing.assert_allclose(dev[start:start + len(y)], y, atol=1.0 / sigmf.SCALE)
         # Where it was: the LNB's nominal downlink at DC, and the IF the SDR was tuned to.
