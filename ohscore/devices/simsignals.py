@@ -249,6 +249,43 @@ def fsk_tones(rng: np.random.Generator, seconds: float, baud: float, shift: floa
     return (z * gate).astype(np.complex64)
 
 
+def rtty_text(text: str, seconds: float, baud: float = 45.45, shift: float = 170.0, centre: float = 1500.0,
+              gap: float = 4.0) -> np.ndarray:
+    """An RTTY station sending `text` over and over, `gap` seconds of
+    silence between overs, for `seconds`: ITA2 framed exactly as our own
+    encoder sends it (modes/rtty.py: two LTRS first, 1.5 stop bits, mark
+    high), as continuous-phase FSK at `centre` audio Hz (USB). Unlike
+    fsk_tones' random bits it decodes, so the simulated band has RTTY a
+    decoder can be checked against (Radio's Decoders view, its RTTY mode)."""
+    from ..modes import rtty
+    codes = [rtty.LTRS] * rtty.Encoder.LEAD_LTRS + rtty._text_to_codes(text)
+    mark, space = centre + shift / 2, centre - shift / 2
+    bit = 1.0 / baud
+    segs = [(mark, 0.3)]                                  # (Hz, seconds): idle mark first
+    for c in codes:
+        segs.append((space, bit))                         # start bit
+        segs += [(mark if b == "1" else space, bit) for b in c]
+        segs.append((mark, 1.5 * bit))                    # stop bits
+    segs.append((mark, 2 * bit))
+    over = []
+    t = 0.0
+    pos = 0
+    for f, dur in segs:
+        t += dur
+        end = int(round(t * RATE))
+        over.append(np.full(end - pos, f))
+        pos = end
+    freq = np.concatenate(over)
+    on = np.ones(len(freq))
+    freq = np.concatenate([freq, np.full(int(gap * RATE), mark)])
+    on = np.concatenate([on, np.zeros(int(gap * RATE))])
+    n = int(seconds * RATE)
+    reps = int(np.ceil(n / len(freq)))
+    freq, on = np.tile(freq, reps)[:n], np.tile(on, reps)[:n]
+    z = np.exp(2j * np.pi * np.cumsum(freq) / RATE)
+    return (z * on).astype(np.complex64)
+
+
 def psk_like(rng: np.random.Generator, seconds: float, baud: float, centre: float, duty=(0.0, 1.0)) -> np.ndarray:
     """PSK31-like: random phase reversals with the raised-cosine amplitude
     dips of real BPSK31, at `centre` audio Hz."""

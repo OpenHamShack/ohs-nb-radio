@@ -397,8 +397,15 @@ class HamSim(SimCore):
                                        sg.psk_like(rng, 40.0, 31.25, 600 + 900 * k, (0.08 * k, 0.6 + 0.2 * k)),
                                        self._level(rng, -68.0, -52.0, p=0.05),
                                        presence=Presence(rng, (180.0, 600.0), (120.0, 900.0))))
+                # Real ITA2 text (sg.rtty_text), so the RTTY mode and the
+                # Decoders view have something to copy on every HF band. Its
+                # random bits used to come from rng; the same draws are made
+                # and dropped, and the call is read without taking it from
+                # `ci`, so every other station of a seeded band is as it was.
+                rng.integers(0, 2, int(40.0 * 45.45) + 1)
+                r = calls[len(calls) // 2]
                 out.append(Station("RTTY", s.lo + 0.75 * (s.hi - s.lo),
-                                   sg.fsk_tones(rng, 40.0, 45.45, 170.0, 1500.0, (0.0, 0.7)),
+                                   sg.rtty_text(f"CQ TEST {r} {r} {r} TEST\n", 40.0, centre=1500.0),
                                    self._level(rng, -66.0, -52.0, p=0.05),
                                    presence=Presence(rng, (150.0, 480.0), (120.0, 720.0))))
             if b.name in ("20m", "17m", "15m", "12m", "10m"):
