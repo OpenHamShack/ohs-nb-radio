@@ -93,7 +93,9 @@ class StatusStrip(QWidget):
         token) or (text, colour token, tooltip key), before it is cut to
         the room there is."""
         running = bool(st.get("running"))
-        dev = {"sim": "Simulator", "pluto": "Pluto", "soapy": "SoapySDR (receive only)"}.get(st.get("device"), "?")
+        dev = {"sim": "Simulator", "pluto": "Pluto", "libresdr": "LibreSDR", "hl2": "Hermes-Lite 2",
+               "rtlsdr": "RTL-SDR (receive only)", "sdrplay": "SDRplay RSP (receive only)",
+               "soapy": "SoapySDR (receive only)"}.get(st.get("device"), "?")
         items = [(dev + ("" if running else "  —  " + (st.get("error") or "stopped")), "text", "device")]
         if st.get("playing"):
             # Where the radio's name stands, so a recording is never taken for the air.

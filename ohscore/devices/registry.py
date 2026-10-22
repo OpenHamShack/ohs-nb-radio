@@ -30,13 +30,25 @@ def _soapy(cfg: dict, fs: float) -> Device:
     return SoapyDevice(cfg.get("soapyArgs", ""), fs, cfg)
 
 
+def _rtlsdr(cfg: dict, fs: float) -> Device:
+    from .sdrsource import RtlSdrDevice
+    return RtlSdrDevice(cfg, fs)
+
+
+def _sdrplay(cfg: dict, fs: float) -> Device:
+    from .sdrsource import SdrplayDevice
+    return SdrplayDevice(cfg, fs)
+
+
 class DeviceRegistry:
-    """Starts with the core's radios (`pluto`, `soapy`); the app adds the
-    rest with `register`. A later registration of the same name replaces
-    the earlier one."""
+    """Starts with the core's radios (`pluto`, `soapy`, and the receivers
+    shack_sdr reaches without SoapySDR, `rtlsdr` and `sdrplay`); the app
+    adds the rest with `register`. A later registration of the same name
+    replaces the earlier one."""
 
     def __init__(self):
-        self.factories: dict[str, Factory] = {"pluto": _pluto, "soapy": _soapy}
+        self.factories: dict[str, Factory] = {"pluto": _pluto, "soapy": _soapy, "rtlsdr": _rtlsdr,
+                                              "sdrplay": _sdrplay}
 
     def register(self, kind: str, factory: Factory) -> None:
         self.factories[kind] = factory

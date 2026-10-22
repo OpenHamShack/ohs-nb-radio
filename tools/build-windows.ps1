@@ -31,7 +31,8 @@ made, so a bundle missing a module fails here rather than on someone's PC.
 What a Pluto needs is inside the installer too: libiio 0.26's DLLs in the
 bundle (_internal\libiio), and ADI's PlutoSDR USB driver installer, which
 the setup program runs as an option (packaging\windows\pluto-drivers.iss).
-Neither carries SDRplay's API, which is the operator's own install, ever.
+Radio's carries librtlsdr for an RTL-SDR (_internal\rtlsdr). Neither
+carries SDRplay's API, which is the operator's own install, ever.
 The Country column's cty.dat is ohscore's own (ohscore\data, from the
 repository). The licences for all of these are in
 packaging\windows\THIRD-PARTY.txt. WSJT-X is not carried (since
@@ -165,6 +166,19 @@ $Pins = @{
     innosetup = @{ url = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe"
                   file = "innosetup-6.7.3.exe"
                   sha  = "9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732" }
+    # Radio's RTL-SDR receiver (shack_sdr.sources.rtlsdr, over ctypes): the
+    # RTL-SDR Blog's v1.3.6 Windows build of librtlsdr, its own fork of
+    # osmocom's with the Blog V4 dongle's tuner, which is the one most
+    # Windows guides send people to. rtlsdr.dll has libusb 1.0.26 linked in
+    # (its libusb_get_version() table reads 1.0.26.11724) and needs only
+    # msvcr100.dll, the Visual C++ 2010 runtime, which the zip carries
+    # beside it; both are shipped unmodified, in _internal\rtlsdr.
+    rtlsdr   = @{ url  = "https://github.com/rtlsdrblog/rtl-sdr-blog/releases/download/v1.3.6/Release.zip"
+                  file = "rtl-sdr-blog-1.3.6-Release.zip"
+                  sha  = "a331691535fc99cfe21bc83b825c7b03f9f71022f93bc3f85254eb1d49fa77ab" }
+    rtlsdr_copying = @{ url = "https://raw.githubusercontent.com/rtlsdrblog/rtl-sdr-blog/v1.3.6/COPYING"
+                  file = "rtl-sdr-COPYING"
+                  sha  = "ab15fd526bd8dd18a9e77ebc139656bf4d33e97fc7238cd11bf60e2b9b8666c6" }
     codec2_copying = @{ url = "https://raw.githubusercontent.com/drowe67/codec2/1.2.0/COPYING"
                   file = "codec2-COPYING"
                   sha  = "9ebb6f82b7380a62ac74c5f0322c88e6744dedf2ebe1f54d6f088282b39844bf" }
@@ -411,6 +425,32 @@ if (-not (Test-Path (Join-Path $C2 "libcodec2.dll"))) {
 }
 Copy-Item (Fetch "codec2_copying") (Join-Path $Lic "codec2-COPYING")
 Copy-Item (Fetch "lpcnet_copying") (Join-Path $Lic "lpcnet-COPYING")
+
+# ---------------------------------------------------------------- librtlsdr
+if ($App -eq "ham") {
+    Step "librtlsdr from the RTL-SDR Blog's v1.3.6 release"
+    # The dongle also needs the WinUSB driver in place of Windows' own DVB-T
+    # one, once per dongle per USB port (Zadig); Radio's Settings › Radio
+    # says how when the dongle is busy or not found. Nothing here installs
+    # a driver.
+    $Rtl = Join-Path $Vendor "rtlsdr"
+    if (-not (Test-Path (Join-Path $Rtl "rtlsdr.dll"))) {
+        New-Item -ItemType Directory -Force -Path $Rtl | Out-Null
+        $zip = Fetch "rtlsdr"
+        $tmp = Join-Path $Work "rtlsdr-unzip"
+        if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+        Expand-Archive -Path $zip -DestinationPath $tmp
+        foreach ($f in @("rtlsdr.dll", "msvcr100.dll")) { Copy-Item (Join-Path $tmp "x64\$f") (Join-Path $Rtl $f) }
+        Remove-Item -Recurse -Force $tmp
+    }
+    Copy-Item (Fetch "rtlsdr_copying") (Join-Path $Lic "rtl-sdr-COPYING")
+    # Loaded by full path from its own folder, as the frozen program will:
+    # the binding's own probe (no dongle needed) must find every function.
+    Push-Location $Repo
+    try {
+        Run $VPy -c "import sys; from ohscore import shacklibs; shacklibs.sdr(); from shack_sdr.sources import rtlsdr; a = rtlsdr.availability(search=[sys.argv[1]]); print('   librtlsdr', a); assert a['available'], a" $Rtl
+    } finally { Pop-Location }
+}
 
 # ---------------------------------------------------------------- licence texts
 Step "Licence texts: cty.dat's notice, the GCC runtime's and winpthreads'"

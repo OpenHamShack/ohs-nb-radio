@@ -58,6 +58,11 @@ datas += [(str(ROOT / "ohsradio" / n), "ohsradio") for n in ("pad-actions.json",
 # libiio 0.26's DLLs into _internal\libiio, as data: see openhamshack-nb.spec for why.
 datas += [(str(p), "libiio") for p in sorted((VENDOR / "libiio").glob("*.dll"))]
 # No WSJT-X since 17/10/2026: see openhamshack-nb.spec.
+# librtlsdr for the RTL-SDR receiver, into _internal\rtlsdr (the RTL-SDR
+# Blog's rtlsdr.dll and the VC++ 2010 runtime it links, build-windows.ps1),
+# where ohscore/devices/rtlsdr.py points shack_sdr's binding. As data, like
+# libiio's: loaded by full path at run time, never imported.
+datas += [(str(p), "rtlsdr") for p in sorted((VENDOR / "rtlsdr").glob("*.dll"))]
 
 # The same unmodified codec2/LPCNet DLLs as NB's bundle (FreeDV).
 binaries = [(str(p), ".") for p in sorted((VENDOR / "codec2").glob("*.dll"))]
@@ -74,8 +79,8 @@ a = Analysis(  # noqa: F821
     # (ohsradio/plutofix.py); its own hooks bring cryptography, bcrypt, nacl.
     # ohscore.ohsdigi: the FT8/FT4 encoder, as in openhamshack-nb.spec.
     hiddenimports=shack_vendor.hidden(SHACK) + ["iio", "pyaudio", "ohscore.devices.pluto", "ohscore.devices.hl2", "ohsradio.devices.sim",
-                   "ohscore.devices.soapy", "paramiko", "ohscore.ohsdigi",
-                   "ohscore.update", "cryptography.hazmat.primitives.asymmetric.ed25519", "hid"],
+                   "ohscore.devices.soapy", "ohscore.devices.rtlsdr", "ohscore.devices.sdrplay",
+                   "paramiko", "ohscore.ohsdigi", "ohscore.update", "cryptography.hazmat.primitives.asymmetric.ed25519", "hid"],
     # ohsnb is never imported by HAM; excluding it keeps NB's code out of
     # HAM's bundle should anything ever reach for it by accident.
     # PIL is no longer excluded (until 12/10/2026 it was, and the pad's keys

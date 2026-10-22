@@ -722,7 +722,7 @@ The table below is generated from the Settings window itself (`tools/settings-re
 
 | Setting | Range or choices | Default | What it does |
 | --- | --- | --- | --- |
-| Radio | Simulator / Pluto family / Hermes-Lite 2 / SoapySDR (RX only) | Simulator | Which radio. The simulator (HF and VHF/UHF bands, busy with other stations) needs no hardware and is the default. *Restarts the radio when saved.* |
+| Radio | Simulator / Pluto family / LibreSDR / Hermes-Lite 2 / RTL-SDR (RX only) / SDRplay RSP (RX only) / SoapySDR (RX only) | Simulator | Which radio. The simulator (HF and VHF/UHF bands, busy with other stations) needs no hardware and is the default. An RTL-SDR or an SDRplay RSP only receives; an RSP needs SDRplay's own API installed. *Restarts the radio when saved.* |
 | Pluto address | text | `ip:192.168.2.1` | libiio URI: ip:192.168.2.1 (Pluto over USB), ip:pluto.local, ip:<address> (Pluto+, LibreSDR), usb:<bus>.<dev>.<n>. *Restarts the radio when saved.* |
 | SoapySDR device | text | `driver=rtlsdr` | SoapySDR device arguments for a receive-only SDR, e.g. driver=airspy. *Restarts the radio when saved.* |
 | Sample rate | 1.2 MS/s / 2.4 MS/s | 1.2 MS/s | Pluto sample rate. 1.2 MS/s suits a Raspberry Pi; 2.4 MS/s shows all of 2 m's busy part at once and is the Pluto nano's native rate (at 1.2 MS/s the nano runs at 2.4 and the program converts). *Restarts the radio when saved.* |
@@ -733,6 +733,8 @@ The table below is generated from the Settings window itself (`tools/settings-re
 | HL2 receiver gain | -12 dB – 48 dB | 20 dB | Hermes-Lite 2 receiver gain (the AD9866's LNA). |
 | HL2 power amplifier | On / Off | On | Hermes-Lite 2 power amplifier (about 5 W). Off: the low-level RF1 output, up to 17 dBm - still enough to destroy a transverter that wants 0 dBm. *Restarts the radio when saved.* |
 | Swap HL2 transmit I/Q | On / Off | Off | Swap the Hermes-Lite 2's transmit I and Q. Whether HL2 clients swap them is not documented; a wrong choice mirrors the signal (USB comes out as LSB). Settle it with a known tone into a dummy load. *Restarts the radio when saved.* |
+| Receiver serial | text | (empty) | The RTL-SDR's or SDRplay RSP's serial number, to pick one of several alike. Empty: the first found. *Restarts the radio when saved.* |
+| RSP LNA state | 0 – 27 | 4 | The SDRplay RSP's LNA state: higher attenuates more. 4 suits an HF dipole in the evening; the range each band allows is in SDRplay's API notes. *Restarts the radio when saved.* |
 | Reference error | -50.00 ppm – 50.00 ppm | 0.00 ppm | The device's reference error, measured once against a known signal; applied to every tune. |
 
 #### Licence & plan

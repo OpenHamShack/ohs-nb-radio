@@ -37,13 +37,21 @@ _k = REG.add
 _o = REG.override
 
 # --- device -----------------------------------------------------------------
-_o("device", choices=["sim", "pluto", "hl2", "soapy"],
+_o("device", choices=["sim", "pluto", "libresdr", "hl2", "rtlsdr", "sdrplay", "soapy"],
    help="Which radio. The simulator (HF and VHF/UHF bands, busy with other stations) needs no hardware and is the "
-        "default.")
+        "default. An RTL-SDR or an SDRplay RSP only receives; an RSP needs SDRplay's own API installed.")
 _o("sampleRate", choices=[1_200_000, 2_400_000],
    help="Pluto sample rate. 1.2 MS/s suits a Raspberry Pi; 2.4 MS/s shows all of 2 m's busy part at once and is "
         "the Pluto nano's native rate (at 1.2 MS/s the nano runs at 2.4 and the program converts).")
 with REG.after("sampleRate"):
+    # The RTL-SDR's and the RSP's (ohscore/devices/sdrsource.py): which one of
+    # several alike, and the RSP's LNA state, which Radio's one gain control
+    # does not cover (RADIO-SDR-PLAN §6.2; SoapySDR's rfgain_sel before).
+    _k("sdrSerial", "str", "", "setting", restart=True,
+       help="The RTL-SDR's or SDRplay RSP's serial number, to pick one of several alike. Empty: the first found.")
+    _k("sdrplayLna", "int", 4, "setting", lo=0, hi=27, restart=True,
+       help="The SDRplay RSP's LNA state: higher attenuates more. 4 suits an HF dipole in the evening; the "
+            "range each band allows is in SDRplay's API notes.")
     _k("hl2Address", "str", "", "setting", auth=True, restart=True,
        help="Hermes-Lite 2 address (ip or ip:port). Empty: find it by broadcast on port 1024.")
     _k("hl2Rate", "enum", 192_000, "setting", choices=HL2_RATES, unit="S/s", restart=True,

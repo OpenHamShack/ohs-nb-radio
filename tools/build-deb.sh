@@ -49,8 +49,8 @@ case "$arch" in
     *) echo "build-deb.sh: --arch must be amd64, arm64 or all, not $arch" >&2; exit 1 ;;
 esac
 case "$app" in
-    nb)  pkgname="openhamshack-nb";    pydir="ohsnb";    depends_extra="" ;;
-    ham) pkgname="openhamshack-radio"; pydir="ohsradio"; depends_extra=", python3-paramiko" ;;
+    nb)  pkgname="openhamshack-nb";    pydir="ohsnb";    depends_extra="";                 recommends_extra="" ;;
+    ham) pkgname="openhamshack-radio"; pydir="ohsradio"; depends_extra=", python3-paramiko"; recommends_extra=", librtlsdr0" ;;
 esac
 
 version="${1:-}"
@@ -252,6 +252,10 @@ esac
 # with Pillow; without it the keys come up blank. Recommends, not Depends:
 # everything else works and the rest of the window is usable without it, but
 # apt installs it by default so nobody meets the blank pad.
+# librtlsdr0 (Radio's): the RTL-SDR receiver (shack_sdr.sources, over
+# ctypes) and, in the same package, its udev rule and the blacklist that
+# keeps the kernel's DVB driver off the dongle. Recommends: only an RTL
+# owner needs it. NB offers no RTL-SDR.
 # python3-zeroconf: Settings › Controller's "Find controllers" (Bonjour);
 # without it the controller's address is typed instead.
 # js8call: JS8 receive (ohscore/modes/js8.py), its own package, not wsjtx's.
@@ -279,7 +283,7 @@ Priority: optional
 Architecture: $arch
 Installed-Size: $installed_size
 Depends: python3 (>= 3.11), python3-numpy, python3-pyqt6, python3-pyaudio, python3-cryptography$depends_extra$depends_arch
-Recommends: python3-libiio, libiio-utils, libad9361-0, avahi-daemon$wsjtx_rec, libcodec2-1.2 | libcodec2-1.0, python3-soapysdr, python3-serial, python3-zeroconf, python3-pil
+Recommends: python3-libiio, libiio-utils, libad9361-0, avahi-daemon$wsjtx_rec, libcodec2-1.2 | libcodec2-1.0, python3-soapysdr$recommends_extra, python3-serial, python3-zeroconf, python3-pil
 Suggests: soapysdr-module-rtlsdr, soapysdr-module-airspy, js8call$wsjtx_sug
 Maintainer: Brian Henderson <noreply@openhamshack.com>
 Description: $summary

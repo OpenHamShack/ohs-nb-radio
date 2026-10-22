@@ -81,7 +81,7 @@ PROFILE_KEYS = frozenset({"callsign", "locator", "stationCountry", "licence", "l
 # Settings the store form cannot use or the controller does instead: the
 # device's address comes from the broker's claim, there is no sound card.
 PLATFORM_KEYS = frozenset({"audioBackend", "audioIn", "audioOut", "audioOut2", "plutoUri", "hl2Address",
-                           "soapyArgs"})
+                           "soapyArgs", "sdrSerial"})
 
 
 def _json_default(o):
@@ -196,7 +196,7 @@ class Server:
         if not addr:
             return
         # The device's class is its broker name's stem (pluto-1 is a pluto).
-        key = {"pluto": "plutoUri", "hl2": "hl2Address"}.get(dev.rsplit("-", 1)[0], "")
+        key = {"pluto": "plutoUri", "libresdr": "plutoUri", "hl2": "hl2Address"}.get(dev.rsplit("-", 1)[0], "")
         if key:
             val = f"ip:{addr}" if key == "plutoUri" else addr
             try:
@@ -217,12 +217,23 @@ class Server:
         how a driver's own settings reach the device when it opens - for an
         RSP, rfgain_sel (its LNA state; ohs-box's RSPdx on an 80 m dipole
         wants 4, or the IF AGC runs out of range in the evening)."""
+        serial = str(access.get("serial") or "").strip()
+        if not re.match(r"^[A-Za-z0-9]{1,32}$", serial):
+            serial = ""
+        if self.radio.st.get("device") in ("rtlsdr", "sdrplay"):
+            # shack_sdr's own receivers (ohscore/devices/sdrsource.py): the
+            # claim's serial picks the one the broker lent, as soapyArgs'
+            # serial= does below; none (a dongle without one) is the first.
+            try:
+                self.radio.set(authorise=True, sdrSerial=serial)
+            except ValueError as e:
+                log.warning("broker device not taken: %s", e)
+            return
         driver = {"sdrplay": "sdrplay"}.get(dev.rsplit("-", 1)[0], "")
         if not driver:
             return
         args = [f"driver={driver}"]
-        serial = str(access.get("serial") or "").strip()
-        if serial and re.match(r"^[A-Za-z0-9]{1,32}$", serial):
+        if serial:
             args.append(f"serial={serial}")
         for part in str(self.radio.st.get("soapyArgs") or "").split(","):
             k, _eq, v = part.strip().partition("=")

@@ -43,7 +43,8 @@ def main(argv=None) -> int:
                     help="the store form: run the engine headless behind its HTTP/WebSocket API "
                          "(docs/SERVER-API.md); for a container on an OpenHamShack controller")
     ap.add_argument("--port", type=int, default=None, help="--server's port (default $SHACK_PORT or 8080)")
-    ap.add_argument("--device", choices=["sim", "pluto", "hl2", "soapy"], help="override the configured device")
+    ap.add_argument("--device", choices=["sim", "pluto", "libresdr", "hl2", "rtlsdr", "sdrplay", "soapy"],
+                    help="override the configured device")
     ap.add_argument("--band", help="start on this band (e.g. 20m, 2m, 70cm)")
     ap.add_argument("--rf", type=float, help="start on this frequency, MHz")
     ap.add_argument("--mode", help="start in this mode")

@@ -62,6 +62,11 @@ class HamDeb(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self.assertNotIn("paramiko", field(build(d, "nb"), "Depends"))
 
+    def test_recommends_librtlsdr_for_the_rtl_sdr_and_nb_does_not(self):
+        self.assertIn("librtlsdr0", field(self.deb, "Recommends").split(", "))
+        with tempfile.TemporaryDirectory() as d:
+            self.assertNotIn("librtlsdr0", field(build(d, "nb"), "Recommends"))
+
     def test_explicit_version(self):
         with tempfile.TemporaryDirectory() as d:
             deb = build(d, "ham", "9.8.7")

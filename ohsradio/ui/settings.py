@@ -27,6 +27,7 @@ class SettingsDialog(core.SettingsDialog):
              ("screen", "Second display", "page_second"), ("link", "Controller", "page_controller"), ("keyboard", "Control pad", "page_pad"),
              ("gear", "Simulator", "page_simulator")]
     LABELS = {**core.LABELS,
+              "sdrSerial": "Receiver serial", "sdrplayLna": "RSP LNA state",
               "hl2Address": "Hermes-Lite 2 address", "hl2Rate": "Hermes-Lite 2 rate", "hl2Lna": "HL2 receiver gain",
               "hl2Pa": "HL2 power amplifier", "hl2TxSwapIQ": "Swap HL2 transmit I/Q",
               "ppm": "Reference error", "plan": "Band plan", "planGuard": "Band-plan guard",
@@ -37,8 +38,9 @@ class SettingsDialog(core.SettingsDialog):
               "cwSkim": "CW skimmer", "cwSkimSquelch": "CW skimmer squelch", "cwSkimMax": "CW skimmer channels",
               "cwSkimScp": "Download MASTER.SCP"}
     CHOICE_LABELS = {**core.CHOICE_LABELS,
-                     "device": {"sim": "Simulator", "pluto": "Pluto family", "hl2": "Hermes-Lite 2",
-                                "soapy": "SoapySDR (RX only)"},
+                     "device": {"sim": "Simulator", "pluto": "Pluto family", "libresdr": "LibreSDR",
+                                "hl2": "Hermes-Lite 2", "rtlsdr": "RTL-SDR (RX only)",
+                                "sdrplay": "SDRplay RSP (RX only)", "soapy": "SoapySDR (RX only)"},
                      "sampleRate": {1200000: "1.2 MS/s", 2400000: "2.4 MS/s"},
                      "hl2Rate": {48000: "48 k", 96000: "96 k", 192000: "192 k", 384000: "384 k"},
                      "plan": {plans.AUTO: "Follow the country", **{pid: p.SHORT for pid, p in plans.PLANS.items()}},
@@ -110,10 +112,40 @@ class SettingsDialog(core.SettingsDialog):
         self._add(box, "hl2Lna")
         self._add(box, "hl2Pa")
         self._add(box, "hl2TxSwapIQ")
+        # The receivers shack_sdr reaches (ohscore/devices/sdrsource.py). What
+        # the chosen one needs and does not have here - SDRplay's API above
+        # all, which Radio never includes - is said under them, as the
+        # device is picked, rather than only when Start fails.
+        self._section(box, self.tr("RTL-SDR and SDRplay"))
+        self._add(box, "sdrSerial")
+        self._add(box, "sdrplayLna")
+        self.sdr_why = QLabel()
+        self.sdr_why.setWordWrap(True)
+        self.sdr_why.setObjectName("Muted")
+        box.addWidget(self.sdr_why)
+        dev = self.fields.get("device")
+        if dev is not None:
+            dev.w.picked.connect(lambda v: self._show_sdr_why(v))
+        self._show_sdr_why(str(self.st.get("device", "sim")))
         self._section(box, self.tr("Calibration"))
         self._add(box, "ppm")
         lay.insertWidget(at, tmp)
         return sc
+
+    def _show_sdr_why(self, device: str) -> None:
+        """Under the RTL-SDR and SDRplay settings: whether the radio picked
+        can be used here, and if not, what to install."""
+        if device not in ("rtlsdr", "sdrplay"):
+            self.sdr_why.setText(self.tr("An RTL-SDR or an SDRplay RSP only receives. Choose one above to see "
+                                         "whether this computer has what it needs."))
+            return
+        from ohscore.devices import sdrsource
+        ok, why = sdrsource.availability(device)
+        if ok:
+            self.sdr_why.setText(self.tr("This computer has what the {radio} needs.")
+                                 .format(radio="RTL-SDR" if device == "rtlsdr" else "SDRplay RSP"))
+        else:
+            self.sdr_why.setText(why)
 
     def find_hl2(self):
         # The same broadcast the driver sends when its address is empty

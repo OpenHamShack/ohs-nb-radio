@@ -192,7 +192,8 @@ def device_key(st: dict) -> str:
     ip:192.168.2.1, so two of those share one calibration - which is the
     best the program can tell."""
     dev = str(st.get("device") or "sim")
-    addr = {"pluto": st.get("plutoUri"), "soapy": st.get("soapyArgs"), "hl2": st.get("hl2Address")}.get(dev) or ""
+    addr = {"pluto": st.get("plutoUri"), "libresdr": st.get("plutoUri"), "soapy": st.get("soapyArgs"),
+            "hl2": st.get("hl2Address"), "rtlsdr": st.get("sdrSerial"), "sdrplay": st.get("sdrSerial")}.get(dev) or ""
     return f"{dev}:{addr}" if addr else dev
 
 
@@ -251,6 +252,9 @@ def where_text(st: dict) -> str:
     names = {"sim": QCoreApplication.translate("SMeter", "the simulator"),
              "pluto": QCoreApplication.translate("SMeter", "the Pluto"),
              "soapy": QCoreApplication.translate("SMeter", "the SoapySDR radio"),
+             "libresdr": QCoreApplication.translate("SMeter", "the LibreSDR"),
+             "rtlsdr": QCoreApplication.translate("SMeter", "the RTL-SDR"),
+             "sdrplay": QCoreApplication.translate("SMeter", "the SDRplay RSP"),
              "hl2": QCoreApplication.translate("SMeter", "the Hermes-Lite 2")}
     s = names.get(st.get("device") or "sim", str(st.get("device")))
     if st.get("band"):

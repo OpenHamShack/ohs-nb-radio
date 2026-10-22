@@ -81,6 +81,19 @@ licences/PyNaCl-*)
     https://www.paramiko.org/
     https://github.com/pyca/bcrypt  https://github.com/pyca/pynacl
 
+OpenHamShack Radio only: librtlsdr - rtlsdr/rtlsdr.dll (GPL-2.0-or-later;
+licences/rtl-sdr-COPYING), with libusb 1.0.26 linked in (LGPL-2.1-or-later;
+licences/libusb-COPYING) and Microsoft's Visual C++ 2010 runtime beside it
+(rtlsdr/msvcr100.dll, a Microsoft redistributable)
+    The RTL-SDR receiver's library, unmodified from the RTL-SDR Blog's
+    v1.3.6 Windows release (Release.zip, x64\). Sources (rtl-sdr-blog-1.3.6
+    and libusb-1.0.26 on the source site):
+    https://github.com/rtlsdrblog/rtl-sdr-blog/releases/tag/v1.3.6
+    https://github.com/libusb/libusb/releases/tag/v1.0.26
+    You may replace rtlsdr.dll with your own build of librtlsdr. SDRplay's
+    API is not here: Radio uses the one SDRplay's own installer puts on
+    your PC.
+
 codec2 - libcodec2.dll (LGPL-2.1; licences/codec2-COPYING)
 LPCNet - liblpcnetfreedv.dll (BSD-3-Clause; licences/lpcnet-COPYING)
     Taken unmodified from FreeDV-GUI 1.9.9.2's Windows release
