@@ -4,5 +4,16 @@
 <dict>
     <key>com.apple.security.device.audio-input</key>
     <true/>
+    <!-- RADIO-SDR-PLAN 5.4. The hardened runtime of a notarised build
+         refuses any library not signed by our own team, and the libraries
+         this app opens at run time are the operator's: SDRplay's API (signed
+         by SDRplay), a codec from Homebrew or the codecs folder (faad2,
+         mbelib: never ours to ship). shack_sdr opens them only by full path
+         from known folders, and probes a new codec in a child process first,
+         which is what keeps this from being a door for injected dylibs.
+         Not yet proved on the Mac mini: a notarised build loading a dylib
+         from the codecs folder is M1's open check. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
 </dict>
 </plist>
