@@ -11,9 +11,19 @@
 # folder keeps old wheels that published builds reference, so a name must
 # never be reused) and new lines here, in one commit.
 #
+# Re-pinned at the family rename (22/10/2026): be8c102 re-vendored this
+# repo's ohs-libs wheels once ohs-libs itself was renamed, but missed this
+# file - these hashes still named the wheels built before the rename,
+# whose module inside the .so's own package still carried the former
+# name's short form, not "ohsdigi". A store build from main would have
+# baked that into Radio's image. Hashes now name openhamshack-digimodes'
+# re-vendored wheels (its requirements.lock, openhamshack-nb commit
+# be8c102, rust/ohsdigi unchanged - same crate commit, same .so bytes,
+# only the wrapping module renamed); no decoder behaviour changed.
+#
 # The .deb, AppImage, Windows and Mac builds carry the bare module from
 # tools/build-ohsdigi.sh instead, as before; only the store form uses these.
 # The 0.2.0 macOS wheel is not built yet: Mac builds run only from Brian's
 # desktop-remote.sh, and the store form has no use for it.
-ohs-ohsdigi==0.2.0 --hash=sha256:53e3496af82b421a5c7e5750911fcb1472db1b122a2c09339effc347a450782e  # x86_64
-ohs-ohsdigi==0.2.0 --hash=sha256:774f600ac30b0ec028e3dbfa121707a54cca3a880e29787c30feaeed3e54ecc9  # aarch64
+ohs-ohsdigi==0.2.0 --hash=sha256:511da9b5a50acb328b4a56198382691ca9a920ae8ded575703522c79d3519485  # x86_64
+ohs-ohsdigi==0.2.0 --hash=sha256:c0a2ab4eb0211028bfe217126c7749fd94187e4fdfb5b4173480557ca35e7d79  # aarch64
