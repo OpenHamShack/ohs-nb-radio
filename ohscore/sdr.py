@@ -71,7 +71,13 @@ def probe_argv() -> list[str] | None:
     `python -m shack_sdr.codecs`) from source and in the .deb; the app
     itself with --codec-probe when frozen."""
     if getattr(sys, "frozen", False):
-        return [sys.executable, "--codec-probe"]
+        exe = Path(sys.executable)
+        # A Windows GUI program has no stdout to answer on, so the probe is
+        # the console twin every Windows build has beside it.
+        console = exe.with_name(exe.stem + "-console" + exe.suffix)
+        if sys.platform == "win32" and console.is_file():
+            exe = console
+        return [str(exe), "--codec-probe"]
     return None
 
 

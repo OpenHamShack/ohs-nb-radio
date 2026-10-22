@@ -48,15 +48,21 @@ from typing import Callable
 
 import numpy as np
 
-from .. import host
+from .. import host, sdr
 
 FS = 12_000.0
 
-# The Windows build carries its own libcodec2.dll (and the liblpcnetfreedv.dll
-# it links against for 2020), taken from FreeDV-GUI's Windows release, so
-# FreeDV works there without the operator finding a DLL; host.find_library
-# looks beside the frozen app first, then where the system would.
-_LIBNAME = host.find_library("codec2")
+# Which libcodec2 is opened is the shared codec loader's answer (shack_sdr
+# codecs, RADIO-SDR-PLAN §5), as every codec's is from Radio's SDR milestone
+# 1: an explicit SHACK_CODEC_CODEC2, the app's codecs folder, the copy the
+# Windows and Mac builds carry (libcodec2.dll from FreeDV-GUI's Windows
+# release, with the liblpcnetfreedv.dll it links against for 2020; Brian,
+# 22/10/2026: keep shipping it), then the system's - and only a file that
+# passed the loader's probe in a child process, so a wrong-ABI library
+# found somewhere can no longer take the program down here. The binding
+# below is unchanged. Without shack_sdr (the .deb built for any machine)
+# the old search stands in: the bundle first, then the system's.
+_LIBNAME = sdr.codec_path("codec2") if sdr.available() else host.find_library("codec2")
 _lib = None
 if _LIBNAME:
     try:
