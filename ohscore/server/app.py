@@ -309,7 +309,9 @@ class Server:
                 "station": self.radio.state().get("station"),
                 "sharedLog": self.shared_log(),
                 # What can be recorded and what is (api/recordings has the rest).
-                "recordings": self.recordings.summary()}
+                "recordings": self.recordings.summary(),
+                # Whether to show a Decoders view: no scan here (api/decoders).
+                "decoders": st.get("decoders") or self.radio.decoders.status()}
 
     def shared_log(self) -> dict:
         try:
@@ -615,6 +617,9 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self._route("POST")
 
+    def do_DELETE(self):
+        self._route("DELETE")
+
     def _route(self, method: str) -> None:
         u = urlsplit(self.path)
         path, query = u.path.rstrip("/") or "/", parse_qs(u.query)
@@ -635,6 +640,9 @@ class _Handler(BaseHTTPRequestHandler):
             return
         try:
             handler = ROUTES.get((method, path))
+            if handler is None:
+                handler = next(((need, fn) for (m, prefix), (need, fn) in PREFIX_ROUTES.items()
+                                if m == method and path.startswith(prefix) and len(path) > len(prefix)), None)
             if handler is None:
                 self._error(404, _("There is nothing at {path}").format(path=path), "not_found")
                 return
@@ -894,6 +902,61 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._send(200, view())
 
+    # ---------------------------------------------------------- decoders
+    # api/decoders (docs/SERVER-API.md "Decoders"; RADIO-SDR-PLAN §4.4): the
+    # engine's decoder sessions (ohscore/decoders.py). Nothing here transmits.
+    REFUSAL_STATUS = {"bad_params": 400, "unknown_decoder": 404, "decoder_unavailable": 409, "outside_span": 409,
+                      "too_many_sessions": 429, "not_running": 503}
+
+    def get_decoders(self, who, q):
+        d = self.srv.radio.decoders
+        self._send(200, {"decoders": d.catalogue(), "codecs": d.codecs(), "limits": d.limits(),
+                         "sessions": d.sessions()})
+
+    def post_decoder_session(self, who, q):
+        from ..decoders import Refused as DecoderRefused
+        b = self._body()
+        decoder, freq, params = b.get("decoder"), b.get("freqHz"), b.get("params") or {}
+        if not isinstance(decoder, str) or not isinstance(params, dict) or isinstance(freq, bool) \
+                or not isinstance(freq, (int, float)):
+            self._error(400, _("Give decoder, freqHz and, if any, params"), "bad_params")
+            return
+        try:
+            sess = self.srv.radio.decoders.start(decoder, float(freq), params)
+        except DecoderRefused as e:
+            more = {"needs": e.needs} if e.needs else {}
+            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+            return
+        log.info("decoder session %s started by %s: %s at %.0f Hz", sess["id"], who.get("user", "?"), decoder, freq)
+        self._send(201, sess)
+
+    def _session_id(self) -> str:
+        return urlsplit(self.path).path.rstrip("/").rsplit("/", 1)[-1]
+
+    def get_decoder_session(self, who, q):
+        try:
+            since = int(q["since"][0]) if "since" in q else None
+        except ValueError:
+            self._error(400, _("since must be a whole number"), "bad_params")
+            return
+        sess = self.srv.radio.decoders.session(self._session_id(), since)
+        if sess is None:
+            self._error(404, _("There is no decoder session called {id}").format(id=self._session_id()),
+                        "unknown_session")
+            return
+        self._send(200, sess)
+
+    def delete_decoder_session(self, who, q):
+        sid = self._session_id()
+        if sid == "vfo" or not self.srv.radio.decoders.stop(sid):
+            self._error(404, _("There is no decoder session called {id}").format(id=sid), "unknown_session")
+            return
+        log.info("decoder session %s stopped by %s", sid, who.get("user", "?"))
+        self._send(200, {"stopped": True})
+
+    def post_codecs_rescan(self, who, q):
+        self._send(200, {"codecs": self.srv.radio.decoders.codecs(rescan=True)})
+
     def get_overpower(self, who, q):
         """NB's over-power and LEILA watch: its list of the last 30 minutes
         and its state (docs/SERVER-API.md). Radio has none."""
@@ -1043,8 +1106,10 @@ class _Handler(BaseHTTPRequestHandler):
         {"kind": "state" | "toast" | ..., ...item}. ?kinds=a,b picks them;
         spectrum kinds are offered but not sent unless asked."""
         radio = self.srv.radio
-        kinds = [k for k in (q.get("kinds", [",".join(FEED_KINDS_DEFAULT)])[0].split(","))
-                 if k in radio.FEED_KINDS]
+        # "decoder" is the decoder sessions' results (SERVER-API "Decoders"):
+        # the engine's feed `decoders`, each item sent as kind "decoder".
+        asked = [{"decoder": "decoders"}.get(k, k) for k in q.get("kinds", [",".join(FEED_KINDS_DEFAULT)])[0].split(",")]
+        kinds = [k for k in dict.fromkeys(asked) if k in radio.FEED_KINDS]
         if not ws.handshake(self):
             return
         sock = ws.Socket(self.rfile, self.wfile)
@@ -1079,7 +1144,7 @@ class _Handler(BaseHTTPRequestHandler):
                                     who.get("user", "?"))
                         items = [{"changes": dict(radio.state()), "full": True}]
                     for item in items:
-                        msg = spectrum_item(k, item) if k in SPECTRUM else {"kind": k, **(
+                        msg = spectrum_item(k, item) if k in SPECTRUM else {"kind": EVENT_KIND.get(k, k), **(
                             item if isinstance(item, dict) else {"item": item})}
                         sock.send_text(json.dumps(msg, default=_json_default))
         except (OSError, ConnectionError):
@@ -1149,6 +1214,8 @@ class _Handler(BaseHTTPRequestHandler):
 #: the arm's heartbeat. Matches the manifest's `digital: true` rule, which
 #: the controller enforces first. Never api/ptt's key-up or api/audio/tx.
 DIGITAL_ROUTES = {("POST", "/api/ptt/heartbeat")}
+# Feeds whose items go out under another kind's name on api/events.
+EVENT_KIND = {"decoders": "decoder"}
 
 ROUTES = {
     ("GET", "/"): ("view", _Handler.page),
@@ -1176,10 +1243,19 @@ ROUTES = {
     ("GET", "/api/shack/busy"): ("view", _Handler.get_shack_busy),
     ("POST", "/api/shack/pad/action"): ("control", _Handler.post_pad_action),
     ("POST", "/api/shack/release"): ("view", _Handler.post_shack_release),
+    ("GET", "/api/decoders"): ("view", _Handler.get_decoders),
+    ("POST", "/api/decoders/sessions"): ("control", _Handler.post_decoder_session),
+    ("POST", "/api/decoders/codecs/rescan"): ("control", _Handler.post_codecs_rescan),
     ("GET", "/api/recordings"): ("view", _Handler.get_recordings),
     ("GET", "/api/recordings/status"): ("view", _Handler.get_recordings_status),
     ("GET", "/api/recordings/file"): ("view", _Handler.get_recordings_file),
     ("POST", "/api/recordings/start"): ("control", _Handler.post_recordings_start),
     ("POST", "/api/recordings/stop"): ("control", _Handler.post_recordings_stop),
     ("POST", "/api/recordings/delete"): ("control", _Handler.post_recordings_delete),
+}
+# Routes with a path parameter: (method, prefix) -> (level, handler); the
+# rest of the path after the prefix is the parameter. Exact routes first.
+PREFIX_ROUTES = {
+    ("GET", "/api/decoders/sessions/"): ("view", _Handler.get_decoder_session),
+    ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
 }

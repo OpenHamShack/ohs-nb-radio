@@ -37,7 +37,7 @@ the desktop apps.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET /` | view | a status page and the Recordings (record, play, download, delete); nothing fetched from elsewhere, one small script that posts to `api/recordings` |
-| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog` |
+| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own) |
 | `GET api/state` | view | `Radio.state()`: every key |
 | `GET api/spec` | view | the settings registry (type, limits, choices, help, auth, restart) |
 | `POST api/set` | control (transmit for `auth` keys) | `{key: value, …}` or `{"changes": {…}}` through `Radio.set()`, all or nothing; answers `{"changed": {…}}`. The station profile's keys (callsign, locator, country, licence, class, own licence, conditions) are refused: they are set on the controller. So are the device addresses and audio devices (the broker and the API own those). |
@@ -52,6 +52,8 @@ the desktop apps.
 | `GET api/events` (state resync) | view | A `state` item is a diff, published once, and a client too slow to drain its queue loses the oldest. When that has happened the server sends the whole state before any later diff: a `state` message in the usual shape, `{"kind": "state", "changes": {…every key…}, "full": true}`. `full` is new and optional (absent on ordinary diffs); a client that merges `changes` as it always has needs no change, and one that wants to can replace its copy instead. Diffs it had not yet received are folded into the snapshot, not sent after it. Other kinds (meter, spectrum, events) still drop oldest-first. |
 | `GET api/events?kinds=…,cwskim,cwspot` | view | Radio's CW skimmer (ENGINE-API `cwskim`, `cwspot`). Neither kind is in the default set, so a client that does not ask never gets them. `cwskim` comes once a second, at most `cwSkimMax` channels (about 8 kB/s at 64). `cwspot` is coalesced to at most 5 items a second. A slow client loses snapshots, which do no harm, and spots, which it recovers through `rev`. |
 | `GET api/cwskim` | view | Radio only: `{"state", "why"?, "band", "segment", "cover", "channels", "carriers", "spotsRev", "spots": [...]}`. That is the `cwskim` item, plus every spot of the last 30 minutes (at most 500, newest first, each a `cwspot` `spot`). Fetch it when a view opens, and after a gap in `rev`. It is `{"state": "off", ...}` with empty lists while `cwSkim` is false. A tap on a spot or channel only tunes: one `POST api/set {"mode": "cw", "vfo": dial}` at Control level, never a reply and never Enable TX (Brian, 13/10/2026). |
+| `GET api/decoders` and the routes under it | view, control | decoder sessions, below ("Decoders") |
+| `GET api/events?kinds=…,decoder` | view | the decoder sessions' results, below |
 | `GET api/overpower` | view | QO-100 NB only (404 `not_found` elsewhere): `{"state", "beacon", "marginDb", "capture", "lastCapture", "events": [...]}` - signals over the middle beacon and LEILA sirens of the last 30 minutes, open ones first, each as ENGINE-API `overpower` describes. The same list comes as `overpower` items on `api/events?kinds=…,overpower` (not in the default set) on every change and once a second while anything is active. A `leila` entry is the siren pattern measured on six real sirens; why LEILA marks a station is unknown, so show it as "LEILA?". Tapping an entry only tunes: `POST api/set {"vfo": …}` at Control level, never TX. |
 | `POST api/overpower/capture` | control | save the last 20 s of receive IQ now (the LEILA evidence ring; `leilaCapture` must be on): `202 {"ok": true}`, the file then appears in Recordings as `…-LEILA`; `409 nothing_to_save` with the sentence why not. Receive only. |
 | `GET api/audio/rx` | view | receive audio, raw PCM over a long-lived response: `Content-Type: audio/L16; rate=12000; channels=1`, and `X-Audio-Format: {"encoding": "s16le", "rate": 12000, "channels": 1}` |
@@ -65,6 +67,77 @@ the desktop apps.
 | `POST api/recordings/stop {"kind"?}` | control | stop that kind, or both; the status with `stopped` |
 | `GET api/recordings/file?id=&part=data\|meta[&download=1]` | view | one file of a recording; `Range: bytes=…` answers `206` |
 | `POST api/recordings/delete {"id"}` | control | delete a recording (`409 recording_active` while it records) |
+
+## Decoders
+
+Decoders running beside the mode's, each on a frequency of its own,
+whatever the dial does (ENGINE-API `decoders`, RADIO-SDR-PLAN §4.4 in the
+openhamshack repo). Milestone 1 has one: RTTY (45.45, 50, 75 Bd; 170, 425,
+450, 850 Hz; normal or reversed), shack_sdr's Rust decoder, the same one
+the RTTY mode now uses. Nothing here transmits. The mode decoder itself is
+unchanged: its decodes still come as `events`, and it is listed as the
+session `vfo` while the mode is decoded by shack_sdr.
+
+| Method, path | Level | Does |
+|---|---|---|
+| `GET api/decoders` | view | `{"decoders": [entry…], "codecs": [codec…], "limits": {"sessions", "cpuMax", "threads"}, "sessions": [session…]}`. Fetch it once when a view opens. The first fetch after a start may take a moment: it is when the codecs are first looked for. |
+| `POST api/decoders/sessions` | control | `{"decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45, "shift": 170, "reverse": false}}`. `201` with the session, or `400 bad_params`, `404 unknown_decoder`, `409 decoder_unavailable` (`needs` names a codec when that is why; a slot mode, which runs only as the mode, says so too), `409 outside_span`, `429 too_many_sessions` (`decodersMax`, default 4), `503 not_running`. Sessions are kept in the settings and start again with the radio. |
+| `DELETE api/decoders/sessions/{id}` | control | stop it: `{"stopped": true}`; `404 unknown_session` (the `vfo` session stops with its mode, never here) |
+| `GET api/decoders/sessions/{id}?since=<rev>` | view | the session, with `results`: its kept results (the last 500 or 30 minutes) newer than `rev`. Fetch it after a gap in `rev`. `404 unknown_session`. |
+| `POST api/decoders/codecs/rescan` | control | look for codecs again without a restart: `{"codecs": [...]}` |
+
+Not yet: `listen` (a session's audio in place of the demodulator, M3) and
+`api/decoders/files` (a picture a decoder saved, M2).
+
+An entry (the catalogue):
+
+```json
+{"id": "rtty", "family": "amateur", "inputs": ["iq"], "rateHz": 12000.0, "bandwidthHz": 3000.0,
+ "outputs": ["text"], "panel": "text", "params": [{"key": "baud", "type": "choice", "choices": [45.45, 50.0, 75.0], "default": 45.45}, ...],
+ "needs": [], "engine": "shack_sdr", "available": true, "why": null, "whyText": "", "version": "0.1.0", "fixed": true}
+```
+
+`panel` says how a client shows the results (`text`, `slots`, `frames`,
+`image`, `meta`), so a new decoder needs no client release. `engine` is
+the library that decodes (`shack_sdr`, `shack_cw`, `ohsdigi`); `fixed`
+whether it can run on a frequency of its own (CW through shack_cw can;
+FT8, FT4, Q65 and JS8 run only as the mode).
+
+A session:
+
+```json
+{"id": "ds_3f2a", "decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45, "shift": 170},
+ "state": "synced", "why": null, "whyText": "", "since": "2026-10-22T10:00:00Z", "rev": 812,
+ "stats": {"snrDb": 14.2, "offsetHz": -12.5, "cpu": 0.004, "dropped": 0}, "panel": "text"}
+```
+
+`state` is one of `starting`, `running`, `nosignal`, `synced`, `outside`
+(its frequency left the receiver's span: fed nothing, and back by itself
+when the span covers it), `budget` (paused at `decodeCpuMax`), `error` or
+`stopped`. `why` is a code and `whyText` the server's sentence for it;
+prefer your own translation of the code (CONTROLLER-CONTRACT §9).
+
+A codec:
+
+```json
+{"id": "faad2", "for": ["dabplus", "drm"], "state": "missing", "path": null, "version": null, "why": "not_found",
+ "whyText": "Ask your controller's administrator to install faad2 (Controller › Optional libraries).",
+ "where": null, "host": true, "shippable": false}
+```
+
+`host` is true on a controller: the app cannot install anything, and
+says to ask the administrator. Results on `api/events?kinds=…,decoder`
+(not in the default set), one message per result:
+
+```json
+{"kind": "decoder", "session": "ds_3f2a", "rev": 813, "t": 1792663200.25, "type": "text", "text": "CQ TEST DE ", "offsetHz": -12.5, "snrDb": 14.0}
+{"kind": "decoder", "session": "ds_3f2a", "rev": 814, "t": 1792663201.0, "type": "state", "state": "outside", "why": "outside_span", "whyText": "..."}
+```
+
+`rev` rises by one per result, per session; a client that sees a gap
+fetches the session with `?since=`. `t` is UTC from the samples. Text is
+not yet coalesced: RTTY's results come a character or a few at a time,
+about seven a second at 45.45 Bd.
 
 ## Recordings
 
