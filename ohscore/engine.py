@@ -514,6 +514,7 @@ class Engine:
         # FT8 decoder's working directory in the temp folder.
         self.retired: deque = deque()
         self.rx_gain_applied = None
+        self.antenna_applied = None
         self.startup_notes = notes
         self.rx_samples = 0
         self.tx_t0 = 0.0
@@ -881,6 +882,7 @@ class Engine:
             self._status(running=False, error=str(e))
             raise
         self.rx_gain_applied = self._rx_gain_wanted(self.st)     # open() applied the configured gain
+        self.antenna_applied = str(self.st.get("soapyAntenna", "") or "")   # open() applied this antenna too
         self.rx_samples = 0
         self.modes_info = self._mode_caps(modes_glue.available(self.STATE.modes, self.st["freedvMode"]))
         self.decoders.open(realtime)
@@ -1195,6 +1197,29 @@ class Engine:
                 self.dev.set_rx_gain(want[0], float(s["rxGain"]) if want[1] is None else float(want[1]))
             except DeviceError as e:
                 self.toast(_("Receiver gain not applied: {error}").format(error=e), "warn")
+        # The antenna input, the same way: set_antenna is called on the
+        # open device with no reopen (soapy.py's SoapySDRPlay3 path takes
+        # it on a running stream); a device with no antenna to pick
+        # ignores it (Device.set_antenna's base no-op). An unknown input
+        # is refused by the device and only toasted here, never applied:
+        # api/set and the Settings dialog validate it first, but a label
+        # saved for a radio that was later swapped for a different one
+        # must not silently try its old antenna's name.
+        want_ant = str(s.get("soapyAntenna", "") or "")
+        if want_ant != self.antenna_applied:
+            if s["keyed"]:
+                # Every device with an antenna to switch is receive-only
+                # (can_tx is False), so nothing here could be on the air -
+                # but safety rule 2 is never trusted to a device's own
+                # kind, so the switch waits for the next unkeyed
+                # reconfigure instead of touching the open device mid-over.
+                self.reconf = True
+            else:
+                self.antenna_applied = want_ant
+                try:
+                    self.dev.set_antenna(want_ant)
+                except DeviceError as e:
+                    self.toast(_("Antenna not changed: {error}").format(error=e), "warn")
         lo, hi = passband(s["mode"], s["filterLo"], s["filterHi"], s["cwPitch"], s["cwWidth"], s["amWidth"])
         self.demod.configure(s["mode"], lo, hi, s["agc"], s["rfGain"])
         self.nb.threshold = s["nbThreshold"]

@@ -55,6 +55,17 @@ class Device:
         change in signal that peaking a dish is looking for."""
         return None
 
+    def set_antenna(self, name: str) -> None:
+        """Switch the antenna input on the open device, applied the same
+        way as set_rx_gain: the engine calls this when `soapyAntenna`
+        changes while running, so most devices never need a restart for
+        it. `name` is "" for the driver's default, else one of the names
+        `status()` lists under `antennas`. Raises DeviceError if `name`
+        names an input the device does not have. A device with no antenna
+        to pick (every device but `soapy` today) ignores it: the base
+        implementation does nothing, successfully, so the setting is
+        simply inert rather than refused."""
+
     def set_tx_freq(self, hz: float) -> None:
         raise DeviceError("This device cannot transmit")
 

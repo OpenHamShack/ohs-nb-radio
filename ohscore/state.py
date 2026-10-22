@@ -222,9 +222,13 @@ def add_shared_keys(reg: Registry) -> None:
       help="libiio URI: ip:192.168.2.1 (Pluto over USB), ip:pluto.local, ip:<address> (Pluto+, LibreSDR), usb:<bus>.<dev>.<n>.")
     k("soapyArgs", "str", "driver=rtlsdr", "setting", restart=True,
       help="SoapySDR device arguments for a receive-only SDR, e.g. driver=airspy.")
-    k("soapyAntenna", "str", "", "setting", restart=True,
-      help="The SoapySDR receiver's antenna input, as its driver names it (an SDRplay RSPdx: Antenna A, Antenna B "
-           "or Antenna C). Empty: the driver's default.")
+    k("soapyAntenna", "str", "", "setting",
+      help="The receiver's antenna input, as its driver names it (an SDRplay RSPdx: Antenna A, Antenna B or "
+           "Antenna C). Empty: the driver's default. Applied live, with no restart, where the driver allows it.")
+    k("soapyAntennaLabels", "str", "", "setting",
+      help="A name for each antenna input (\"Antenna C\" -> \"80 m dipole\"), as one line of JSON "
+           "({\"Antenna C\": \"80 m dipole\"}): Settings' Radio page writes and reads it with a table, never by "
+           "hand.")
     k("sampleRate", "enum", 1_200_000, "setting", choices=[1_200_000], unit="S/s", restart=True,
       help="Complex sample rate shared by receive and transmit.")
     k("rxGainMode", "enum", "slow_attack", "setting", choices=["manual", "slow_attack", "fast_attack"],

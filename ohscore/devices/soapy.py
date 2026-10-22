@@ -14,6 +14,14 @@ has Antenna A, B and C; C is the HF-only socket). It is checked against the
 driver's own list before it is set: SoapySDRPlay3 ignores a name it does
 not know and stays on Antenna A, so a typo would otherwise listen to the
 wrong antenna with nothing said.
+
+Switching it does not reopen the device: SoapySDRPlay3 (the RSPdx) takes
+`setAntenna` on a running stream, and the SoapySDR API has no notion of a
+"stream must be idle first" the way a sample rate change does, so
+`set_antenna` below is called straight through. A driver that genuinely
+cannot change it live would raise from `setAntenna` itself, which the
+engine shows as "antenna not changed" rather than acting on - there is
+none such known today, so this has not been exercised against a refusal.
 """
 from __future__ import annotations
 
@@ -87,6 +95,11 @@ class SoapyDevice(Device):
             self.antenna = str(self.sdr.getAntenna(self.RX, 0))
         except (RuntimeError, AttributeError):
             self.antenna = want
+
+    def set_antenna(self, name: str) -> None:
+        if self.sdr is None:
+            return
+        self._set_antenna(str(name or "").strip())
 
     def set_rx_gain(self, mode: str, db: float) -> None:
         """SoapySDR has one automatic gain switch, not the AD936x's two

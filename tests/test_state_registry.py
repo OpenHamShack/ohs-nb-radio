@@ -231,8 +231,10 @@ ADDED_SINCE = {"txRadio", "civPort", "civBaud", "civAddress", "rigctldHost", "ri
                # The over-power and LEILA watch (17/10, ohsnb/overpower.py, ohsnb/dsp/overpower.py).
                "opWatch", "leilaCapture", "opState", "opBeacon", "opActive", "opLeila", "opCpu", "opDropped",
                "opCapture",
-               # The SoapySDR receiver's antenna input (12/10, an RSPdx's Antenna C).
-               "soapyAntenna",
+               # The SoapySDR receiver's antenna input (12/10, an RSPdx's Antenna C),
+               # as a drop-down of what the radio reports, plus a label per
+               # input (22/10/2026, ohscore/antennas.py).
+               "soapyAntenna", "soapyAntennaLabels",
                # Decoder sessions (22/10/2026, ohscore/decoders.py, Radio's SDR
                # milestone 1): how many, their processor share, the saved
                # sessions, and their status.

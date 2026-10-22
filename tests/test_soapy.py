@@ -130,6 +130,30 @@ class Antenna(unittest.TestCase):
         with self.assertRaisesRegex(DeviceError, "runs at 2000000 S/s, not 1200000"):
             dev.open()
 
+    def test_set_antenna_switches_live_on_the_open_stream(self):
+        dev = self.open(soapyAntenna="Antenna A")
+        rsp = FakeRsp.made[-1]
+        self.assertTrue(rsp.active)            # the stream is already running
+        dev.set_antenna("Antenna C")
+        self.assertEqual(rsp.antenna, "Antenna C")
+        self.assertEqual(dev.status()["antenna"], "Antenna C")
+        self.assertTrue(rsp.active)            # no stop/start: calling setAntenna is all it took
+
+    def test_set_antenna_refuses_an_unknown_input_without_touching_the_driver(self):
+        dev = self.open(soapyAntenna="Antenna A")
+        rsp = FakeRsp.made[-1]
+        with self.assertRaises(DeviceError) as e:
+            dev.set_antenna("Antenna D")
+        self.assertIn("Antenna D", str(e.exception))
+        self.assertEqual(rsp.antenna, "Antenna A")    # unchanged
+        self.assertEqual(dev.status()["antenna"], "Antenna A")
+
+    def test_set_antenna_empty_leaves_the_current_input_alone(self):
+        dev = self.open(soapyAntenna="Antenna B")
+        rsp = FakeRsp.made[-1]
+        dev.set_antenna("")
+        self.assertEqual(rsp.antenna, "Antenna B")
+
     def test_it_cannot_transmit(self):
         dev = self.open(soapyAntenna="Antenna C")
         self.assertFalse(dev.can_tx)
