@@ -234,5 +234,17 @@ Tested only into the simulator: nothing in this server has keyed a radio.
   before the broker is asked. The image runs SDRplay's API service beside
   the server (store/radio/entrypoint.sh) and asks for the USB bus; the
   controller needs a udev rule for the RSP (Host -> Hardware, plugdev).
+- Radio's other receive-only receivers go through shack_sdr's own
+  bindings, not SoapySDR (RADIO-SDR-PLAN §6): `device` rtlsdr is the
+  broker's `rtlsdr-1` (an RTL-SDR, 0bda:2838; the image carries Debian's
+  librtlsdr0) and `device` sdrplay the same RSP as soapy, `sdrplay-1`,
+  through SDRplay's API directly. The claim's USB serial becomes
+  `sdrSerial` (a platform key, like soapyArgs). `device` libresdr is the
+  broker's `libresdr-1`, opened by the Pluto driver at the address the
+  claim gives (`plutoUri`). SDRplay's API stays in the image until the
+  platform stages it as a host library (§6.3); an image built with
+  `SHACK_STORE_DROP_SDRPLAY=1` carries none and starts the service from
+  `/opt/hostlibs/sdrplay-api/`, and without it the RSP says "Ask your
+  controller's administrator to install SDRplay's API".
 - Hermes-Lite 2 discovery uses a LAN broadcast the container's network may
   not pass; give its address in the broker's device instead.

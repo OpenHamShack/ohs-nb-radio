@@ -19,11 +19,22 @@
 # clean stop, and the next start resets the receiver.
 #
 # Without an SDRplay plugged in the service idles; a missing service (an
-# image built without the SDRplay files) only means no RSP will open.
+# image built without the SDRplay files on a controller without the host
+# library) only means no RSP will open, and Radio says why ("Ask your
+# controller's administrator to install SDRplay's API").
 set -eu
 
-if [ -x /usr/local/bin/sdrplay_apiService ]; then
-    /usr/local/bin/sdrplay_apiService &
+# Where the service comes from: the controller's host library when the
+# administrator installed one (RADIO-SDR-PLAN 6.3: /opt/hostlibs/sdrplay-api,
+# mounted read-only by the platform, preferred so an image and a
+# controller can never run two different API versions), else the copy an
+# image built before the switch-over still carries.
+SVC=""
+for c in "${SHACK_HOSTLIBS:-/opt/hostlibs}/sdrplay-api/sdrplay_apiService" /usr/local/bin/sdrplay_apiService; do
+    if [ -x "$c" ]; then SVC=$c; break; fi
+done
+if [ -n "$SVC" ]; then
+    "$SVC" &
     svc=$!
     # The service is ready to answer within a second of starting; the
     # server's first open comes later than that anyway (it reads its

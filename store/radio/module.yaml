@@ -47,7 +47,7 @@ openhamshack:
     - {path: "/api/halt", method: POST, level: control}
   release_request: /api/shack/release
   busy: /api/shack/busy
-  broker_devices: [pluto, hl2, sdrplay]
+  broker_devices: [pluto, libresdr, hl2, sdrplay, rtlsdr]
   actions: pad-actions.json
   controller_layout: pad-layout.json
 
@@ -58,15 +58,29 @@ exclusive_devices:
     label: Pluto
     address: 192.168.2.1
     claim: runtime
+  # A LibreSDR: a class of its own to the broker though Radio's Pluto
+  # driver opens it (device "libresdr"); its address comes with the claim.
+  - name: libresdr-1
+    label: LibreSDR
+    claim: runtime
   - name: hl2-1
     label: Hermes-Lite 2
     claim: runtime
-  # An SDRplay RSP, receive only, through SoapySDR (device "soapy"). The
+  # An SDRplay RSP, receive only, through SoapySDR (device "soapy") or
+  # shack_sdr's own binding to SDRplay's API (device "sdrplay"). The
   # id is the RSPdx's (an RSPdx-R2 is 1df7:3060); it only puts the claim on
   # the right row of the Hardware page.
   - name: sdrplay-1
     label: SDRplay RSP
     usb_id: 1df7:3030
+    claim: runtime
+  # An RTL-SDR, receive only, through shack_sdr's binding to librtlsdr
+  # (device "rtlsdr"; the image carries Debian's librtlsdr0). 0bda:2838 is
+  # the RTL2832U every common dongle reports; its udev rule is the
+  # controller's (Host -> Hardware), as the RSP's is.
+  - name: rtlsdr-1
+    label: RTL-SDR
+    usb_id: 0bda:2838
     claim: runtime
 
 # Recordings (ohscore/server/recording.py, shack_rec): receive audio and IQ,

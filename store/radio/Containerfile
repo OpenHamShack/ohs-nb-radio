@@ -10,6 +10,8 @@
 # but kept because ohscore imports it lazily for update checks. No PyQt, no
 # PortAudio, no sound card: audio goes over the API (ohscore/server/audio.py).
 
+# >>> sdrplay-in-image (tools/build-store.sh deletes from here to the
+# matching "<<<" line when SHACK_STORE_DROP_SDRPLAY=1: RADIO-SDR-PLAN 6.3)
 # The SDRplay receivers (an RSPdx on ohs-box, 12/10/2026), through SoapySDR
 # like any receive-only SDR (ohscore/devices/soapy.py). Debian has SoapySDR
 # but neither SDRplay's API nor SoapySDRPlay3, so this stage installs the
@@ -43,6 +45,7 @@ RUN set -e; cd /src \
     && cmake --build build -j"$(nproc)" \
     && DESTDIR=/out cmake --install build \
     && install -m 0644 SoapySDRPlay3-soapy-sdrplay3-*/LICENSE.txt /out/usr/share/doc/sdrplay-api/SoapySDRPlay3-LICENSE.txt
+# <<< sdrplay-in-image
 
 FROM docker.io/library/debian:13-slim
 
@@ -53,6 +56,11 @@ FROM docker.io/library/debian:13-slim
 # OpenBLAS half that (14/10/2026). One BLAS thread (OPENBLAS_NUM_THREADS
 # below): the products are too small to share, and spare threads would
 # spin on cores the other apps use.
+# librtlsdr0: the RTL-SDR receiver (device rtlsdr, shack_sdr's ctypes
+# binding); its udev rule is the controller's (Host -> Hardware), not this
+# image's. SDRplay's API is never apt's: in the image while the
+# sdrplay-in-image blocks are (above), and once they go, the controller's
+# host library mounted at /opt/hostlibs/sdrplay-api (entrypoint.sh).
 # python3-soapysdr and the SDRplay module built above, for the soapy device;
 # soapysdr-tools for SoapySDRUtil, which is how to see from a shell on the
 # controller what the container can find (podman exec ... SoapySDRUtil --find).
@@ -65,12 +73,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-soapysdr \
         soapysdr-tools \
         libusb-1.0-0 \
+        librtlsdr0 \
         libad9361-0 \
         libcodec2-1.2 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+# >>> sdrplay-in-image
 COPY --from=sdrplay /out/ /
 RUN ldconfig && SoapySDRUtil --info | grep -q sdrPlaySupport
+# <<< sdrplay-in-image
 
 # The shared OpenHamShack libraries, exactly the pinned wheels: each one's
 # hash is checked against tools/vendor/requirements.lock before it is
