@@ -1,8 +1,11 @@
-"""tests/conftest.py, the pytest hook that destroys every window a test
-left alive: run for real, under pytest in a child process, against a
-scratch tree of three tests - one that keeps a window alive the way the
-UI tests do (closed, and still referenced), one that opens nothing, and
-one that checks what the class made in setUpClass is still whole."""
+"""tests/conftest.py, the pytest hooks that destroy every window a test
+left alive and give back each module's memory: run for real, under
+pytest in a child process, against scratch trees. The windows: one test
+keeps a window alive the way the UI tests do (closed, and still
+referenced), one opens nothing, one checks that what the class made in
+setUpClass is still whole. The memory: a module leaves a reference
+cycle with the collector off, as a UI module has it, and the next
+module finds it collected."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 
 import os
@@ -70,6 +73,47 @@ class DestroysWhatATestLeft(unittest.TestCase):
         self.assertIn("3 passed", res.stdout)
         summary = res.stdout.split("windows tests left alive", 1)[1]
         self.assertIn("    2  test_scratch.py", summary)
+
+
+FIRST = '''import gc, unittest, weakref
+import shared
+
+
+class Big:
+    pass
+
+
+class Leaves(unittest.TestCase):
+    def test_a_cycle_while_the_collector_is_off(self):
+        gc.disable()                 # as a UI module's QApplication has it
+        b = Big()
+        b.me = b
+        shared.ref = weakref.ref(b)
+'''
+SECOND = '''import gc, unittest
+import shared
+
+
+class Finds(unittest.TestCase):
+    def test_the_last_modules_garbage_is_gone(self):
+        gc.enable()
+        self.assertIsNone(shared.ref())
+'''
+
+
+@unittest.skipUnless(HAVE, "needs PyQt6 and pytest")
+class GivesBackWhatAModuleLeft(unittest.TestCase):
+    def test_a_modules_cyclic_garbage_is_collected_when_it_ends(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        shutil.copy2(HERE / "conftest.py", tmp / "conftest.py")
+        (tmp / "shared.py").write_text("ref = None\n")
+        (tmp / "test_a.py").write_text(FIRST)
+        (tmp / "test_b.py").write_text(SECOND)
+        res = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "test_a.py", "test_b.py"],
+                             cwd=tmp, capture_output=True, text=True, timeout=120)
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("2 passed", res.stdout)
 
 
 if __name__ == "__main__":

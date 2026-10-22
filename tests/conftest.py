@@ -1,4 +1,6 @@
-"""Under pytest, every window a test opens is destroyed when the test ends.
+"""Under pytest, every window a test opens is destroyed when the test ends,
+and each module's freed memory is given back when the module ends
+(_give_back_the_modules_memory says why).
 
 Why. The whole suite in one interpreter (beta-build's `pytest tests`) had
 stopped finishing: past its 2400 s limit, and a run left for three hours
@@ -86,6 +88,55 @@ def _destroy(widgets) -> None:
         if not sip.isdeleted(w):
             w.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+
+
+def _malloc_trim():
+    """glibc's malloc_trim(0), where there is a glibc; a no-op elsewhere."""
+    import ctypes
+    import ctypes.util
+    import sys
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6")
+        return libc.malloc_trim
+    except (OSError, AttributeError):     # musl has no malloc_trim
+        return None
+
+
+_trim = _malloc_trim()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _give_back_the_modules_memory():
+    """After each test module, collect its garbage and hand the freed
+    memory back to the system.
+
+    Why. Measured on ohs-dev (22/10/2026): with the windows destroyed,
+    the one-process run still grew to 6 GB and was killed by a 6 GB
+    limit at 55%, yet after gc.collect() and malloc_trim(0) a process
+    that had run the worst modules held about 400 MB: the growth was not
+    live objects but memory already freed and kept. With this, the whole
+    run peaked at 2.9 GB.
+    Two causes, both of the process rather than of any test. A radio's
+    buffers sit in reference cycles (callbacks, threads, signal hooks),
+    which only the collector frees, and the collector counts objects, not
+    bytes - and in a UI module it does not run at all except from the
+    event loop (ohscore/ui/qtapp.py). And glibc gives each thread that
+    allocates its own arena; every radio runs a dozen threads that
+    allocate numpy blocks, and a freed arena's memory stays with the
+    process unless trimmed. tracemalloc showed 6.5 MB of real growth over
+    a module that put 800 MB on the process.
+
+    Per module, not per test: both together cost about 70 ms with the
+    suite's heap, 200 s over 2,937 tests, and a module's own growth is
+    bounded. On the main thread between Qt calls - qtapp.release_gc's
+    safe point."""
+    yield
+    import gc
+    gc.collect()
+    if _trim is not None:
+        _trim(0)
 
 
 @pytest.fixture(autouse=True)
