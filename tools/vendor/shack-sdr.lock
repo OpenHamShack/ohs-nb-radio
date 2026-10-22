@@ -1,9 +1,13 @@
 # shack-sdr, the decoder host, the Rust RTTY decoder, the runtime codec
 # loader and the receive-only RTL-SDR and SDRplay sources
 # (openhamshack docs/RADIO-SDR-PLAN.md, Milestone 1). Built by ohs-libs
-# tools/build-sdr-wheels.sh at ohs-libs main dfcb334 (22/10/2026), the
-# wheels' own SHA256SUMS in ~/build/ohs-dist/shack-sdr matching the lines
-# below. One line per platform, its tag in the comment; a bump is a commit
+# tools/build-sdr-wheels.sh at ohs-libs main fdb5de9 (22/10/2026; 0.2.0,
+# the first ohs-libs version carrying shack_sdr), the wheels' own
+# SHA256SUMS in ~/build/ohs-dist/shack-sdr matching the lines below.
+# 0.2.0 replaces 0.1.0 (dfcb334) for d62bafe: the RTTY decoder took its
+# frames' noise floor from a stale spectrum and printed one to three
+# characters of noise after an over ended, where rtty.py printed none
+# (NB's own-echo test, 3 runs in 5). One line per platform, its tag in the comment; a bump is a commit
 # of its own (REPO-LAYOUT 4), with new wheels, new lines and the old wheels
 # deleted.
 #
@@ -23,9 +27,9 @@
 # There is no macOS wheel yet: the Mac's universal2 build has not run.
 # Until one is pinned here, build-macos.sh (through shack_vendor.py) stops
 # with that sentence rather than build a Radio that cannot decode RTTY.
-shack-sdr==0.1.0 --hash=sha256:94e2deb6ddd2af1c4c2e56108b0c7af2390821c291c64483ba1e284d73688642  # manylinux_2_35_x86_64
-shack-sdr==0.1.0 --hash=sha256:8ee7b025148a4ecdaee7f58c034ea7ed86d22d7df8e8d8d76e10d0273212af54  # manylinux_2_35_aarch64
-shack-sdr==0.1.0 --hash=sha256:fa38904bfb538c0d5afb492b44b3da9a334ff7e792f37b73c24c17be289c520a  # win_amd64
+shack-sdr==0.2.0 --hash=sha256:3caa1bc1995ae05fe5e67f7fabb52e070133c8213d25baa411914abdbabfdb4d  # manylinux_2_35_x86_64
+shack-sdr==0.2.0 --hash=sha256:3a369a83fff33cace094b4f50d01f329179417cd90113a01885ba497f4fa4bf2  # manylinux_2_35_aarch64
+shack-sdr==0.2.0 --hash=sha256:2f0132a536a1a5a26874e94cff290949a703f8c1994552362181d39938a8d137  # win_amd64
 #
 # The encumbered check (RADIO-SDR-PLAN 5.5), copied from the same ohs-libs
 # commit: tools/check-encumbered.py and spec/encumbered.json, into

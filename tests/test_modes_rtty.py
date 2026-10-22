@@ -327,11 +327,12 @@ class RttyOwnEchoTests(unittest.TestCase):
         upto = heard[:end + len("PSE K")] if end >= 0 else heard
         self.assertLessEqual(_cer(upto, self.TEXT), 0.03, repr(heard))
 
-    @unittest.skip("shack_sdr 0.1.0's RTTY decoder prints one to three characters of noise after an over "
-                   "ends ('PSE KSWI', 'PSE KKR': 3 runs in 5 on 22/10/2026) where the Python decoder printed "
-                   "none; a fix belongs in ohs-libs, and this comes back when one is vendored")
     def test_nothing_is_printed_after_the_over(self):
-        self.assertLessEqual(_cer(self.heard(), self.TEXT), 0.03)
+        # shack_sdr 0.1.0 printed one to three characters of noise here
+        # ("PSE KSWI") 3 runs in 5; 0.2.0 (ohs-libs d62bafe) prints none,
+        # as the Python decoder did.
+        heard = self.heard()
+        self.assertLessEqual(_cer(heard, self.TEXT), 0.03, repr(heard))
 
 
 class TerminalControlCharacterTests(unittest.TestCase):
