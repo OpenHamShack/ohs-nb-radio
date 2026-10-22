@@ -302,7 +302,17 @@ Tested only into the simulator: nothing in this server has keyed a radio.
   one) and keeps any other `key=value` the configured soapyArgs carries,
   which is how the driver's own settings reach it (`rfgain_sel`, the LNA
   state). `soapyAntenna` picks the input (`Antenna C` is an RSPdx's HF
-  socket), and status shows `antenna`/`antennas` under the device. A
+  socket; "" is the driver's default) through `POST api/set` at control
+  level, applied live with no restart where the driver allows it
+  (SoapySDRPlay3 does); the current input and the inputs the open radio
+  reports are `antenna`/`antennas` under `deviceStatus` in `api/state`,
+  kept at their last value while the radio is closed. `soapyAntennaLabels`
+  is the operator's own name for each input ("Antenna C" -> "80 m
+  dipole"), one line of JSON ({"Antenna C": "80 m dipole"}), also set
+  through `api/set` at control level: a client names an input as
+  "Antenna C - 80 m dipole" by combining `antenna`/`antennas` with this
+  the way Settings' Radio page does (ohscore/antennas.py `display_name`).
+  A
   key-up through a receiver is refused with "This radio can only receive"
   before the broker is asked. The image runs SDRplay's API service beside
   the server (store/radio/entrypoint.sh) and asks for the USB bus; the
