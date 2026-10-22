@@ -156,6 +156,15 @@ class CivSim:
 
     def stop(self) -> None:
         self.running = False
+        # shutdown() before close(): on Linux, closing a listening socket
+        # does not wake a thread blocked in its accept(), so every stopped
+        # simulator left its accept thread behind for the life of the
+        # process - one per test, 70 in a full run of the suite. shutdown
+        # makes the accept() fail (EINVAL), and _accept returns.
+        try:
+            self.srv.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass                    # not listening, or not on this platform: close() is enough there
         try:
             self.srv.close()
         except OSError:

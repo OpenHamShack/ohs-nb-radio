@@ -446,5 +446,31 @@ class NoWriteOnceKeyed(unittest.TestCase):
         self.released_then(lambda: self.sim.mode == "usb")
 
 
+class SimulatorsStopWhole(unittest.TestCase):
+    """stop() ends a simulator's accept thread, not just its socket. On
+    Linux a thread blocked in accept() is not woken when another thread
+    closes the listening socket, so every stopped simulator used to leave
+    its thread behind: one per test, about 70 in a full run of the suite."""
+
+    def accept_threads(self, name):
+        return [t for t in threading.enumerate() if t.name == name and t.is_alive()]
+
+    def check(self, make, name):
+        before = set(self.accept_threads(name))
+        sim = make().start()
+        mine = [t for t in self.accept_threads(name) if t not in before]
+        self.assertEqual(len(mine), 1)
+        sim.stop()
+        mine[0].join(timeout=2)
+        self.assertFalse(mine[0].is_alive(), f"{name}'s accept thread outlived stop()")
+
+    def test_the_ci_v_simulator(self):
+        self.check(lambda: CivSim(freq=432_000_000), "civsim")
+
+    def test_the_rigctld_simulator(self):
+        from ohscore.rig.rigctlsim import RigctldSim
+        self.check(RigctldSim, "rigctlsim")
+
+
 if __name__ == "__main__":
     unittest.main()
