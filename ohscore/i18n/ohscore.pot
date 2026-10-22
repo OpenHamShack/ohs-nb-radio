@@ -71,7 +71,7 @@ msgstr ""
 msgid "Antenna not changed: {error}"
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:71
+#: ohscore/devices/sdrsource.py:84
 msgid "Ask your controller's administrator to install SDRplay's API (Controller › Optional libraries) to use this radio."
 msgstr ""
 
@@ -269,7 +269,7 @@ msgstr ""
 msgid "If the voice sounds wrong, press Auto-tune again within {s:.0f} s for the next best fit ({shift:+d} Hz from here)."
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:73
+#: ohscore/devices/sdrsource.py:86
 msgid "Install SDRplay's API to use this radio: SDRplay's own installer, from sdrplay.com. Radio never includes it."
 msgstr ""
 
@@ -321,7 +321,7 @@ msgstr ""
 msgid "No sound card: transmit audio cannot reach the radio"
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:55
+#: ohscore/devices/sdrsource.py:67
 #, python-brace-format
 msgid "No {radio} was found. Is it plugged in?"
 msgstr ""
@@ -575,7 +575,7 @@ msgstr ""
 msgid "That recording is {seconds:.0f} s long; a voice memory can be at most {most:.0f} s"
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:53
+#: ohscore/devices/sdrsource.py:65
 msgid "The RTL-SDR library (librtlsdr) is not installed: on Debian or Ubuntu, install librtlsdr0."
 msgstr ""
 
@@ -726,42 +726,47 @@ msgstr ""
 msgid "The {mode} decoder stopped: {error}"
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:60
+#: ohscore/devices/sdrsource.py:72
 #, python-brace-format
 msgid "The {radio} cannot run at that sample rate."
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:61
+#: ohscore/devices/sdrsource.py:73
 #, python-brace-format
 msgid "The {radio} cannot tune that frequency."
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:58
+#: ohscore/devices/sdrsource.py:70
 #, python-brace-format
 msgid "The {radio} could not be opened."
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:65
+#: ohscore/devices/sdrsource.py:78
 #, python-brace-format
 msgid "The {radio} failed ({reason})."
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:56
+#: ohscore/devices/sdrsource.py:76
+#, python-brace-format
+msgid "The {radio} has no such antenna input."
+msgstr ""
+
+#: ohscore/devices/sdrsource.py:68
 #, python-brace-format
 msgid "The {radio} is in use by another program, or (Windows) still has Windows' own driver: fit the WinUSB driver once with Zadig."
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:62
+#: ohscore/devices/sdrsource.py:74
 #, python-brace-format
 msgid "The {radio} stopped sending samples."
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:63
+#: ohscore/devices/sdrsource.py:75
 #, python-brace-format
 msgid "The {radio} was unplugged."
 msgstr ""
 
-#: ohscore/devices/sdrsource.py:59
+#: ohscore/devices/sdrsource.py:71
 #, python-brace-format
 msgid "The {radio} would not take a setting."
 msgstr ""
