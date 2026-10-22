@@ -149,6 +149,18 @@ class RememberedTemplates(unittest.TestCase):
         c.bit_generator.state = g.bit_generator.state
         return c.random()
 
+    def test_a_template_drawn_from_no_generator_is_remembered_by_its_arguments(self):
+        from ohscore.devices import simsignals as sg
+        from conftest import memoised
+        real = getattr(sg.f1a_beacon, "__wrapped__", sg.f1a_beacon)
+        memo = memoised(real, 64 << 20)
+        want = real("VVV DE G4XYZ", 20.0, mark_high=False)
+        for _ in range(2):
+            self.np.testing.assert_array_equal(memo("VVV DE G4XYZ", 20.0, mark_high=False), want)
+        self.assertEqual(len(memo.cache), 1)
+        memo("VVV DE G4XYZ", 20.0)
+        self.assertEqual(len(memo.cache), 2)
+
     def test_another_generator_state_or_argument_is_another_template(self):
         np = self.np
         a = self.memo(np.random.default_rng(7), 1.0)

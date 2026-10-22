@@ -113,6 +113,8 @@ def memoised(fn, max_bytes: int):
     A repeat call returns the same samples, read-only, and leaves the
     generator exactly where `fn` would have left it, so whatever the
     simulator draws next is unchanged: a cached run is the uncached run.
+    A function whose first argument is not a Generator (f1a_beacon) is
+    remembered by its arguments alone.
 
     Why. The Radio simulator builds each band's stations when it opens,
     synchronously when it runs faster than real time (the tests): about
@@ -133,22 +135,27 @@ def memoised(fn, max_bytes: int):
     cache: collections.OrderedDict = collections.OrderedDict()
     size = [0]
 
+    import numpy as np
+
     @functools.wraps(fn)
-    def wrapper(rng, *args, **kwargs):
-        key = (repr(rng.bit_generator.state), args, tuple(sorted(kwargs.items())))
+    def wrapper(*args, **kwargs):
+        rng = args[0] if args and isinstance(args[0], np.random.Generator) else None
+        key = (repr(rng.bit_generator.state) if rng is not None else None,
+               args[1:] if rng is not None else args, tuple(sorted(kwargs.items())))
         with lock:
             hit = cache.get(key)
             if hit is not None:
                 cache.move_to_end(key)
         if hit is not None:
             out, after = hit
-            rng.bit_generator.state = after
+            if rng is not None:
+                rng.bit_generator.state = after
             return out
-        out = fn(rng, *args, **kwargs)
+        out = fn(*args, **kwargs)
         out.flags.writeable = False
         with lock:
             if key not in cache:
-                cache[key] = (out, rng.bit_generator.state)
+                cache[key] = (out, rng.bit_generator.state if rng is not None else None)
                 size[0] += out.nbytes
                 while size[0] > max_bytes and cache:
                     _k, (old, _s) = cache.popitem(last=False)
@@ -166,6 +173,10 @@ def _remember_voices() -> None:
         return
     if not hasattr(simsignals.voice, "cache"):
         simsignals.voice = memoised(simsignals.voice, 512 << 20)
+    # The NB simulator's lower and upper beacons, built afresh by every NB
+    # radio: 2% of the run (60 s), the same two templates each time.
+    if not hasattr(simsignals.f1a_beacon, "cache"):
+        simsignals.f1a_beacon = memoised(simsignals.f1a_beacon, 64 << 20)
 
 
 _remember_voices()
