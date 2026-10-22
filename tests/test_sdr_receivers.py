@@ -147,6 +147,54 @@ class RtlSdrThroughTheEngine(unittest.TestCase):
         self.assertIn("agc 0", log)                  # the RTL2832's own AGC stays off: it pumps
         self.assertIn("rate 1200000", log)
 
+    def test_antenna_is_rx_and_reported_the_soapy_shape_of_status(self):
+        """An RTL-SDR has one socket (ohs-libs shack_sdr README): `status`
+        still carries antenna/antennas, so Settings' drop-down and the API
+        see the same shape it gets from a SoapyDevice (docs/SERVER-API.md)."""
+        dev = RtlSdrDevice({"soapyAntenna": "RX"}, 1_200_000.0)
+        dev.open()
+        try:
+            st = dev.status()
+            self.assertEqual(st["antenna"], "RX")
+            self.assertEqual(st["antennas"], ["RX"])
+        finally:
+            dev.close()
+
+    def test_a_saved_antenna_this_receiver_does_not_have_fails_the_open(self):
+        """Mirrors soapy.py's open(): an unknown `soapyAntenna` fails the
+        whole open rather than listening on the wrong (only) input with
+        nothing said - and the half-opened device is closed again, not
+        left dangling."""
+        dev = RtlSdrDevice({"soapyAntenna": "Antenna A"}, 1_200_000.0)
+        with self.assertRaises(DeviceError) as cm:
+            dev.open()
+        self.assertIn("no such antenna", str(cm.exception))
+        self.assertIn("close 1", self.log())
+
+    def test_a_live_switch_to_an_unknown_input_is_refused_not_applied(self):
+        dev = RtlSdrDevice({}, 1_200_000.0)
+        dev.open()
+        try:
+            with self.assertRaises(DeviceError) as cm:
+                dev.set_antenna("Antenna A")
+            self.assertIn("no such antenna", str(cm.exception))
+            self.assertEqual(dev.status()["antenna"], "RX")   # refused, so unchanged
+        finally:
+            dev.close()
+
+    def test_empty_antenna_is_the_drivers_default_and_a_no_op_live(self):
+        """"" means "the driver's default" (ohscore/antennas.py), already
+        applied at open; set_antenna("") must never ask the source for an
+        antenna it was never given - RtlSdrSource.set_antenna("") would
+        refuse it (not one of ["RX"])."""
+        dev = RtlSdrDevice({}, 1_200_000.0)
+        dev.open()
+        try:
+            dev.set_antenna("")          # must not raise
+            self.assertEqual(dev.status()["antenna"], "RX")
+        finally:
+            dev.close()
+
 
 @unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
 class SdrplayWithoutTheApi(unittest.TestCase):
@@ -186,6 +234,116 @@ class SdrplayWithoutTheApi(unittest.TestCase):
         self.assertEqual(dev._gain("manual", 40.0), 39.0)
         self.assertEqual(dev._gain("manual", 0.0), 59.0)
         self.assertEqual(dev._gain("manual", 73.0), 20.0)
+
+
+class FakeSdrplaySource:
+    """Just enough of SdrplaySource's shape (ohs-libs shack_sdr README
+    "Antenna/input selection") to drive SdrplayDevice's antenna code
+    without the SDRplay API or real hardware: an RSPdx's three inputs,
+    resolved at open() the way the real source resolves them against the
+    model it found, and switched live after that."""
+
+    ANTENNAS = ("Antenna A", "Antenna B", "Antenna C")
+
+    def __init__(self, centre, rate, gain, *, serial=None, lna_state=4, antenna=None):
+        self.centre, self.rate, self.gain = centre, rate, gain
+        self.serial, self.lna_state = serial, lna_state
+        self.antenna = antenna
+        self.opened = False
+        self.switches: list[str] = []
+
+    def open(self) -> None:
+        from shack_sdr.sources import SdrError
+        if self.antenna is None:
+            self.antenna = self.ANTENNAS[0]
+        elif self.antenna not in self.ANTENNAS:
+            raise SdrError("bad-antenna",
+                           f"{self.antenna!r} is not one of this receiver's inputs: {list(self.ANTENNAS)}")
+        self.opened = True
+
+    def close(self) -> None:
+        self.opened = False
+
+    def antennas(self) -> list[str]:
+        return list(self.ANTENNAS) if self.opened else []
+
+    def set_antenna(self, name: str) -> None:
+        from shack_sdr.sources import SdrError
+        names = self.antennas()
+        if name not in names:
+            raise SdrError("bad-antenna", f"{name!r} is not one of this receiver's inputs: {names}")
+        self.switches.append(name)
+        self.antenna = name
+
+    def set_centre(self, hz: float) -> None:
+        self.centre = hz
+
+    def set_gain(self, gain) -> None:
+        self.gain = gain
+
+    def read(self):
+        from shack_sdr.sources import IqBlock
+        return IqBlock(np.zeros(1024, np.complex64), 0, 0.0, 0)
+
+    def status(self) -> dict:
+        return {"kind": "sdrplay", "centre": self.centre, "rate": self.rate, "gain": self.gain,
+                "antenna": self.antenna, "antennas": self.antennas(), "open": self.opened,
+                "blocks": 0, "samples": 0, "dropped": 0, "drops": 0, "lagS": 0.0, "notes": []}
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class SdrplayAntennaThroughAFakeSource(unittest.TestCase):
+    """SdrplaySource's own antenna switching is proven in ohs-libs against
+    the SDRplay API's own fixtures; what RADIO-SDR-PLAN needs checked here
+    is sdrsource.py's side of the contract - the saved `soapyAntenna`
+    reaching the source's constructor, an unknown one failing the open,
+    and the engine's live switch reaching `set_antenna` - against a fake
+    standing in for SdrplaySource (no SDRplay API is reachable from a
+    test host)."""
+
+    def dev(self, cfg):
+        with mock.patch("shack_sdr.sources.SdrplaySource", FakeSdrplaySource):
+            d = SdrplayDevice(dict(cfg), 2_400_000.0)
+            d.open()
+        return d
+
+    def test_the_saved_antenna_is_given_to_the_source_at_open(self):
+        dev = self.dev({"soapyAntenna": "Antenna C"})
+        try:
+            self.assertEqual(dev.src.antenna, "Antenna C")
+            self.assertEqual(dev.status()["antenna"], "Antenna C")
+            self.assertEqual(dev.status()["antennas"], ["Antenna A", "Antenna B", "Antenna C"])
+            self.assertEqual(dev.src.switches, [])    # given at construction, not a live switch
+        finally:
+            dev.close()
+
+    def test_no_saved_antenna_opens_on_the_models_default(self):
+        dev = self.dev({})
+        try:
+            self.assertEqual(dev.src.antenna, "Antenna A")
+        finally:
+            dev.close()
+
+    def test_an_unknown_saved_antenna_fails_the_open_and_closes_the_source(self):
+        with mock.patch("shack_sdr.sources.SdrplaySource", FakeSdrplaySource):
+            d = SdrplayDevice({"soapyAntenna": "Antenna Z"}, 2_400_000.0)
+            with self.assertRaises(DeviceError) as cm:
+                d.open()
+        self.assertIn("no such antenna", str(cm.exception))
+        self.assertIsNone(d.src)
+
+    def test_a_live_switch_reaches_the_source_and_an_unknown_one_is_refused(self):
+        dev = self.dev({})
+        try:
+            dev.set_antenna("Antenna B")
+            self.assertEqual(dev.src.antenna, "Antenna B")
+            self.assertEqual(dev.src.switches, ["Antenna B"])
+            with self.assertRaises(DeviceError) as cm:
+                dev.set_antenna("Antenna Z")
+            self.assertIn("no such antenna", str(cm.exception))
+            self.assertEqual(dev.src.antenna, "Antenna B")     # refused, so unchanged
+        finally:
+            dev.close()
 
 
 class StoreClaims(unittest.TestCase):
