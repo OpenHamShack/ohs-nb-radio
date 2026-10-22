@@ -126,10 +126,20 @@ if [ -n "$ohsdigi_so" ]; then
 fi
 
 # The shared OpenHamShack libraries (shack_bandplan, shack_client, shack_cw,
-# shack_pad) beside ohscore, exactly the wheels tools/vendor/requirements.lock
-# pins, hash-checked (packaging/shack_vendor.py): the band limits, the
-# shared logbook, the pad and the CW decoder need them at run time.
-python3 "$repo_root/packaging/shack_vendor.py" "$lib"
+# shack_pad, shack_sdr) beside ohscore, exactly the wheels
+# tools/vendor/requirements.lock and shack-sdr.lock pin, hash-checked
+# (packaging/shack_vendor.py): the band limits, the shared logbook, the
+# pad, the CW decoder and the decoder host (RTTY, the codec loader, the
+# RTL-SDR and SDRplay sources) need them at run time. shack_sdr is native,
+# so an amd64 or arm64 package carries that architecture's wheel and the
+# "all" package none: there RTTY and the two receivers are listed with the
+# sentence saying why (ohscore/decoders.py), as FT8 falls back to jt9 there.
+case "$arch" in
+    amd64) shack_platform=linux_x86_64 ;;
+    arm64) shack_platform=linux_aarch64 ;;
+    all) shack_platform=pure ;;
+esac
+python3 "$repo_root/packaging/shack_vendor.py" "$lib" "$shack_platform"
 find "$lib" -maxdepth 1 -name '*.dist-info' -type d -exec rm -rf {} +
 # shack_pad's udev rule is the controller's (group shack-input, its input
 # host service), so the copy inside the library would only mislead. The
@@ -281,5 +291,16 @@ EOF
 chmod 644 "$root/DEBIAN/md5sums"
 
 dpkg-deb --build --root-owner-group "$root" "$out_deb" >/dev/null
+
+# Nothing encumbered inside (RADIO-SDR-PLAN 5.5): no AAC or AMBE codec or
+# SDRplay's API carried, linked or defined by anything in the package. The
+# check is ohs-libs' own, vendored and hash-checked; a finding deletes the
+# package, so a failed build leaves nothing that could be published.
+if ! python3 "$repo_root/packaging/shack_vendor.py" --check-encumbered "$out_deb" >/dev/null; then
+    python3 "$repo_root/packaging/shack_vendor.py" --check-encumbered "$out_deb" >&2 || true
+    rm -f "$out_deb"
+    echo "build-deb.sh: the package failed the encumbered check" >&2
+    exit 1
+fi
 
 echo "built $out_deb"

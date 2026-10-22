@@ -133,6 +133,14 @@ export MACOSX_DEPLOYMENT_TARGET=12.0
 export UV_CACHE_DIR=$CACHE/uv UV_NO_CONFIG=1 UV_PYTHON_DOWNLOADS=never
 
 step() { printf '\n== %s\n' "$*"; }
+
+# shack_sdr (RTTY in both apps, the codec loader, the RTL-SDR and SDRplay
+# sources) is native, one wheel per platform, and no macOS universal2
+# wheel is pinned in tools/vendor/shack-sdr.lock yet. The specs would stop
+# on that after an hour of building; say so now instead.
+step "shack_sdr for macOS"
+python3 "$REPO/packaging/shack_vendor.py" "$BUILD/shack-sdr-check" macosx >/dev/null
+rm -rf "$BUILD/shack-sdr-check"
 die() { echo "build-macos.sh: $*" >&2; exit 1; }
 
 # ---------------------------------------------------------------- pins
@@ -458,6 +466,12 @@ for b in sorted(bad, key=lambda b: ver(b.split()[0]), reverse=True)[:20]:
 sys.exit(1 if bad else 0)
 EOF
     echo "   $(codesign -dv "$APP" 2>&1 | grep -E '^(Identifier|Signature)=' | tr '\n' ' ')"
+
+    step "$NAME $VERSION: nothing encumbered in the bundle"
+    # No AAC or AMBE codec and no SDRplay API carried, linked or defined by
+    # anything in the .app (RADIO-SDR-PLAN 5.5), checked with ohs-libs' own
+    # tool, vendored and hash-checked.
+    "$VPY" "$REPO/packaging/shack_vendor.py" --check-encumbered "$APP" || die "the bundle failed the encumbered check"
 
     step "$NAME $VERSION: smoke test - headless on the simulator"
     EXE=$APP/Contents/MacOS/$PKG

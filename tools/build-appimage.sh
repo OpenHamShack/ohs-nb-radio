@@ -39,7 +39,8 @@ mkdir -p "$WORK/src"
 cd "$ROOT"
 git archive HEAD ohscore "$PKG" LICENSE | tar -x -C "$WORK/src"
 mv "$WORK/src/LICENSE" "$WORK/LICENSE"
-python3 "$ROOT/packaging/shack_vendor.py" "$WORK/src"
+# x86-64 only (the kit's AppImages are), so that architecture's shack_sdr.
+python3 "$ROOT/packaging/shack_vendor.py" "$WORK/src" linux_x86_64
 find "$WORK/src" -maxdepth 1 -name '*.dist-info' -type d -exec rm -rf {} +
 rm -rf "$WORK/src/shack_pad/udev"
 cp "$ROOT/packaging/appimage/qt-app.spec" "$ROOT/packaging/appimage/host-libs.txt" "$WORK/"
@@ -58,3 +59,19 @@ sed -e "s|@KIND@|$KIND|g" -e "s|@NAME@|$NAME|" -e "s|@SUMMARY@|$SUMMARY|" -e "s|
     -e "s|@REQUIREMENTS@|$REQ|" "$ROOT/packaging/appimage/app.toml.in" > "$WORK/shack-app.toml"
 
 "$KIT/appimage/build-appimage.sh" "$WORK/shack-app.toml" --out "$OUT"
+
+# Nothing encumbered inside (RADIO-SDR-PLAN 5.5), checked on what was just
+# built. The check cannot read the AppImage's squashfs, so it reads the
+# tree the AppImage unpacks itself to (--appimage-extract runs no part of
+# the app). A finding deletes the AppImage.
+appimage=$(ls -t "$OUT"/*.AppImage 2>/dev/null | head -n 1)
+if [ -n "$appimage" ]; then
+    rm -rf "$WORK/squashfs-root"
+    (cd "$WORK" && "$appimage" --appimage-extract >/dev/null)
+    if ! python3 "$ROOT/packaging/shack_vendor.py" --check-encumbered "$WORK/squashfs-root"; then
+        rm -f "$appimage"
+        echo "build-appimage.sh: the AppImage failed the encumbered check" >&2
+        exit 1
+    fi
+    rm -rf "$WORK/squashfs-root"
+fi

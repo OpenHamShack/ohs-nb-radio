@@ -371,6 +371,26 @@ class ArchitecturePackages(unittest.TestCase):
         deb = Path(self.tmp.name) / "openhamshack-nb_9.9.9_all.deb"
         self.assertEqual(field(deb, "Architecture"), "all")
         self.assertEqual([p for p in contents(deb) if "ohsdigi" in p], [])
+        # shack_sdr is native too, so the package for any machine has none
+        # (RTTY is then listed with the reason, ohscore/sdr.py).
+        self.assertEqual([p for p in contents(deb) if "shack_sdr" in p], [])
+
+    def test_amd64_carries_the_x86_64_shack_sdr_and_the_installed_program_loads_it(self):
+        self._stage("amd64")
+        self._build("amd64")
+        deb = Path(self.tmp.name) / "openhamshack-nb_9.9.9_amd64.deb"
+        native = [p for p in contents(deb) if "/shack_sdr/_native" in p]
+        self.assertEqual(native, ["./usr/lib/openhamshack-nb/shack_sdr/_native.abi3.so"])
+        root = Path(self.tmp.name) / "root"
+        subprocess.run(["dpkg-deb", "-x", str(deb), str(root)], check=True)
+        libdir = root / "usr" / "lib" / "openhamshack-nb"
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env["PYTHONPATH"] = str(libdir)
+        with tempfile.TemporaryDirectory() as cwd:
+            res = subprocess.run([sys.executable, "-c", "from ohscore import sdr; m = sdr.load(); print(m.__file__)"],
+                                 cwd=cwd, env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertTrue(Path(res.stdout.strip()).resolve().is_relative_to(libdir.resolve()), res.stdout)
 
     def test_amd64_carries_ohsdigi_and_the_installed_program_encodes_with_it(self):
         self._stage("amd64")

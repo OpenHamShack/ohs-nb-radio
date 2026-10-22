@@ -23,9 +23,14 @@ app = json.loads((stage / "app.json").read_text())
 datas, hidden = [], []
 for pkg in sorted(p.name for p in src.iterdir() if p.is_dir()):
     for p in sorted((src / pkg).rglob("*")):
-        if p.is_file() and p.suffix not in (".py", ".pyc") and "__pycache__" not in p.parts \
+        if p.is_file() and p.suffix not in (".py", ".pyc", ".so") and "__pycache__" not in p.parts \
                 and not p.name.endswith(("_en_XA.ts", "_en_XA.qm")):
             datas.append((str(p), str(p.parent.relative_to(src))))
+        # A native module (shack_sdr's _native) is named, not copied as
+        # data: the analysis then collects it as an extension, with what
+        # it links against.
+        if p.is_file() and p.suffix == ".so" and "__pycache__" not in p.parts:
+            hidden.append(".".join(p.relative_to(src).parent.parts + (p.name.split(".")[0],)))
     # Named from the files, not by importing them as collect_submodules
     # does: in the build container a window module cannot import (no
     # libGL), and a module that fails to import is silently left out -

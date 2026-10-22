@@ -77,6 +77,10 @@ RUN ldconfig && SoapySDRUtil --info | grep -q sdrPlaySupport
 # unpacked into site-packages (no pip in the image; a wheel is a zip with
 # nothing to run at install).
 #
+# shack-sdr (the decoder host and RTTY's decoder, the codec loader, the
+# RTL-SDR and SDRplay sources) is the one with native code: the wheel for
+# this architecture, checked against tools/vendor/shack-sdr.lock.
+#
 # Then ohsdigi, the one decoder for FT8, FT4, Q65, JS8 and HSmodem (BETA-PLAN D9): the
 # wheel for this architecture, checked against tools/vendor/ohsdigi.lock,
 # and only its module kept, as ohscore/ohsdigi.abi3.so - where ohscore imports
@@ -99,6 +103,11 @@ RUN cd /tmp/vendor \
        done \
     && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec; shack_bandplan.load()" \
     && arch="$(uname -m)" \
+    && f="$(ls shack_sdr-*-manylinux_*_${arch}.whl)" \
+    && want="$(sed -n "s/^shack-sdr==.*--hash=sha256:\([0-9a-f]*\).*_${arch}$/\1/p" shack-sdr.lock)" \
+    && echo "$want  $f" | sha256sum -c - \
+    && python3 -m zipfile -e "$f" "$site" \
+    && python3 -c "import shack_sdr; assert any(e['id'] == 'rtty' for e in shack_sdr.catalogue())" \
     && f="$(ls ohs_ohsdigi-*-manylinux_*_${arch}.whl)" \
     && want="$(sed -n "s/^ohs-ohsdigi==.*--hash=sha256:\([0-9a-f]*\).*# ${arch}$/\1/p" ohsdigi.lock)" \
     && echo "$want  $f" | sha256sum -c - \

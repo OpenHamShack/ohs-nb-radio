@@ -31,6 +31,7 @@ made, so a bundle missing a module fails here rather than on someone's PC.
 What a Pluto needs is inside the installer too: libiio 0.26's DLLs in the
 bundle (_internal\libiio), and ADI's PlutoSDR USB driver installer, which
 the setup program runs as an option (packaging\windows\pluto-drivers.iss).
+Neither carries SDRplay's API, which is the operator's own install, ever.
 The Country column's cty.dat is ohscore's own (ohscore\data, from the
 repository). The licences for all of these are in
 packaging\windows\THIRD-PARTY.txt. WSJT-X is not carried (since
@@ -507,6 +508,12 @@ if ($pdf.Count -gt 0) {
           "packaging\windows\bundle_prune.py no longer catches it - fix that, or its source must be published (sources.txt)"
 }
 Write-Host "   neither Qt6Pdf*.dll nor qpdf.dll in $Bundle"
+
+Step "Nothing encumbered in the bundle"
+# No AAC or AMBE codec and no SDRplay API carried, linked or defined by
+# anything in the bundle (RADIO-SDR-PLAN 5.5): ohs-libs' own check,
+# vendored in tools\vendor\encumbered and hash-checked before it runs.
+Run $VPy (Join-Path $Repo "packaging\shack_vendor.py") --check-encumbered $Bundle
 
 Step "ohsdigi in the bundle"
 # The spec names ohscore.ohsdigi as a hidden import (ft8.py imports it by

@@ -52,7 +52,7 @@ ALWAYS = ("pyinstaller",)
 # the program, so the program's LICENSE beside THIRD-PARTY.txt already
 # covers them, and their wheels carry no text of their own. Not third
 # party, so neither a licences/ file nor a THIRD-PARTY.txt entry.
-OWN = ("shack-bandplan", "shack-client", "shack-pad", "shack-cw")
+OWN = ("shack-bandplan", "shack-client", "shack-pad", "shack-cw", "shack-sdr")
 
 
 class LicenceError(Exception):
