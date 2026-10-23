@@ -100,7 +100,19 @@ class OnTheSimulator(unittest.TestCase):
         own = st["rxOwner"]
         self.assertEqual((own["by"], own["session"], own["block"], own["freqHz"]), ("dab", sess["id"], BLOCK, CENTRE))
         self.assertEqual(own["prior"], {"vfo": HOME, "mode": "fm", "rptOffsetHz": 600_000.0})
-        self.assertTrue(wait(r, lambda: (r.decoders.session(sess["id"])["meta"] or {}).get("dls") == DLS))
+        # The ensemble label (FIG 1/0) shares its slot with the two service
+        # labels (tx.rs fic_block: one label every third eligible frame, so
+        # each specific label repeats roughly once a second) and the DLS
+        # text rides the much more frequent PAD, so a session can show the
+        # right DLS well before its first ensemble-label frame has gone by.
+        # On a loaded or slow host decode falls further behind real time,
+        # so that first frame lands later still: wait for both together,
+        # on the same generous, open-ended deadline as dls, rather than
+        # reading "complete" the instant dls matches (ohs-dev VM, 23/10:
+        # dls was true and ensemble label still None on every run).
+        self.assertTrue(wait(r, lambda: (lambda m: m is not None and m.get("dls") == DLS
+                                          and m.get("sync") and m.get("complete"))(
+                                              r.decoders.session(sess["id"])["meta"])))
         self.assertEqual(r.centre, CENTRE)                   # DC on the block's unused middle carrier
         meta = r.decoders.session(sess["id"])["meta"]
         self.assertTrue(meta["sync"] and meta["complete"])
