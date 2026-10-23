@@ -421,6 +421,243 @@ class SoapySdrplayWithoutSoapySDRPlay3(unittest.TestCase):
             self.assertTrue(sdrsource.soapy_has_driver("sdrplay"))
 
 
+# A stand-in SDRplay API, compiled against SDRplay's own headers where they
+# are installed (ohs-libs shack_sdr pytests/test_sources.py does the same):
+# the fields shack_sdr writes are then read back by the names the headers
+# give them, so what the test checks is what the real service would be
+# handed. Every sdrplay_api_Update logs the gain fields as they stand.
+SDRPLAY_STUB = r"""
+#include <stdio.h>
+#include <string.h>
+#include <pthread.h>
+#include <time.h>
+#include "sdrplay_api.h"
+static sdrplay_api_DevParamsT dev;
+static sdrplay_api_RxChannelParamsT chA, chB;
+static sdrplay_api_DeviceParamsT params = {&dev, &chA, &chB};
+static sdrplay_api_CallbackFnsT cbs;
+static int running, locked, hwver = SDRPLAY_RSPdx_ID, token = 5;
+static pthread_t th;
+static char logbuf[65536]; static size_t loglen = 0;
+static void note(const char *what, int reason) {
+    int n = snprintf(logbuf + loglen, sizeof logbuf - loglen, "%s reason=%d grdb=%d lna=%d agc=%d setpoint=%d\n",
+                     what, reason, chA.tunerParams.gain.gRdB, chA.tunerParams.gain.LNAstate,
+                     chA.ctrlParams.agc.enable, chA.ctrlParams.agc.setPoint_dBfs);
+    if (n > 0 && loglen + n < sizeof logbuf) loglen += n;
+}
+const char *stub_log(void) { logbuf[loglen] = 0; return logbuf; }
+void stub_clear(void) { loglen = 0; }
+void stub_set_hwver(int v) { hwver = v; }
+static void *pump(void *a) {
+    enum { N = 1344 };
+    static short z[N];
+    struct timespec ts = {0, 5000000}, t0, t;
+    sdrplay_api_StreamCbParamsT p; memset(&p, 0, sizeof p);
+    long sent = 0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    while (running) {
+        clock_gettime(CLOCK_MONOTONIC, &t);
+        double due = ((t.tv_sec - t0.tv_sec) + (t.tv_nsec - t0.tv_nsec) * 1e-9) * dev.fsFreq.fsHz;
+        while (running && sent < due) { cbs.StreamACbFn(z, z, &p, N, 0, 0); sent += N; }
+        nanosleep(&ts, 0);
+    }
+    return 0;
+}
+sdrplay_api_ErrT sdrplay_api_Open(void) { return sdrplay_api_Success; }
+sdrplay_api_ErrT sdrplay_api_Close(void) { return sdrplay_api_Success; }
+sdrplay_api_ErrT sdrplay_api_ApiVersion(float *v) { *v = SDRPLAY_API_VERSION; return sdrplay_api_Success; }
+sdrplay_api_ErrT sdrplay_api_LockDeviceApi(void) { locked = 1; return sdrplay_api_Success; }
+sdrplay_api_ErrT sdrplay_api_UnlockDeviceApi(void) { locked = 0; return sdrplay_api_Success; }
+sdrplay_api_ErrT sdrplay_api_GetDevices(sdrplay_api_DeviceT *d, unsigned int *n, unsigned int max) {
+    *n = 1; memset(d, 0, sizeof *d); snprintf(d->SerNo, 64, "240309F070"); d->hwVer = hwver; d->valid = 1;
+    d->dev = &token; return sdrplay_api_Success;
+}
+/* The API's own defaults where they matter here: gRdB 50, LNA state 0, AGC
+   at 50 Hz with a -60 dBfs set point (sdrplay_api_tuner.h, _control.h). */
+sdrplay_api_ErrT sdrplay_api_SelectDevice(sdrplay_api_DeviceT *d) {
+    if (!locked) return sdrplay_api_Fail;
+    memset(&dev, 0, sizeof dev); memset(&chA, 0, sizeof chA); memset(&chB, 0, sizeof chB);
+    dev.fsFreq.fsHz = 2e6;
+    chA.tunerParams.gain.gRdB = chB.tunerParams.gain.gRdB = 50;
+    chA.ctrlParams.agc.enable = chB.ctrlParams.agc.enable = sdrplay_api_AGC_50HZ;
+    chA.ctrlParams.agc.setPoint_dBfs = chB.ctrlParams.agc.setPoint_dBfs = -60;
+    return sdrplay_api_Success;
+}
+sdrplay_api_ErrT sdrplay_api_ReleaseDevice(sdrplay_api_DeviceT *d) { return sdrplay_api_Success; }
+const char *sdrplay_api_GetErrorString(sdrplay_api_ErrT e) { return "stub error"; }
+sdrplay_api_ErrT sdrplay_api_GetDeviceParams(HANDLE h, sdrplay_api_DeviceParamsT **p) { *p = &params; return sdrplay_api_Success; }
+sdrplay_api_ErrT sdrplay_api_Init(HANDLE h, sdrplay_api_CallbackFnsT *c, void *ctx) {
+    cbs = *c; note("init", 0); running = 1; pthread_create(&th, 0, pump, 0); return sdrplay_api_Success;
+}
+sdrplay_api_ErrT sdrplay_api_Uninit(HANDLE h) { if (running) { running = 0; pthread_join(th, 0); } return sdrplay_api_Success; }
+sdrplay_api_ErrT sdrplay_api_Update(HANDLE h, sdrplay_api_TunerSelectT t, sdrplay_api_ReasonForUpdateT r,
+                                    sdrplay_api_ReasonForUpdateExtension1T e) {
+    note("update", (int)r); return sdrplay_api_Success;
+}
+sdrplay_api_ErrT sdrplay_api_SwapRspDuoActiveTuner(HANDLE h, sdrplay_api_TunerSelectT *t,
+                                                    sdrplay_api_RspDuo_AmPortSelectT p) { return sdrplay_api_Success; }
+"""
+
+SDRPLAY_INCLUDE = os.environ.get("SHACK_SDRPLAY_INCLUDE", "/usr/local/include")
+
+# What SoapySDRPlay3 0.5.2 set for SoapySDR's overall setGain(RX, 0, g)
+# after setGainMode(false) - Radio's manual gain on `device soapy`
+# (ohscore/devices/soapy.py set_rx_gain) - worked by hand from its source,
+# not from the code under test: Settings.cpp listGains ["IFGR", "RFGR"],
+# getGainRange IFGR 20..59 and RFGR 0..27 on an RSPdx (0..9 on an RSP1A),
+# setGain(IFGR/RFGR) storing (int)value into gain.gRdB/gain.LNAstate; and
+# SoapySDR 0.8.1 lib/Device.cpp's base setGain(dir, ch, value), which for
+# RX gives each element min(left, max - min) + min in that order and
+# subtracts what it took. getGain is the sum of (value - min).
+#   rxGain: (gRdB, LNAstate, getGain)
+SOAPYSDRPLAY3_RSPDX = {
+    0.0: (20, 0, 0.0),
+    10.0: (30, 0, 10.0),
+    10.7: (30, 0, 10.0),      # (int)30.7 = 30; the 0.7 left is (int)0.7 = 0 on RFGR
+    25.0: (45, 0, 25.0),
+    39.0: (59, 0, 39.0),
+    40.0: (59, 1, 40.0),      # ohs-box: manual 40 was gRdB 59 at LNA state 1, whatever rfgain_sel said
+    40.5: (59, 1, 40.0),
+    50.0: (59, 11, 50.0),
+    66.0: (59, 27, 66.0),
+    73.0: (59, 27, 66.0),     # Radio's top; RFGR stops at 27
+}
+SOAPYSDRPLAY3_RSP1A = {40.0: (59, 1, 40.0), 50.0: (59, 9, 48.0), 73.0: (59, 9, 48.0)}
+# sdrplay_api_control.h: AGC_DISABLE 0, AGC_50HZ 2, AGC_CTRL_EN 4 (SoapySDRPlay3's setGainMode(true)).
+AGC_DISABLE, AGC_CTRL_EN = 0, 4
+
+
+class SoapySdrplay3GainTable(unittest.TestCase):
+    """The split itself, with no API at all: always runs."""
+
+    def test_the_split_is_soapysdrplay3s(self):
+        from ohscore.devices.sdrsource import soapy_gain_of, soapy_gain_split
+        for hw, table in ((4, SOAPYSDRPLAY3_RSPDX), (255, SOAPYSDRPLAY3_RSP1A)):
+            for g, (grdb, lna, back) in table.items():
+                with self.subTest(hw=hw, rxGain=g):
+                    self.assertEqual(soapy_gain_split(g, hw), (grdb, lna))
+                    self.assertEqual(soapy_gain_of(grdb, lna, hw), back)
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class SoapySdrplayGainThroughTheApi(unittest.TestCase):
+    """`device soapy`, driver=sdrplay, opened through shack_sdr's binding
+    (no SoapySDRPlay3 here) must hand SDRplay's API the gRdB, LNA state and
+    AGC that SoapySDRPlay3 handed it for the same settings, and report the
+    gain SoapySDRPlay3 reported. Store Radio 0.1.22-beta.3 did not: manual
+    40 became gRdB 39 at LNA state 4, 13 dB hotter on ohs-box."""
+
+    ARGS = "driver=sdrplay,serial=240309F070,rfgain_sel=4"
+
+    @classmethod
+    def setUpClass(cls):
+        cc = shutil.which("cc") or shutil.which("gcc")
+        if cc is None:
+            raise unittest.SkipTest("no C compiler for the stand-in SDRplay API")
+        if not os.path.exists(os.path.join(SDRPLAY_INCLUDE, "sdrplay_api.h")):
+            raise unittest.SkipTest("SDRplay's API headers are not installed here")
+        cls.tmp = tempfile.TemporaryDirectory()
+        src = os.path.join(cls.tmp.name, "stub_sdrplay.c")
+        cls.lib = os.path.join(cls.tmp.name, "libsdrplay_api_stub.so")
+        with open(src, "w") as f:
+            f.write(SDRPLAY_STUB)
+        subprocess.run([cc, "-shared", "-fPIC", "-O1", "-pthread", f"-I{SDRPLAY_INCLUDE}", "-o", cls.lib, src],
+                       check=True)
+        cls.ctl = ctypes.CDLL(cls.lib)
+        cls.ctl.stub_log.restype = ctypes.c_char_p
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        for p in (mock.patch.dict(os.environ, {"SHACK_SDRPLAY_LIB": self.lib}),
+                  mock.patch("ohscore.devices.sdrsource.soapy_has_driver", lambda d: False)):
+            p.start()
+            self.addCleanup(p.stop)
+        self.ctl.stub_clear()
+        self.ctl.stub_set_hwver(4)
+
+    def log(self) -> list[dict]:
+        out = []
+        for line in self.ctl.stub_log().decode().splitlines():
+            what, *kv = line.split()
+            out.append({"what": what, **{k: int(v) for k, v in (x.split("=") for x in kv)}})
+        return out
+
+    def open(self, **cfg):
+        from ohscore.devices import registry
+        dev = registry.DeviceRegistry().make({"device": "soapy", "sampleRate": 2_400_000,
+                                              "soapyArgs": self.ARGS, **cfg})
+        dev.open()
+        self.addCleanup(dev.close)
+        return dev
+
+    def fields(self, entry):
+        return entry["grdb"], entry["lna"], entry["agc"]
+
+    def test_manual_gain_gives_soapysdrplay3s_grdb_and_lna_state(self):
+        dev = self.open(rxGainMode="manual", rxGain=40.0)
+        self.assertEqual(self.fields(self.log()[0]), (59, 1, AGC_DISABLE))   # at Init: ohs-box's settings
+        self.assertEqual(dev.rx_gain_now(), 40.0)
+        self.assertEqual(dev.status()["gain"], 40.0)
+        for g, (grdb, lna, back) in SOAPYSDRPLAY3_RSPDX.items():
+            with self.subTest(rxGain=g):
+                self.ctl.stub_clear()
+                dev.set_rx_gain("manual", g)
+                self.assertEqual(self.fields(self.log()[-1]), (grdb, lna, AGC_DISABLE))
+                self.assertEqual(dev.rx_gain_now(), back)
+                st = dev.status()
+                self.assertEqual((st["gain"], st["gRdB"], st["lnaState"]), (back, grdb, lna))
+
+    def test_another_model_tops_the_lna_state_at_its_own_range(self):
+        self.ctl.stub_set_hwver(255)                 # RSP1A: RFGR 0..9
+        dev = self.open(rxGainMode="manual", rxGain=50.0)
+        self.assertEqual(self.fields(self.log()[0]), (59, 9, AGC_DISABLE))
+        self.assertEqual(dev.rx_gain_now(), 48.0)
+
+    def test_agc_is_soapysdrplay3s_loop_and_set_point_with_the_lna_state_left_alone(self):
+        # Opening under AGC: rfgain_sel's LNA state, AGC_CTRL_EN, -30 dBfs -
+        # not shack_sdr's own AGC_50HZ - and gRdB the API's own (50).
+        dev = self.open(rxGainMode="slow_attack", rxGain=40.0)
+        first = self.log()[0]
+        self.assertEqual(self.fields(first), (50, 4, AGC_CTRL_EN))
+        self.assertEqual(first["setpoint"], -30)
+        self.assertEqual(dev.rx_gain_now(), 34.0)     # SoapySDRPlay3's getGain: (50 - 20) + 4
+        # Fast attack is the same: SoapySDR has one automatic switch.
+        dev.set_rx_gain("fast_attack", 40.0)
+        self.assertEqual(self.fields(self.log()[-1]), (50, 4, AGC_CTRL_EN))
+        # A manual spell moves the LNA state, and AGC afterwards keeps it,
+        # as SoapySDRPlay3's structure kept it.
+        dev.set_rx_gain("manual", 45.0)
+        self.assertEqual(self.fields(self.log()[-1]), (59, 6, AGC_DISABLE))
+        dev.set_rx_gain("slow_attack", 45.0)
+        self.assertEqual(self.fields(self.log()[-1]), (59, 6, AGC_CTRL_EN))
+
+    def test_without_rfgain_sel_the_lna_state_opens_at_0_as_soapysdrplay3_did(self):
+        self.ARGS = "driver=sdrplay"
+        self.open(rxGainMode="slow_attack", sdrplayLna=7)       # sdrplayLna was never read on this path
+        self.assertEqual(self.fields(self.log()[0]), (50, 0, AGC_CTRL_EN))
+
+    def test_an_agc_setpoint_in_soapyargs_is_honoured(self):
+        self.ARGS = "driver=sdrplay,rfgain_sel=4,agc_setpoint=-40"
+        self.open(rxGainMode="slow_attack")
+        self.assertEqual(self.log()[0]["setpoint"], -40)
+
+    def test_the_engine_reports_the_gain_it_was_asked_for(self):
+        r = make_radio(device="soapy", soapyArgs=self.ARGS, soapyAntenna="Antenna A", sampleRate=2_400_000,
+                       vfo=145_650_000.0, mode="fm", rxGainMode="manual", rxGain=40.0, licenceClass="full")
+        r.start()
+        try:
+            st = r.state()
+            self.assertTrue(st["running"], st["error"])
+            pump(r, 5, until=lambda: r.state()["deviceStatus"].get("gRdB") is not None)
+            ds = r.state()["deviceStatus"]
+            self.assertEqual((ds["via"], ds["gain"], ds["gRdB"], ds["lnaState"]), ("sdrplay-api", 40.0, 59, 1))
+        finally:
+            close(r)
+
+
 class StoreClaims(unittest.TestCase):
     """The store form claims the broker device for each kind, and takes the
     serial (USB) or address (network) the claim gives."""
