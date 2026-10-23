@@ -39,6 +39,12 @@ an input that puts this shack_sdr into the state ohs-box was found in.
 - **A wide FM session reads RDS** at 2.4 MS/s on a 240 kS/s channel of
   its own (refused on every receiver before 23/10/2026: every unheld
   session started at 12 kHz).
+
+- **PSK and SSTV (Radio's SDR milestone 2)** at 2.4 MS/s: a PSK session
+  copies two stations on its two channels, an SSTV session paints a
+  picture and saves it, nothing dropped; and as the mode's own decoders,
+  fed the engine's 12 kHz audio while the receive audio is 48 kHz, PSK
+  copies a station on its own channel and one more, and SSTV a picture.
 """
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import logging
@@ -63,6 +69,8 @@ HOME = 145_500_000.0
 RTTY_HZ = 145_300_000.0             # both inside the span around HOME (+-1.08 MHz at 2.4 MS/s)
 CW_HZ = 145_700_000.0
 WFM_HZ = 144_800_000.0             # a broadcast-shaped station on the test air, 700 kHz below the dial
+PSK_HZ = 145_200_000.0             # two PSK31 stations, 1000 and 1650 Hz above this USB dial
+SSTV_HZ = 145_400_000.0            # an SSTV picture's 1900 Hz leader
 TEXT = "CQ TEST DE GM4BRI"
 # An RSP's own DC residue at the centre of every capture, about -45 dBFS:
 # what Radio's DC blocker (dcBlock auto, on for device soapy) takes out
@@ -129,6 +137,52 @@ class Wfm:
         t = (k + np.arange(n)) / FS
         return (self.z[(k + np.arange(n)) % len(self.z)] * np.exp(2j * np.pi * (self.hz - centre) * t)) \
             .astype(np.complex64)
+
+
+class Iq12k:
+    """A signal made at 12 kHz as complex baseband (`z`), looped, put on
+    `hz` at the receiver's rate. Each 12 kHz sample is held, not
+    interpolated as the Rtty class does: its images sit 12 kHz away, where
+    the bank's 12 kHz channel never reaches, and np.interp on three such
+    stations at 2.4 MS/s cost the stand-in so much time that the engine
+    lost receive blocks (overruns) and an SSTV header with them."""
+
+    def __init__(self, hz, z, level_db=-40.0):
+        self.hz = hz
+        z = np.asarray(z, np.complex64)
+        self.z = z * np.float32(10 ** (level_db / 20) / (np.sqrt(np.mean(np.abs(z) ** 2)) + 1e-12))
+
+    def iq(self, k, n, centre):
+        idx = ((k + np.arange(n)) * (12_000.0 / FS)).astype(np.int64) % len(self.z)
+        t = (k + np.arange(n)) / FS
+        return (self.z[idx] * np.exp(2j * np.pi * (self.hz - centre) * t)).astype(np.complex64)
+
+
+def psk_stations(dial, level_db=-40.0):
+    """Two PSK31 stations from shack_sdr's PSK test transmitter on a USB
+    `dial`: G4AAA at 1000 Hz, M0BBB at 1650 Hz - one template, both put
+    at their audio offsets at 12 kHz, so the stand-in mixes one signal."""
+    from shack_sdr import _native
+    parts = []
+    for audio_hz, text in ((1000.0, "CQ DE G4AAA G4AAA K "), (1650.0, "QRZ DE M0BBB M0BBB ")):
+        z = np.frombuffer(_native.testsig_psk(text, rate=12_000.0, centre=0.0, iq=True, lead_s=1.0, tail_s=2.0),
+                          np.complex64)
+        parts.append(z * np.exp(2j * np.pi * audio_hz * np.arange(len(z)) / 12_000.0))
+    n = max(len(p) for p in parts)
+    z = np.zeros(n, np.complex64)
+    for p in parts:
+        z[:len(p)] += p
+    return [Iq12k(dial, z, level_db + 3.0)]
+
+
+def sstv_station(leader_hz, level_db=-40.0):
+    """A Robot 36 picture from shack_sdr's SSTV test transmitter, its 1900 Hz
+    leader on `leader_hz`, then quiet for as long again."""
+    from shack_sdr import sstv
+    z, sent = sstv.testsig("robot36", rate=12_000.0, iq=True, lead_s=1.0, tail_s=2.0)
+    st = Iq12k(leader_hz, np.concatenate([z, np.zeros(len(z), np.complex64)]), level_db)
+    st.sent = sent
+    return st
 
 
 MORSE = {"C": "-.-.", "Q": "--.-", "T": "-", "E": ".", "S": "...", "D": "-..", "G": "--.", "M": "--",
@@ -324,6 +378,71 @@ class ThroughTheRsp(unittest.TestCase):
         self.assertIsNone(view["why"], view)
         self.assertEqual(view["stats"]["dropped"], 0, view)
         self.assertEqual(r.decoders.host.status(sess["id"])["rate"], 240_000.0)
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class PskAndSstvThroughTheRsp(unittest.TestCase):
+    """Milestone 2's decoders on the RSP's path, at its pace (module
+    docstring). Real time: a Robot 36 picture takes 37 s."""
+
+    def setUp(self):
+        self.sstv = sstv_station(SSTV_HZ)
+        RspStandIn.AIR = [*psk_stations(PSK_HZ), self.sstv]
+        RspStandIn.DIP = False
+
+    def test_psk_and_sstv_sessions_at_2_4_ms(self):
+        r, _audio = rsp_radio(self)
+        psk = r.decoders.start("psk", PSK_HZ + 1000.0, {"channels": "0,650"})
+        sst = r.decoders.start("sstv", SSTV_HZ)
+
+        def psk_text(chan):
+            return "".join(i["text"] for i in r.decoders.session(psk["id"])["results"]
+                           if i.get("type") == "text" and abs(float(i["offsetHz"]) - chan) < 100)
+        self.assertTrue(wait(r, lambda: "G4AAA G4AAA" in psk_text(0.0) and "M0BBB M0BBB" in psk_text(650.0)),
+                        r.decoders.session(psk["id"]))
+        self.assertTrue(wait(r, lambda: any(i.get("event") == "done" for i in r.decoders.session(sst["id"])["results"]),
+                             timeout=90.0), r.decoders.session(sst["id"]))
+        done = next(i for i in r.decoders.session(sst["id"])["results"] if i.get("event") == "done")
+        from shack_sdr import sstv
+        self.assertGreater(sstv.score(self.sstv.sent, sstv.png_rgb(r.decoders.file(done["file"])))["psnr"], 20.0)
+        for sid in (psk["id"], sst["id"]):
+            view = r.decoders.session(sid)
+            self.assertIsNone(view["why"], view)
+            self.assertGreater(view["stats"]["fed"], 0, view)
+            self.assertEqual(view["stats"]["dropped"], 0, view)
+
+    def test_psk_and_sstv_as_the_mode_at_2_4_ms_with_48_khz_audio(self):
+        r, audio = rsp_radio(self, mode="psk31", vfo=PSK_HZ)
+        self.assertEqual(r.OUT_RATE, 48_000)
+        events = r.subscribe("events", 50000)
+        r.set(pskChannels=[1650.0])
+        got = []
+
+        def heard(mode, cond):
+            def check():
+                got.extend(e for e in events.drain() if e.get("mode") == mode)
+                return cond()
+            return check
+        by = lambda c: "".join(e["text"] for e in got if e.get("channel") == c)  # noqa: E731
+        self.assertTrue(wait(r, heard("psk31", lambda: "G4AAA G4AAA K" in by(1000.0) and "M0BBB M0BBB" in by(1650.0))),
+                        (by(1000.0), by(1650.0)))
+        # The receive audio is 48 kHz all along; the decoders hear 12.
+        self.assertEqual(audio.out_rate, 48_000)
+        self.assertTrue(audio.chunks)
+        got.clear()
+        r.set(mode="sstv", vfo=SSTV_HZ - 1900.0)
+
+        def whole():
+            # Tuned in part way through a picture, the decoder starts it
+            # from its line syncs (partial); the next one, a cycle later,
+            # comes from its header and is whole.
+            starts = {e["name"]: e for e in got if e.get("state") == "start" and not e.get("partial")}
+            return any(e.get("state") == "done" and e["name"] in starts for e in got)
+        self.assertTrue(wait(r, heard("sstv", whole), timeout=150.0),
+                        [(e["state"], e.get("name"), e.get("partial"), e.get("fmt")) for e in got if e["state"] != "line"])
+        name = next(e["name"] for e in got if e.get("state") == "start" and not e.get("partial"))
+        self.assertGreater(len({e["line"] for e in got if e.get("state") == "line" and e["name"] == name}), 230)
+        self.assertEqual(r.decoders.session("vfo")["stats"]["dropped"], 0)
 
 
 @unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
