@@ -128,6 +128,33 @@ def cal_key(st: dict) -> str | None:
     return f"{device_key(st)}|{band}" if band else None
 
 
+def extra_stage(st: dict) -> tuple[str, float] | None:
+    """A gain stage besides the one `known_gain` reports and `effective`
+    corrects dB for dB - for the SDRplay RSP family (device `sdrplay`),
+    the LNA state, `sdrplayLna`.
+
+    It is not folded into `known_gain` and corrected the same way because
+    its steps are not a fixed number of dB: how much a step of
+    `sdrplayLna` attenuates depends on the band and the RSP model (the
+    API gives states, not dB), unlike `rxGain`'s manual gain, which is
+    linear by construction. So a calibration records this stage's own
+    setting and holds only while it is unchanged - reported as not
+    holding otherwise, the same as the receiver's own AGC being on,
+    rather than silently wrong. Measured on ohs-box (Brian, 23/10/2026):
+    an RSPdx on 2 m, rxGain 40, sdrplayLna 4, calibrated from a repeater
+    ident; moving `rxGain` is corrected for, moving `sdrplayLna` is not.
+
+    Other devices have one gain stage (a Pluto's rxGain, the HL2's
+    hl2Lna) and so have no entry here. Add one if a device gains a
+    second stage whose steps are not linear in dB."""
+    if st.get("device") == "sdrplay":
+        return "sdrplayLna", float(st.get("sdrplayLna", 4))
+    return None
+
+
+_STAGE_LABELS = {"sdrplayLna": lambda: _("the RSP's LNA state")}
+
+
 def known_gain(st: dict) -> float | None:
     """The receiver's front-end gain in dB, if the program knows it. The
     Hermes-Lite 2 has only its LNA setting; a Pluto or SoapySDR radio knows
@@ -159,8 +186,18 @@ def clean_cal(d) -> dict:
             off, gain = float(rec["offset"]), float(rec["gain"])
         except (KeyError, TypeError, ValueError):
             continue
-        if isinstance(k, str) and math.isfinite(off) and math.isfinite(gain) and -250 <= off <= 250:
-            out[k] = {"offset": off, "gain": gain, "when": str(rec.get("when", ""))}
+        if not (isinstance(k, str) and math.isfinite(off) and math.isfinite(gain) and -250 <= off <= 250):
+            continue
+        entry = {"offset": off, "gain": gain, "when": str(rec.get("when", ""))}
+        name, value = rec.get("extraName"), rec.get("extraValue")
+        if isinstance(name, str) and name:
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                value = None
+            if value is not None and math.isfinite(value):
+                entry["extraName"], entry["extraValue"] = name, value
+        out[k] = entry
     return out
 
 
@@ -231,6 +268,16 @@ def effective(store, st: dict) -> CalState:
         return CalState(rec["offset"], False, _(
             "Uncalibrated now: the receiver's own AGC is on, so its gain is unknown and no calibration holds. Set "
             "Receiver gain control to Manual (Settings › Radio)."), "agc", rec)
+    stage = extra_stage(st)
+    if stage is not None:
+        name, value = stage
+        if rec.get("extraName") != name or rec.get("extraValue") is None or \
+                abs(float(rec["extraValue"]) - value) > 1e-9:
+            label = _STAGE_LABELS.get(name, lambda: name)()
+            return CalState(rec["offset"], False, _(
+                "Uncalibrated now: {stage} has changed since this radio was calibrated, and that cannot be "
+                "corrected for the way a manual gain change is. Calibrate again.").format(stage=label),
+                "extra_changed", rec)
     off = rec["offset"] - (g - rec["gain"])
     corrected = abs(g - rec["gain"]) > 1e-9
     if rec["when"] and corrected:
@@ -262,7 +309,11 @@ def calibrate(store, st: dict, measured_dbfs: float | None, known_dbm: float, wh
         raise ValueError(_(
             "The receiver is within 3 dB of full scale and may be clipping; lower its gain or the signal."))
     out = clean_cal(store)
-    out[key] = {"offset": round(known_dbm - measured_dbfs, 2), "gain": g, "when": when}
+    entry = {"offset": round(known_dbm - measured_dbfs, 2), "gain": g, "when": when}
+    stage = extra_stage(st)
+    if stage is not None:
+        entry["extraName"], entry["extraValue"] = stage
+    out[key] = entry
     return out
 
 
