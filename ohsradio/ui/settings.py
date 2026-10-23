@@ -39,7 +39,9 @@ class SettingsDialog(core.SettingsDialog):
               "seqPort": "Serial port", "seqLine": "Line", "seqDelayMs": "Sequence delay",
               "simHourUtc": "Time of day (UTC)", "simAntSwr": "Simulated antenna SWR",
               "cwSkim": "CW skimmer", "cwSkimSquelch": "CW skimmer squelch", "cwSkimMax": "CW skimmer channels",
-              "cwSkimScp": "Download MASTER.SCP"}
+              "cwSkimScp": "Download MASTER.SCP",
+              "scanAuto": "Weekly station scan", "scanHour": "Scan at (hour)", "scanEveryDays": "Scan every",
+              "scanIdleMinutes": "Only after idle for"}
     CHOICE_LABELS = {**core.CHOICE_LABELS,
                      "device": {"sim": "Simulator", "pluto": "Pluto family", "libresdr": "LibreSDR",
                                 "hl2": "Hermes-Lite 2", "rtlsdr": "RTL-SDR (RX only)",
@@ -147,6 +149,17 @@ class SettingsDialog(core.SettingsDialog):
             "codecs some decoders need. A change here applies when the radio next starts."))
         self._add(lay, "decodersMax")
         self._add(lay, "decodeCpuMax")
+        # The FM and DAB lists (View › Stations; ohsradio/bandscan.py): these
+        # apply at once, unlike the two above.
+        self._section(lay, self.tr("Station lists"))
+        note = QLabel(self.tr("Radio lists the FM and DAB stations it can hear by itself, once a week at night "
+                              "while nobody is using it, and hands the radio back the moment anyone does. These "
+                              "apply at once."))
+        note.setWordWrap(True)
+        note.setObjectName("Muted")
+        lay.addWidget(note)
+        for key in ("scanAuto", "scanHour", "scanEveryDays", "scanIdleMinutes"):
+            self._add(lay, key)
         self._section(lay, self.tr("Codecs"))
         note = QLabel(self.tr("codec2, for FreeDV, comes with Radio on Windows and macOS and with your system on "
                               "Linux. Radio never includes the codecs whose patents or licences keep them out of "

@@ -150,6 +150,10 @@ DEFAULTS = {
     "cwSkimMarks": True,
     "cwSkimTab": "spots",
     "cwSkimSort": "freq",
+    # Radio's Stations view (ohsradio/ui/broadcast.py): which list was last
+    # open and how the FM list is ordered ("name" or "freq").
+    "stationsBand": "fm",
+    "stationsSort": "name",
     # Whether the AKP03E controller pad may key the transmitter (K1 held is
     # PTT, through the lease: ohscore/ui/padlink.py). Off until the operator
     # says so in Settings › Control pad; like licenceAck, a missing or

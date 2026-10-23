@@ -63,6 +63,7 @@ SHORTCUTS = [
         ("Ctrl + B", QT_TRANSLATE_NOOP("Shortcuts", "Memories")),
         ("Ctrl + K", QT_TRANSLATE_NOOP("Shortcuts", "CW Activity")),
         ("Ctrl + Shift + D", QT_TRANSLATE_NOOP("Shortcuts", "Decoders")),
+        ("Ctrl + Shift + S", QT_TRANSLATE_NOOP("Shortcuts", "Stations (FM and DAB)")),
         ("Ctrl + D", QT_TRANSLATE_NOOP("Shortcuts", "Second display")),
         ("Ctrl + ,", QT_TRANSLATE_NOOP("Shortcuts", "Settings")),
         ("Ctrl + Shift + R", QT_TRANSLATE_NOOP("Shortcuts", "Record receive IQ / stop")),
@@ -84,9 +85,12 @@ class MainWindow(BaseWindow):
     # decoders running on frequencies of their own (ohscore/ui/
     # decodersview.py, RADIO-SDR-PLAN §4.5), Ctrl+Shift+D. The labels are
     # translated where the window shows them, under MainWindow.
+    # Then the FM and DAB station lists the weekly band scan makes
+    # (ohsradio/ui/broadcast.py), Ctrl+Shift+S.
     EXTRA_VIEWS = [("cwskim", QT_TRANSLATE_NOOP("MainWindow", "CW Activity"), "Ctrl+K"),
-                   ("decoders", QT_TRANSLATE_NOOP("MainWindow", "Decoders"), "Ctrl+Shift+D")]
-    TIGHT_MENU_VIEWS = ("decoders",)
+                   ("decoders", QT_TRANSLATE_NOOP("MainWindow", "Decoders"), "Ctrl+Shift+D"),
+                   ("stations", QT_TRANSLATE_NOOP("MainWindow", "Stations"), "Ctrl+Shift+S")]
+    TIGHT_MENU_VIEWS = ("decoders", "stations")
 
     def watch_view(self) -> str:
         """Watch opens on CW Activity, the band view; Decoders came after it."""
@@ -148,6 +152,12 @@ class MainWindow(BaseWindow):
 
     # ----------------------------------------------------------- the app's parts
     def _header_status(self, head) -> None:
+        # Wide FM's station by the frequency: its name large, STEREO, and
+        # what it is playing (ohsradio/ui/broadcast.py); hidden in other modes.
+        from .broadcast import RdsStrip
+        self.rds_strip = RdsStrip()
+        self.rds_strip.on_state(self.bridge.st)
+        head.addWidget(self.rds_strip)
         col = QVBoxLayout()
         col.setSpacing(6)
         self.lic_chip = Chip(self.tr("Licence"), "lock")
@@ -179,6 +189,8 @@ class MainWindow(BaseWindow):
 
     def _sync_header(self, ch: dict | None) -> None:
         st = self.bridge.st
+        if ch is None or any(k in ch for k in ("rds", "mode")):
+            self.rds_strip.on_state(st)
         if ch is None or any(k in ch for k in ("licenceInfo", "estPep", "licenceClass", "band")):
             title, word, detail, colour, tip = licence_chip_text(st)
             self.lic_chip.set(word, detail, colour, tip, title=title)
@@ -195,10 +207,24 @@ class MainWindow(BaseWindow):
                 self._span = span
                 self.wide.reset_view()
 
+    def on_meter(self, m: dict):
+        super().on_meter(m)
+        strip = getattr(self, "rds_strip", None)
+        if strip is not None:
+            strip.on_meter(m)
+
     # ------------------------------------------------------------- CW Activity
     def make_extra_view(self, key: str):
         if key == "decoders":
             return self._make_decoders_view()
+        if key == "stations":
+            from .broadcast import StationsView
+            old = getattr(self, "stations_view", None)
+            if old is not None:
+                old.detach()
+            self.stations_view = StationsView(self.bridge, self.prefs,
+                                              lambda text: self.on_toast({"level": "warn", "text": text}))
+            return self.stations_view
         from ohscore.ui.cwskimview import CwSkimStore, CwSkimView
         # The store outlives the view (a theme change rebuilds the window):
         # made once, on the first build.

@@ -454,6 +454,14 @@ The same terminal, typing line, queue and macros as CW. The decoder listens at 1
 
 A decoder carries on only while the receiver's span covers its frequency: tune far enough away and its card says *out of view*, and it picks up again when you tune back. They start again with the radio. Up to four run at once, sharing at most a quarter of one processor core; past that the newest pauses until there is room (Settings › Decoders). The mode's own decoder is never paused, and shows in the view too while the mode is RTTY.
 
+### Broadcast FM, DAB and the station lists
+
+**WFM** plays a broadcast FM station in stereo when it sends its pilot, with **RDS**: the station's name appears large beside the frequency, with **STEREO** while the pilot is heard, and what it says it is playing (its RadioText) under the name. Hover over the name for its programme identification and type. Every retune starts the receiver again, so the last station's name never stays on the new frequency. **De-emphasis** (Settings) is 50 µs in Europe and most of the world, 75 µs in the Americas.
+
+**Stations** in the lower panel (Ctrl + Shift + S; on a small window, View › Stations) lists the FM and DAB stations Radio can hear. FM is one line per programme, by name or by frequency, filtered to one programme type if you like; a station heard on several frequencies is listed once, on its strongest, with the others under **Also on**, and one without RDS by its frequency. **Click** a station to listen: WFM on its strongest frequency. The DAB list has every station of every ensemble found; a click plays it (a DAB station takes the receiver until you stop it, as in Decoders).
+
+Radio makes these lists by itself, **once a week, at night** (03:00 by default), but only while nobody is using it: nothing changed for half an hour, no broadcast station playing out loud, not transmitting, recording or decoding. Busy, it tries the next night. **Scan now** makes them at once (about a minute and a half at 2.4 MS/s; DAB needs 2.048 MS/s or more). A scan moves only the receiver, never your dial, and the moment you touch anything it stops and everything is as you left it. Settings › Decoders › Station lists has the hour, how often, how long Radio must have been left alone, and the switch to stop the nightly scans.
+
 ### FT8 and FT4
 
 ![FT8 on 20 m in the simulator, at the band's FT8 dial.](screenshots/main-ft8-20m-1920.png)
@@ -755,6 +763,10 @@ The table below is generated from the Settings window itself (`tools/settings-re
 | --- | --- | --- | --- |
 | Decoders at once | 0 – 16 | 4 | How many decoders may run on frequencies of their own, beside the mode's decoder. *Restarts the radio when saved.* |
 | Processor share for decoders | 5 % of a core – 100 % of a core | 25 % of a core | The share of one processor core the decoders may use between them. Past it the newest is paused until there is room; the mode's own decoder is never paused. *Restarts the radio when saved.* |
+| Weekly station scan | On / Off | On | Make the FM and DAB station lists by itself: once a week, at night, while nobody is using the radio. It gives the radio back the moment anyone does, with everything as it was. |
+| Scan at (hour) | 0 h – 23 h | 3 h | The hour of the night (local time) the weekly station scan is tried. Busy then, it tries the next night. |
+| Scan every | 1 days – 60 days | 7 days | How old a station list may be before the night's scan makes it again. |
+| Only after idle for | 1 min – 720 min | 30 min | How long the radio must have been left alone (nobody tuning or listening) before a night's scan may start. |
 
 #### Licence & plan
 
@@ -863,6 +875,8 @@ The table below is generated from the Settings window itself (`tools/settings-re
 | Ctrl + L | Logbook |
 | Ctrl + B | Memories |
 | Ctrl + K | CW Activity |
+| Ctrl + Shift + D | Decoders |
+| Ctrl + Shift + S | Stations (FM and DAB) |
 | Ctrl + D | Second display |
 | Ctrl + , | Settings |
 | Ctrl + Shift + R | Record receive IQ / stop recording |
