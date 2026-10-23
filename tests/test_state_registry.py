@@ -245,7 +245,11 @@ ADDED_SINCE = {"txRadio", "civPort", "civBaud", "civAddress", "rigctldHost", "ri
                # Who holds the receiver (23/10/2026, Engine.hold_receiver: a DAB
                # session in Radio; always {} in NB) and the controller's host
                # libraries (ohscore/hostlibs.py).
-               "rxOwner", "hostLibs"}
+               "rxOwner", "hostLibs",
+               # What the receiver covers and whether background decoder
+               # sessions pin it (23/10/2026, Radio's pinned span; always {}
+               # in NB).
+               "span"}
 # Keys removed since, deliberately: the LNB's LO and the IC-9700's
 # upconverter LO and side became converter choices (07/10; ohsnb/config.py
 # migrates them - upconverterLo and upconverterSide had been added after
