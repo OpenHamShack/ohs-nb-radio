@@ -290,6 +290,58 @@ end. Code `ohscore/server/autotx.py`, tests `tests/test_server_autotx.py`.
 
 Tested only into the simulator: nothing in this server has keyed a radio.
 
+## Wide FM and listening outside the amateur bands (Radio)
+
+What openhamshack-remote `docs/RADIO-LISTEN-CONTRACT.md` §1-2 asked of the
+server, as built on 23/10/2026 (code `ohscore/dsp/wfm.py`,
+`ohsradio/radio.py`; tests `tests/test_ham_wfm.py`,
+`tests/test_ham_listen.py`, `tests/test_core_wfm.py`).
+
+- **`mode: "wfm"`** is in `api/spec`'s `mode` choices and `state.modes`,
+  and is set like any mode: `POST api/set {"changes": {"mode": "wfm"}}`.
+  Mono, 50 us de-emphasis by default; `wfmDeemphasis` (control level,
+  `50` or `75`, unit us) is the other. The audio is the ordinary
+  `api/audio/rx` stream, 12 kHz mono, so it is flat to about 5 kHz;
+  stereo, RDS and the full 15 kHz wait for the 48 kHz audio contract
+  (RADIO-SDR-PLAN M3). No squelch in wfm: `sqlOpen` reads true.
+- **The passband in state:** `rxFilterLo` and `rxFilterHi`, Hz from the
+  receive dial (`rxDial`), the demodulator's real edges in every mode.
+  wfm is `-90000`/`90000`: a 180 kHz channel, the bank's filter at those
+  edges. In the other modes they are what a client computed before from
+  `filterLo`/`filterHi`, `cwPitch`/`cwWidth` and `amWidth` (FM is
+  ±6250), so drawing from these keys alone is right everywhere.
+- **A receiver too slow for it** (under 240 kS/s; a Hermes-Lite 2 at its
+  default 192 kS/s or at 48) refuses it: `api/set` answers `400` with the
+  sentence, for example "Wide FM needs the receiver to run at 240 kS/s or
+  more, and the hl2 runs at 48 kS/s", and `state.modes.wfm` is
+  `{"decode": false, "encode": false, "missing": "<that sentence>"}`. The
+  RSPdx (2.4 MS/s), RTL-SDR and Pluto (1.2 or 2.4) all take it.
+- **Never transmitted.** In wfm `txBlocked` is "WFM is for listening only:
+  nothing is ever transmitted in it", whatever the dial, the licence or the
+  radio, and every key-up is refused with it (`api/ptt` answers `onAir`
+  false with it in `txError`; `send`, Tune and voice memories alike).
+  `state.modes.wfm.encode` is false.
+- **The listening areas** (contract §2) all receive on an RSPdx: a dial
+  anywhere from the lowest to the highest channel of each is taken, the
+  passband lies inside the receiver's span there, and a station there is
+  heard in the area's mode (tested on an RSPdx-shaped simulator for LW, MW,
+  both CB plans, broadcast FM, airband, marine VHF, DAB Band III's dial,
+  LPD433 and PMR446). On the RSPdx itself transmit is refused as on any
+  receiver ("This radio can only receive"; wfm's own sentence in wfm). On a
+  radio that transmits, outside the amateur bands, the licence refuses
+  with its usual sentence ("118.0056-118.011 MHz is not an amateur band").
+  **LPD433 is the exception:** 433.075-434.775 MHz is inside 70 cm, so a
+  licensed amateur may transmit FM there under the licence and band plan
+  like anywhere else on 70 cm; Remote should not tag that area "RX" as if
+  transmit were impossible.
+- **Dials are whole Hz and are never rounded.** `api/set` keeps
+  `118008333` (an 8.33 kHz channel) to the hertz in `vfo` and `rxDial`,
+  and the engine's channel is cut there exactly (a carrier 1 kHz above it
+  is heard at 1000.0 Hz). Only the radio's centre (DC) moves in 1 kHz
+  steps, which no client sees.
+- **AM is ±4 kHz by default in Radio** (`amWidth` 4000, 1000-5000), wide
+  enough for airband voice and AM broadcast; it was ±3 kHz. NB keeps 3000.
+
 ## What it is not (yet)
 
 - No web console: Remote is the UI. The status page only says how it is.
