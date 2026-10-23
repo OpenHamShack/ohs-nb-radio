@@ -159,5 +159,23 @@ class TooSlowAReceiver(unittest.TestCase):
         self.assertEqual(r.wfm_ch.rate, 384_000.0)
 
 
+
+class DesktopTuning(unittest.TestCase):
+    """The window's click-to-tune and default step in wfm: a click on a
+    broadcast station lands on the 50 kHz raster it sits on, and the
+    arrows step a 100 kHz channel."""
+
+    def test_a_click_lands_on_the_station(self):
+        from ohscore.ui.tuning import DEFAULT_STEP, click_to_dial
+        self.assertEqual(click_to_dial("wfm", 97_712_400.0, {}), 97_700_000.0)
+        self.assertEqual(click_to_dial("wfm", 95_046_000.0, {}), 95_050_000.0)
+        self.assertEqual(DEFAULT_STEP["wfm"], 100_000)
+
+    def test_nb_never_offers_it(self):
+        from ohscore import modegroups
+        from ohsnb import state as nb_state
+        self.assertNotIn("wfm", [m for _g, ms in modegroups.groups(nb_state.MODES) for m in ms])
+
+
 if __name__ == "__main__":
     unittest.main()
