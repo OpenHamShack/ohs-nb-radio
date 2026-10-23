@@ -214,6 +214,16 @@ the first 39 dB is corrected the right way round, and one that moves the
 LNA state makes the calibration not hold (`extra_changed`). A device that
 reports nothing is `"db"`.
 
+Under `"soapysdrplay3"` the LNA state is derived from `rxGain` itself
+(SoapySDRPlay3's own split, above), not read from a setting of its own the
+way `sdrplayLna` is for plain `"sdrplay"` - so a calibration stored on
+this path has no `extraName`/`extraValue` (the table entry below shows
+only `offset`, `gain` and `when`), and the check that the LNA state has
+not moved is made from the stored `gain` at calibration time against the
+dial's current `rxGain`, not from a stored extra field. A `rxGain` change
+that crosses the 39 dB split still reports `extra_changed` - it is just
+not recorded as a separate stage.
+
 The `meter` feed item (ENGINE-API.md) gains four fields on Radio,
 alongside its unchanged raw `rx` (dBFS): `dbm` and `s` (e.g. `"S9+12"`,
 IARU Region 1: S9 is -73 dBm below 30 MHz, -93 dBm at and above, 6 dB per
