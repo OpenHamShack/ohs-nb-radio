@@ -71,7 +71,7 @@ from ohscore.engine import AUDIO_RATE, Engine, TxRefused
 from ohsradio.i18n import _
 
 from . import bands, config, guard, power, state, xvtr
-from .bandscan import BandScanner
+from .bandscan import BandScanner, rds_text
 from .cwskim import CwSkim, off_item
 from .devices import REGISTRY
 from . import plans
@@ -132,6 +132,7 @@ def plan_centre(dial: float, band: bands.Band | None, fs: float, rx_range: tuple
     c = max(c, rx_range[0])
     c = min(c, rx_range[1])
     return round(c / 1000.0) * 1000.0
+
 
 
 class Radio(Engine):
@@ -908,7 +909,7 @@ class Radio(Engine):
         if rev == self._rds_rev:
             return
         self._rds_rev = rev
-        self._status(rds={k: d.get(k) for k in self.RDS_FIELDS})
+        self._status(rds={k: rds_text(d.get(k)) if k in ("ps", "rt") else d.get(k) for k in self.RDS_FIELDS})
 
     def audio_channels(self) -> int:
         if self.held is not None:

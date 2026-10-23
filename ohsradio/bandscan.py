@@ -80,6 +80,17 @@ from pathlib import Path
 
 import numpy as np
 
+def rds_text(v):
+    """PS and RadioText as a person reads them. Stations pad PS to its eight
+    characters and RT to 32 or 64 with spaces (and end RT with a carriage
+    return); every client would otherwise trim them its own way. The
+    library keeps the raw text, so this is done once where Radio publishes it."""
+    if not isinstance(v, str):
+        return v
+    v = v.strip()
+    return v or None
+
+
 from ohsradio.i18n import _
 
 log = logging.getLogger("ohsradio.bandscan")
@@ -163,7 +174,7 @@ def merge_fm(found: list[dict]) -> list[dict]:
             # may have its PI and nothing else yet.
             return next((s[key] for s in group if s.get(key) is not None), None)
         pty = first("pty")
-        out.append({"pi": pi, "ps": first("ps"), "pty": pty, "ptyName": first("ptyName"), "rt": first("rt"),
+        out.append({"pi": pi, "ps": rds_text(first("ps")), "pty": pty, "ptyName": first("ptyName"), "rt": rds_text(first("rt")),
                     "best": freq(best), "alts": [freq(s) for s in group[1:]]})
     for st in alone:
         out.append({"pi": None, "ps": None, "pty": None, "ptyName": None, "rt": None, "best": freq(st), "alts": []})

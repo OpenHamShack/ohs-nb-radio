@@ -68,7 +68,7 @@ class StereoAndRds(unittest.TestCase):
         d = self.rds(r)
         self.assertEqual(list(d), FIELDS)
         self.assertEqual((d["pi"], d["ps"], d["rt"], d["pty"], d["ptyName"], d["stereo"]),
-                         ("C201", "SIM ONE ", RT, 10, "Pop music", True))
+                         ("C201", "SIM ONE", RT, 10, "Pop music", True))
         self.assertIsInstance(d["ts"], float)
         self.assertEqual(r.audio_channels(), 2)
         self.assertEqual(r.wfmdemod.status()["blend"], 1.0)
@@ -93,7 +93,7 @@ class StereoAndRds(unittest.TestCase):
     def test_without_a_pilot_it_is_mono(self):
         r, audio = self.radio(station(stereo=False, ps="SIMNEWS"))
         d = self.rds(r)
-        self.assertEqual((d["ps"], d["stereo"]), ("SIMNEWS ", False))
+        self.assertEqual((d["ps"], d["stereo"]), ("SIMNEWS", False))
         self.assertEqual(r.audio_channels(), 1)
         audio.chunks = []
         pump(r, 2)

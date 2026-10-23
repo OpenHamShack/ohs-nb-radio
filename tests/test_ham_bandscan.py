@@ -100,7 +100,7 @@ class Geometry(unittest.TestCase):
         ]
         got = merge_fm(found)
         self.assertEqual(got, [
-            {"pi": "C201", "ps": "SIM ONE ", "pty": 10, "ptyName": "Pop music", "rt": "Now playing",
+            {"pi": "C201", "ps": "SIM ONE", "pty": 10, "ptyName": "Pop music", "rt": "Now playing",
              "best": {"hz": 88_600_000, "level": -38.0, "stereo": True},
              "alts": [{"hz": 91_300_000, "level": -47.2, "stereo": True},
                       {"hz": 89_900_000, "level": -50.0, "stereo": False}]},
@@ -267,7 +267,7 @@ class TheScan(unittest.TestCase):
         self.assertEqual(sorted(got), [("C201", 88_600_000), ("C3B4", 93_500_000)])
         one = got[("C201", 88_600_000)]
         self.assertEqual((one["ps"], one["pty"], one["ptyName"], one["best"]["stereo"]),
-                         ("SIM ONE ", 10, "Pop music", True))
+                         ("SIM ONE", 10, "Pop music", True))
         self.assertEqual([a["hz"] for a in one["alts"]], [91_300_000])
         self.assertFalse(got[("C3B4", 93_500_000)]["best"]["stereo"])
         dab = sc.view("dab")
@@ -515,3 +515,15 @@ class NbHasNone(test_server.ServerTest):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RdsText(unittest.TestCase):
+    """PS and RadioText are published as a person reads them: stations pad
+    PS to eight characters and RT with spaces and a carriage return."""
+
+    def test_padding_and_carriage_return_are_trimmed(self):
+        from ohsradio.bandscan import rds_text
+        self.assertEqual(rds_text("BBC R3  "), "BBC R3")
+        self.assertEqual(rds_text("Now Playing: Babydoll  \r"), "Now Playing: Babydoll")
+        self.assertIsNone(rds_text("        "))
+        self.assertIsNone(rds_text(None))
