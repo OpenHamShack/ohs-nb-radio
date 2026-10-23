@@ -310,6 +310,10 @@ Choose your radio and a band, and the bandscope fills. Then tune. Everything you
 
 The **Receive** card on the rail has **Volume** and **Mute** (M), **AGC** (Off, Fast, Med, Slow), **Gain** with AGC off, the **Filter low / high** edges (also by dragging the passband's edges on the zoom scope; , and . narrow and widen it), the **Noise blanker** (N) for impulse noise, and **Noise reduction** (Shift + N) with its **NR strength** for steady hiss, then **Auto-tune** (A) and **Best audio** (Shift + A) (both below).
 
+### The line at the centre (DC)
+
+An RTL-SDR, an SDRplay RSP or a Pluto puts a steady line of its own at the exact centre of what it receives. Radio takes it out (Settings › Radio › **DC spike removal**: *Automatic* does so for those radios, and not for the Hermes-Lite 2 or the simulator, which make none), and never lets the centre come near what you are listening to: tune onto it and the receiver moves instead.
+
 ### The S-meter
 
 The **Signal** meter at the top of the **Receive** card has three styles and four units.
@@ -452,7 +456,7 @@ The same terminal, typing line, queue and macros as CW. The decoder listens at 1
 
 **Decoders** in the lower panel (Ctrl + Shift + D; on a small window, View › Decoders) runs decoders that each listen on a frequency of their own, whatever the dial and the mode are doing - several RTTY stations at once beside the one you are working, say. **Add** starts one: the decoder, its frequency in MHz (for RTTY the middle of its two tones; empty takes the dial's), and RTTY's speed (45.45, 50 or 75 baud), shift (170, 425, 450 or 850 Hz) and reversed. **Right-click a signal on a scope › Decode here as** starts one on it without the view. Each gets a card with what it copies; **Tune** puts the dial on it in that mode, **Stop** ends it. They only listen.
 
-A decoder carries on only while the receiver's span covers its frequency: tune far enough away and its card says *out of view*, and it picks up again when you tune back. They start again with the radio. Up to four run at once, sharing at most a quarter of one processor core; past that the newest pauses until there is room (Settings › Decoders). The mode's own decoder is never paused, and shows in the view too while the mode is RTTY.
+While a decoder runs, Radio holds the receiver's span still for it - the stretch the wide scope shows, which then says *Span held for decoders* and marks each decoder's frequency. You tune freely inside it and the decoders carry on undisturbed; anything the scope shows beyond it is greyed. Tuning outside it - the knob, a click, a band button, a memory - asks first (*Tuning to 7.0500 MHz stops: RTTY on 14.0933 MHz. Continue?*): **Yes** stops those decoders and the receiver follows you again, **No** leaves everything as it was. Playing a DAB station asks the same, since DAB takes the receiver to Band III. A decoder added too far from the dial to fit in one span with it is refused, with a sentence saying so. When the last decoder stops, the receiver follows the dial again. They start again with the radio. Up to four run at once, sharing at most a quarter of one processor core; past that the newest pauses until there is room (Settings › Decoders). The mode's own decoder is never paused, and shows in the view too while the mode is RTTY.
 
 ### Broadcast FM, DAB and the station lists
 

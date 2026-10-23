@@ -274,10 +274,8 @@ class MemoriesView(QWidget):
     def recall_index(self, i: int):
         if not 0 <= i < len(self.rows):
             return
-        try:
-            self.bridge.radio.recall(self.rows[i]["name"])
-        except ValueError as e:
-            self.bridge.say(str(e))
+        name = self.rows[i]["name"]
+        self.bridge.tune_with(lambda: self.bridge.radio.recall(name))
 
     def save(self):
         name, ok = QInputDialog.getText(self, self.tr("Save memory"), self.tr("Name for this frequency and mode:"))

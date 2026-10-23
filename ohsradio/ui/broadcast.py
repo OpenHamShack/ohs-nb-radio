@@ -22,6 +22,7 @@ from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QSizePolicy, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
+from ohscore.decoders import Refused
 from ohscore.i18n import fmt
 from ohscore.ui import theme
 from ohscore.ui.controls import Button
@@ -326,7 +327,15 @@ class StationsView(QWidget):
                 return
             if held is not None:
                 decs.stop(held["id"])
-            decs.start("dab", freq, {"block": block, "service": sid})
+            try:
+                decs.start("dab", freq, {"block": block, "service": sid})
+            except Refused as e:
+                # Background decoders pin the span: DAB would take it to
+                # Band III, so the operator says whether to stop them.
+                if e.code != "span_pinned":
+                    raise
+                if self.bridge.ask_stop(e.sessions or [], None, str(e)):
+                    decs.start("dab", freq, {"block": block, "service": sid}, drop_sessions=True)
         except ValueError as e:
             self.say(str(e))
 

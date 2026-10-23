@@ -185,9 +185,10 @@ class SpanPinned(ValueError):
 
     code = "span_pinned"
 
-    def __init__(self, sentence: str, sessions: list[dict]):
+    def __init__(self, sentence: str, sessions: list[dict], freq: float | None = None):
         super().__init__(sentence)
         self.sessions = sessions
+        self.freq = freq          # the receive dial the change would have given
 
 
 SLOT_SEC = {"ft8": 15.0, "ft4": 7.5, "q65": 60.0, "js8": 15.0}

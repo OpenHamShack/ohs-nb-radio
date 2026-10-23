@@ -367,10 +367,7 @@ class MainWindow(BaseWindow):
         if b is not None:
             self.show_chip_dialog(b)
             return
-        try:
-            self.bridge.radio.band(name)
-        except ValueError as e:
-            self.bridge.say(str(e))
+        if not self.bridge.tune_with(lambda: self.bridge.radio.band(name)):
             return
         self.bridge.st.update(self.bridge.radio.state())
         self.on_state(dict(self.bridge.st))

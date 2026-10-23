@@ -10,7 +10,10 @@ Heartbeat and draining live on the same timer on purpose (docs/ENGINE-API.md
 unkeys. Nothing in the window may block this thread for long.
 
 Operator actions go through `set()`, `ptt()` and `send()` here, which turn
-the engine's ValueError sentences into toasts instead of exceptions. `ptt()`
+the engine's ValueError sentences into toasts instead of exceptions. A tune
+out of the span background decoders pin (SpanPinned) asks the operator
+first whether to stop them (`ask_stop`), here, so every way of tuning -
+the knob, a scope click, a band button, a memory - asks the same question. `ptt()`
 and `send()` also hold the UI's one extra gate: nothing keys until the
 operator has acknowledged the licence conditions - except, in an app whose
 face says so, a simulator, which never radiates.
@@ -20,8 +23,11 @@ from __future__ import annotations
 import logging
 import time
 
-from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QTimer, pyqtSignal
+from PyQt6.QtWidgets import QMessageBox, QWidget
 
+from ..engine import SpanPinned
+from ..i18n import fmt
 from .face import Face
 
 log = logging.getLogger("ohsnb.ui")
@@ -41,6 +47,10 @@ class Bridge(QObject):
     tick = pyqtSignal(float)         # dt seconds, once per timer tick (meters' ballistics)
 
     KINDS = ("wide", "zoom", "meter", "lock", "state", "toast", "events")
+    # After a No, how long further refusals of the same kind are only
+    # toasted: a knob turned past the span's edge refuses on every step,
+    # and one question per turn is enough.
+    DECLINED_QUIET_S = 2.0
 
     def __init__(self, radio, parent=None, hz: float = 30.0, face=None):
         super().__init__(parent)
@@ -61,6 +71,10 @@ class Bridge(QObject):
         self.timer.timeout.connect(self.pump)
         self.last = time.monotonic()
         self.frame_ms = 0.0          # how long the last pump took, signal handlers included
+        # How a question is put to the operator (ask_stop): a dialog; a test
+        # puts its own answer here. And when they last said No.
+        self.asker = self._ask_dialog
+        self.declined_at = -1e9
 
     # ------------------------------------------------------------- lifecycle
     def start(self) -> str:
@@ -139,7 +153,12 @@ class Bridge(QObject):
 
     def set(self, authorise: bool = False, quiet: bool = False, **changes) -> bool:
         try:
-            done = self.radio.set(authorise=authorise, **changes)
+            try:
+                done = self.radio.set(authorise=authorise, **changes)
+            except SpanPinned as e:
+                if quiet or not self.ask_stop(e.sessions, e.freq, str(e)):
+                    return False
+                done = self.radio.set(authorise=authorise, drop_sessions=True, **changes)
         except ValueError as e:
             if not quiet:
                 self.say(str(e))
@@ -157,15 +176,59 @@ class Bridge(QObject):
         wrapper rather than plain set() - the same settle-this-frame and
         toast-not-exception treatment, for whichever of mode or mode+vfo
         the engine actually applied."""
-        try:
-            changed = self.radio.set_mode_tuned(mode)
-        except ValueError as e:
-            self.say(str(e))
+        got = []
+        if not self.tune_with(lambda: got.append(self.radio.set_mode_tuned(mode))):
             return False
+        changed = got[-1] if got else None
         if changed:
             self.st.update(changed)
             self.changed.emit(dict(changed))
         return True
+
+    def tune_with(self, fn) -> bool:
+        """Run `fn` (a band button, a memory, a mode's usual frequency: an
+        engine call that tunes), asking first if it would leave the span
+        background decoders pin, and stopping them on a Yes before trying
+        again. False, with the sentence toasted, when it did not tune."""
+        try:
+            try:
+                fn()
+            except SpanPinned as e:
+                if not self.ask_stop(e.sessions, e.freq, str(e)):
+                    return False
+                self.radio.decoders.stop_background()
+                fn()
+        except ValueError as e:
+            self.say(str(e))
+            return False
+        return True
+
+    def ask_stop(self, sessions: list[dict], freq: float | None = None, refusal: str = "") -> bool:
+        """Ask whether to stop `sessions` (the background decoders pinning
+        the span) to tune to `freq`, or to play DAB when `freq` is None.
+        Shortly after a No, only toasts `refusal` (DECLINED_QUIET_S)."""
+        if time.monotonic() - self.declined_at < self.DECLINED_QUIET_S:
+            if refusal:
+                self.say(refusal)
+            return False
+        names = ", ".join(s.get("label") or s.get("decoder", "") for s in sessions)
+        if freq is None:
+            text = QCoreApplication.translate("Bridge", "Playing DAB stops: {sessions}. Continue?").format(
+                sessions=names)
+        else:
+            text = QCoreApplication.translate("Bridge", "Tuning to {freq} stops: {sessions}. Continue?").format(
+                freq=fmt.frequency(int(round(freq)), "MHz", 4), sessions=names)
+        yes = bool(self.asker(text))
+        if not yes:
+            self.declined_at = time.monotonic()
+        return yes
+
+    def _ask_dialog(self, text: str) -> bool:
+        parent = self.parent() if isinstance(self.parent(), QWidget) else None
+        title = QCoreApplication.translate("Bridge", "Stop the decoders?")
+        ans = QMessageBox.question(parent, title, text, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                   QMessageBox.StandardButton.No)
+        return ans == QMessageBox.StandardButton.Yes
 
     def licence_locked(self) -> bool:
         """Whether the licence acknowledgement stops a key-up now. The one

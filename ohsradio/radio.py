@@ -817,7 +817,7 @@ class Radio(Engine):
         sessions = self.decoders.pinned_by()
         raise SpanPinned(_("Tuning to {freq} stops {sessions}: the receiver stays on {lo} to {hi} while they "
                            "run").format(freq=_mhz(rx), sessions=sessions_text(sessions), lo=_mhz(c - half),
-                                         hi=_mhz(c + half)), sessions)
+                                         hi=_mhz(c + half)), sessions, rx)
 
     def _pin_apply(self) -> None:
         """After a set() that _pin_check let through: stop the sessions

@@ -959,10 +959,7 @@ class BaseWindow(QMainWindow):
         st = self.bridge.st
         mode = st.get("mode", "usb")
         dial = click_to_dial(mode, f, st, mode_offset(mode))
-        try:
-            self.bridge.radio.auto_tune(dial)
-        except ValueError as e:
-            self.on_toast({"level": "warn", "text": str(e)})
+        if not self.bridge.tune_with(lambda: self.bridge.radio.auto_tune(dial)):
             return
         self.bridge.st["autoBusy"] = "tune"
         self.rxcard._sync_auto()

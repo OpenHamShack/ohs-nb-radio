@@ -423,17 +423,17 @@
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1508" />
+        <location filename="../ui/window.py" line="1505" />
         <source>chosen</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1509" />
+        <location filename="../ui/window.py" line="1506" />
         <source>auto</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1510" />
+        <location filename="../ui/window.py" line="1507" />
         <source>Workspace: {name} · {how}</source>
         <translation type="unfinished" />
     </message>
@@ -457,6 +457,23 @@
     <message>
         <location filename="../ui/second.py" line="48" />
         <source>ON AIR</source>
+        <translation type="unfinished" />
+    </message>
+</context><context>
+    <name>Bridge</name>
+    <message>
+        <location filename="../ui/bridge.py" line="216" />
+        <source>Playing DAB stops: {sessions}. Continue?</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/bridge.py" line="219" />
+        <source>Tuning to {freq} stops: {sessions}. Continue?</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/bridge.py" line="228" />
+        <source>Stop the decoders?</source>
         <translation type="unfinished" />
     </message>
 </context><context>
@@ -2187,17 +2204,17 @@ from an HSmodem station at the same speed</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/logbook.py" line="283" />
+        <location filename="../ui/logbook.py" line="281" />
         <source>Save memory</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/logbook.py" line="283" />
+        <location filename="../ui/logbook.py" line="281" />
         <source>Name for this frequency and mode:</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/logbook.py" line="297" />
+        <location filename="../ui/logbook.py" line="295" />
         <source>Built-in memories cannot be deleted</source>
         <translation type="unfinished" />
     </message>
@@ -3154,6 +3171,11 @@ Tune to an SSTV signal</source>
     <message>
         <location filename="../ui/scope.py" line="699" />
         <source>Adjust the zoom scope: scale, peaks, waterfall levels and palette</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/scope.py" line="1474" />
+        <source>Span held for decoders</source>
         <translation type="unfinished" />
     </message>
 </context><context>

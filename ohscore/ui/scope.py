@@ -1258,6 +1258,7 @@ class ScopeView(QWidget):
         p.setBrush(rx)
         p.drawPath(tri)
         if self.wide:
+            self._paint_span(p)
             self._paint_alerts(p)
             self._paint_beacons(p)
             self._paint_band_marks(p)
@@ -1425,6 +1426,59 @@ class ScopeView(QWidget):
             if box is not None and box.adjusted(-2, -2, 2, 2).contains(pos):
                 return a
         return None
+
+    # ------------------------------------------------------------ the pinned span
+    # While background decoder sessions pin Radio's span (state `span`,
+    # SERVER-API "The pinned span"), the wide scope says so: a caption,
+    # each session's frequency as a dashed line with its decoder's name,
+    # and anything the view shows beyond the span greyed, since the dial
+    # cannot go there without stopping them (Bridge.ask_stop asks).
+    def span_layout(self) -> tuple[list[tuple[float, str]], tuple[float, float] | None]:
+        """([(x, caption)] for each session holding the span, in view;
+        (x_lo, x_hi) of the span), or ([], None) while nothing pins it."""
+        sp = self.bridge.st.get("span") or {}
+        if not self.wide or not sp.get("pinned"):
+            return [], None
+        marks = []
+        for sess in sp.get("sessions") or []:
+            x = self.fmap.x(float(sess["freqHz"]))
+            if -5 <= x <= self.width() + 5:
+                marks.append((x, str(sess.get("decoder", "")).upper()))
+        return marks, (self.fmap.x(float(sp["loHz"])), self.fmap.x(float(sp["hiHz"])))
+
+    def _paint_span(self, p: QPainter):
+        marks, edges = self.span_layout()
+        if edges is None:
+            return
+        top, bottom = self.r_spec.y(), self.r_wf.bottom()
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(0, 0, 0, 110))
+        if edges[0] > 0:
+            p.drawRect(QRectF(0, top, edges[0], bottom - top))
+        if edges[1] < self.width():
+            p.drawRect(QRectF(edges[1], top, self.width() - edges[1], bottom - top))
+        col = theme.sc("peak", 0.85)
+        p.setFont(self._mark_font())
+        fm = QFontMetricsF(p.font())
+        y = self.r_spec.y() + self.ALERT_Y + 16
+        for x, cap in marks:
+            p.setPen(QPen(col, 1, Qt.PenStyle.DashLine))
+            p.drawLine(QPointF(x, self.r_spec.y()), QPointF(x, self.r_spec.bottom()))
+            w = fm.horizontalAdvance(cap) + 6
+            box = QRectF(min(max(0.0, x + 3), self.width() - w), y, w, 13)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(MARK_BG))
+            p.drawRoundedRect(box, 2.5, 2.5)
+            p.setPen(col)
+            p.drawText(box, Qt.AlignmentFlag.AlignCenter, cap)
+        text = self.tr("Span held for decoders")
+        w = fm.horizontalAdvance(text) + 10
+        box = QRectF(self.width() - w - 8, self.r_spec.y() + 4, w, 15)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(MARK_BG))
+        p.drawRoundedRect(box, 3, 3)
+        p.setPen(col)
+        p.drawText(box, Qt.AlignmentFlag.AlignCenter, text)
 
     def _paint_alerts(self, p: QPainter):
         lay = self.alert_layout()
