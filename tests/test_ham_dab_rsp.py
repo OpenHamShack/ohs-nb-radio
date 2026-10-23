@@ -27,18 +27,18 @@ an input that puts this shack_sdr into the state ohs-box was found in.
 
 - **A station plays at 2.4 MS/s** through this path, with nothing dropped.
 - **RTTY and CW sessions decode** at 2.4 MS/s through it, nothing dropped.
-- **A decoder that never comes back is said, not silent:** the session
-  goes `error` with why `decoder_stuck` and its sentence, the log says so
-  once, a toast says so; stopping it gives the receiver back, and then an
-  RTTY session decodes and the next DAB station plays (a held session has
-  a host of its own, so its stuck thread starves nothing else). Should
-  shack_sdr's search be mended, the same input simply decodes as noise,
-  and the test asks only that nothing false is said either way.
+- **The fading empty block that held the decoder now decodes as noise:**
+  `nosignal`, nothing dropped, nothing said; and after it an RTTY session
+  decodes and the next DAB station plays. With shack_sdr before ohs-libs
+  23b437c this same test stuck the decoder: the session went `error` with
+  why `decoder_stuck`, said once in the log and a toast (the starvation
+  watch, kept for whatever the next stuck decoder is), and, its host being
+  its own, stopping it let the RTTY session and the next station run.
 - **The watch itself** (decoders.starvation) on numbers alone.
 
-Wide FM is not here: a `wfm` session is refused on any receiver
-("The receiver's samples do not suit this decoder (rate)"): Decoders
-starts every unheld session at 12 kHz and wfm needs 144 kHz or more.
+- **A wide FM session reads RDS** at 2.4 MS/s on a 240 kS/s channel of
+  its own (refused on every receiver before 23/10/2026: every unheld
+  session started at 12 kHz).
 """
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import logging
@@ -327,43 +327,35 @@ class ThroughTheRsp(unittest.TestCase):
 
 
 @unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
-class ADecoderThatNeverComesBack(unittest.TestCase):
+class AFadingEmptyBlock(unittest.TestCase):
+    """The input that held ohs-box's decoder thread (module docstring),
+    with the shack_sdr whose search always moves on (ohs-libs 23b437c)."""
+
     def setUp(self):
         RspStandIn.AIR = [Dab(DAB_BLOCK), Rtty(RTTY_HZ, TEXT)]
         RspStandIn.DIP = True
 
-    def test_it_is_said_once_spares_the_others_and_the_next_station_plays(self):
+    def test_decodes_as_noise_says_nothing_false_and_the_next_station_plays(self):
         r, _audio = rsp_radio(self)
         toasts = r.subscribe("toast", 100)
         said = Said()
         self.addCleanup(logging.getLogger("ohscore.decoders").removeHandler, said)
         dab = r.decoders.start("dab", None, {"block": EMPTY_BLOCK, "service": ""})
-        # The dip comes round twice a second; a decoder that sticks on it is
-        # said once the host's two-second ring has filled and a whole watch
-        # window has passed after that (STARVED_S), well inside this.
-        wait(r, lambda: r.decoders.session(dab["id"])["why"] == "decoder_stuck", timeout=20.0)
+        # The fade comes round twice a second; with the old search the
+        # decoder stuck within two seconds and the watch said so five
+        # seconds after that. Twelve seconds of it here, decoded.
+        until = time.monotonic() + 12.0
+        wait(r, lambda: time.monotonic() > until, timeout=20.0)
         view = r.decoders.session(dab["id"])
         stats = view["stats"]
-        # Never again: `starting` with everything it is fed thrown away and
-        # nothing said.
-        self.assertFalse(view["state"] == "starting" and stats["dropped"] > 0 and not view["why"], view)
-        stuck = view["why"] == "decoder_stuck"
-        if stuck:
-            self.assertEqual(view["state"], "error")
-            self.assertEqual(view["whyText"], decoders._why_text("decoder_stuck"))
-            self.assertGreater(stats["dropped"], 0)
-            self.assertLessEqual(stats["cpu"], 0)          # nothing came back out of its decoder
-            self.assertEqual(len(said.about(dab["id"])), 1, said.lines)
-            shown = [it for it in toasts.drain() if "stopped responding" in it.get("text", "")]
-            self.assertEqual([it["level"] for it in shown], ["error"])
-        else:
-            # A shack_sdr whose search moves on: the dip is decoded as the
-            # noise it is, and nothing is said.
-            self.assertEqual((view["state"], stats["dropped"]), ("nosignal", 0), view)
-            self.assertEqual(said.about(dab["id"]), [])
-        # Stopping it gives the receiver back; the engine's own host was
-        # never touched, so an RTTY session decodes, and the next DAB
-        # station plays on a fresh thread of its own.
+        self.assertEqual((view["state"], view["why"]), ("nosignal", None), view)
+        self.assertEqual(stats["dropped"], 0, view)
+        self.assertGreater(stats["fed"], 10 * FS, view)
+        self.assertGreater(stats["cpu"], 0, view)
+        self.assertEqual(said.about(dab["id"]), [])
+        self.assertEqual([it for it in toasts.drain() if "stopped responding" in it.get("text", "")], [])
+        # Stopping it gives the receiver back: an RTTY session decodes, and
+        # the next DAB station plays.
         self.assertTrue(r.decoders.stop(dab["id"]))
         self.assertEqual(r.state()["rxOwner"], {})
         RspStandIn.DIP = False
@@ -371,8 +363,6 @@ class ADecoderThatNeverComesBack(unittest.TestCase):
         rtty = r.decoders.start("rtty", RTTY_HZ)
         self.assertTrue(wait(r, lambda: "CQ TEST" in text_of(r.decoders.session(rtty["id"]))),
                         r.decoders.session(rtty["id"]))
-        rv = r.decoders.session(rtty["id"])
-        self.assertEqual((rv["why"], rv["stats"]["dropped"]), (None, 0), rv)
         self.assertTrue(r.decoders.stop(rtty["id"]))
         centre = float(sdr.load().dab.block_centre(DAB_BLOCK))
         again = r.decoders.start("dab", centre, {"service": MP2})
