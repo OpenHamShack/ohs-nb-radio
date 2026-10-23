@@ -1,0 +1,5 @@
+Contains public sector information licensed under the Open Government Licence v3.0:
+https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+Source: Maritime and Coastguard Agency, Advice Note 1033 - Maritime Safety
+Information (MSI) Leaflet, updated 4 April 2025. The aerial positions are
+OpenHamShack's approximations of the places the leaflet names.

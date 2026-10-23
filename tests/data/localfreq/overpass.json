@@ -1,0 +1,7 @@
+{"version":0.6,"osm3s":{"timestamp_osm_base":"2026-10-23T07:41:20Z"},"elements":[
+ {"type":"node","id":101,"lat":55.95,"lon":-4.77,"tags":{"name":"James Watt Dock Marina","leisure":"marina","vhf":"80;M"}},
+ {"type":"way","id":202,"center":{"lat":55.86,"lon":-4.30},"tags":{"name":"Clyde Port Control","seamark:type":"harbour","contact:vhf":"VHF 12/16"}},
+ {"type":"node","id":303,"lat":55.80,"lon":-4.90,"tags":{"seamark:type":"calling-in_point","seamark:calling-in_point:channel":"Ch 73"}},
+ {"type":"node","id":404,"lat":55.70,"lon":-4.80,"tags":{"name":"Preston Airfield","contact:vhf":"135.480"}},
+ {"type":"node","id":505,"lat":55.71,"lon":-4.81,"tags":{"leisure":"marina","vhf":"none"}}
+]}

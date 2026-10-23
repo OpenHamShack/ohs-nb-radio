@@ -1,0 +1,2 @@
+PMR446, CB (CEPT and UK 27/81) and LPD433 channel plans (facts; CEPT ERC
+Recommendation 70-03 and Ofcom IR 2030), compiled for OpenHamShack Radio.

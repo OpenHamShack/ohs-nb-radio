@@ -1,0 +1,2 @@
+Airfield frequencies extracted from OurAirports (https://ourairports.com/data/),
+which its author has dedicated to the public domain.

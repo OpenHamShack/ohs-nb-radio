@@ -1,0 +1,2 @@
+Marine VHF channel plan from the ITU Radio Regulations, Appendix 18 (facts;
+compiled for OpenHamShack Radio, GPL-3.0-or-later with the rest of it).
