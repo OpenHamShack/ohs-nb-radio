@@ -37,7 +37,7 @@ the desktop apps.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET /` | view | a status page and the Recordings (record, play, download, delete); nothing fetched from elsewhere, one small script that posts to `api/recordings` |
-| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own) |
+| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below) |
 | `GET api/state` | view | `Radio.state()`: every key |
 | `GET api/spec` | view | the settings registry (type, limits, choices, help, auth, restart) |
 | `POST api/set` | control (transmit for `auth` keys) | `{key: value, …}` or `{"changes": {…}}` through `Radio.set()`, all or nothing; answers `{"changed": {…}}`. The station profile's keys (callsign, locator, country, licence, class, own licence, conditions) are refused: they are set on the controller. So are the device addresses and audio devices (the broker and the API own those). |
@@ -72,7 +72,8 @@ the desktop apps.
 
 Decoders running beside the mode's, each on a frequency of its own,
 whatever the dial does (ENGINE-API `decoders`, RADIO-SDR-PLAN §4.4 in the
-openhamshack repo). Milestone 1 has one: RTTY (45.45, 50, 75 Bd; 170, 425,
+openhamshack repo). Two so far: DAB (Radio, below: it takes the whole
+receiver) and RTTY (45.45, 50, 75 Bd; 170, 425,
 450, 850 Hz; normal or reversed), shack_sdr's Rust decoder, the same one
 the RTTY mode now uses. Nothing here transmits. The mode decoder itself is
 unchanged: its decodes still come as `events`, and it is listed as the
@@ -81,21 +82,29 @@ session `vfo` while the mode is decoded by shack_sdr.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET api/decoders` | view | `{"decoders": [entry…], "codecs": [codec…], "limits": {"sessions", "cpuMax", "threads"}, "sessions": [session…]}`. Fetch it once when a view opens. The first fetch after a start may take a moment: it is when the codecs are first looked for. |
-| `POST api/decoders/sessions` | control | `{"decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45, "shift": 170, "reverse": false}}`. `201` with the session, or `400 bad_params`, `404 unknown_decoder`, `409 decoder_unavailable` (`needs` names a codec when that is why; a slot mode, which runs only as the mode, says so too), `409 outside_span`, `429 too_many_sessions` (`decodersMax`, default 4), `503 not_running`. Sessions are kept in the settings and start again with the radio. |
+| `POST api/decoders/sessions` | control | `{"decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45, "shift": 170, "reverse": false}}`. `201` with the session, or `400 bad_params`, `404 unknown_decoder`, `409 decoder_unavailable` (`needs` names a codec when that is why; a slot mode, which runs only as the mode, says so too), `409 outside_span`, `429 too_many_sessions` (`decodersMax`, default 4), `503 not_running`; for DAB also `409 receiver_busy`, `on_air`, `rate_too_low`, `out_of_range` (below). Sessions are kept in the settings and start again with the radio, except DAB's. |
 | `DELETE api/decoders/sessions/{id}` | control | stop it: `{"stopped": true}`; `404 unknown_session` (the `vfo` session stops with its mode, never here) |
 | `GET api/decoders/sessions/{id}?since=<rev>` | view | the session, with `results`: its kept results (the last 500 or 30 minutes) newer than `rev`. Fetch it after a gap in `rev`. `404 unknown_session`. |
-| `POST api/decoders/codecs/rescan` | control | look for codecs again without a restart: `{"codecs": [...]}` |
+| `POST api/decoders/sessions/{id}` | control | `{"params": {"service": "C3A7"}}`: change a running session's parameters live (DAB's station). `200` with the session; `400 bad_params` (a value the decoder refuses, or another DAB block), `404 unknown_session` |
+| `POST api/decoders/codecs/rescan` | control | look for codecs again without a restart: `{"codecs": [...]}`; also looks at the controller's host libraries again (`hostLibs`) |
 
-Not yet: `listen` (a session's audio in place of the demodulator, M3) and
-`api/decoders/files` (a picture a decoder saved, M2).
+A DAB session's sound replaces the demodulator's (below). Not yet:
+`listen` for other sessions (M3) and `api/decoders/files` (a picture a
+decoder saved, M2).
 
 An entry (the catalogue):
 
 ```json
 {"id": "rtty", "family": "amateur", "inputs": ["iq"], "rateHz": 12000.0, "bandwidthHz": 3000.0,
  "outputs": ["text"], "panel": "text", "params": [{"key": "baud", "type": "choice", "choices": [45.45, 50.0, 75.0], "default": 45.45}, ...],
- "needs": [], "engine": "shack_sdr", "available": true, "why": null, "whyText": "", "version": "0.1.0", "fixed": true}
+ "needs": [], "engine": "shack_sdr", "available": true, "why": null, "whyText": "", "version": "0.1.0", "fixed": true,
+ "partial": false, "missing": [], "missingText": ""}
 ```
+
+`partial` says part of what it decodes needs a codec that is `missing`
+(`missingText` the sentence): DAB without faad2 is `available` and
+`partial` with `missing: ["faad2"]`, because old DAB plays and DAB+ does
+not. It is never refused `409 decoder_unavailable` for that.
 
 `panel` says how a client shows the results (`text`, `slots`, `frames`,
 `image`, `meta`), so a new decoder needs no client release. `engine` is
@@ -158,7 +167,7 @@ play what they say.
   header. Without it, a stereo mode is sent averaged (L+R)/2, as a mono
   FM receiver plays it. `audio.stereo` in `api/status` says whether the
   current mode is making stereo now (wide FM with its pilot, once the
-  stereo decoder is in).
+  stereo decoder is in), or a DAB station playing in stereo.
 
 `api/status` `audio`:
 
@@ -326,6 +335,150 @@ end. Code `ohscore/server/autotx.py`, tests `tests/test_server_autotx.py`.
 
 Tested only into the simulator: nothing in this server has keyed a radio.
 
+## DAB (Radio)
+
+DAB and DAB+ from one Band III block through shack_sdr's DAB decoder
+(ohs-libs `rust/shack_sdr/README.md` "DAB"), as a decoder session that
+takes the receiver while it plays. What openhamshack-remote
+`docs/RADIO-LISTEN-CONTRACT.md` §3 asked for, as built on 23/10/2026
+(code `ohscore/decoders.py` "Held sessions", `Engine.hold_receiver`; tests
+`tests/test_ham_dab.py`). Receive only: nothing here keys.
+
+**Start:** `POST api/decoders/sessions` at control level:
+
+```json
+{"decoder": "dab", "freqHz": 222064000, "params": {"block": "11D", "service": "C221"}}
+```
+
+- `freqHz` is the block's centre (the dial a client shows). `params.block`
+  ("11D", any case) may be given instead of it, or as well, when the two
+  must agree. Neither, a frequency that is not a block's centre (within
+  8 kHz), or a block that does not exist is `400 bad_params` with the
+  sentence.
+- `params.service` is the station's service id in hex; `""` or none lists
+  the ensemble without playing anything (a scan: stop when `meta.complete`,
+  about 0.8 s after sync; allow 1.5 s for a block that holds an ensemble).
+- `201` with the session (below). Refused, each with its sentence:
+  `409 receiver_busy` (another DAB session holds the receiver, or an IQ
+  recording is playing), `409 on_air` (transmitting, or automatic
+  transmit armed), `409 rate_too_low` (the receiver runs below 2.048 MS/s:
+  "DAB needs the receiver to run at 2.048 MS/s or more, and the pluto runs
+  at 1.2 MS/s: choose 2.4 MS/s in Settings › Radio (the radio restarts)",
+  or "... and the hl2 cannot (it runs at 0.192 MS/s)" for a radio with no
+  such rate), `409 out_of_range` (outside what the radio receives), `503
+  not_running`. The rate is never changed for the session: that reopens
+  the radio, which on a controller gives the broker's claim back and takes
+  it again, so it stays the operator's choice. The RSPdx (2.4 MS/s) needs
+  nothing; a Pluto, LibreSDR, RTL-SDR or SoapySDR receiver at 1.2 MS/s is
+  told to choose 2.4.
+
+**The receiver is the session's while it runs,** and only one DAB session
+runs at a time.
+
+- The dial (`vfo`) goes to the block's centre and the receiver's centre
+  with it (DC on the block's unused middle carrier). The mode is left as
+  it was; nothing at the dial is demodulated.
+- `rxOwner` in `api/state` and `api/status` says who holds it, `{}` while
+  the operator has it:
+  `{"by": "dab", "session": "ds_3f2a", "block": "11D", "freqHz": 222064000,
+  "prior": {"vfo": 145500000, "mode": "fm", "rptOffsetHz": 600000},
+  "text": "<the tuning sentence below>"}`.
+- Tuning is refused: `api/set` with `vfo`, `mode`, `rit`, `ritOn`,
+  `rptReverse` or `rptShift` answers `409 receiver_busy`, with `error` "The
+  receiver is playing DAB from block 11D: stop the DAB station to tune or
+  change mode" and `rxOwner`. Anything else (volume, mute, settings) still
+  changes.
+- Transmitting is refused: `txBlocked` is "The receiver is playing DAB from
+  block 11D: stop the DAB station to transmit", and `api/ptt` answers
+  `onAir` false with it in `txError`.
+- **Stopping** (`DELETE api/decoders/sessions/{id}`, `api/stop`, or the
+  radio stopping) puts back the dial, mode and repeater offset from
+  before (`prior`), and the receiver follows the dial again. A DAB session
+  is never saved in `decoderSessions` and never starts again with the
+  radio: a start that retuned to Band III by itself would lose the dial.
+
+**Choose the station live:** `POST api/decoders/sessions/{id}
+{"params": {"service": "C3A7"}}`. Another `block` is `400 bad_params`:
+stop the session and start one there.
+
+**Its sound** is Radio's ordinary receive audio, in place of the
+demodulator's: `api/audio/rx` at 48 kHz, the station's own two channels
+with `?channels=2` and L+R averaged without; `audio.stereo` in status is
+true while the station is stereo. An audio recording made meanwhile is
+the station: 48 kHz, two channels when it began in stereo, `freqHz` the
+block's centre. While the station makes no sound (no sync yet, a DAB+
+station without faad2) the stream carries silence after half a second,
+never a gap.
+
+**The session** (`GET api/decoders/sessions/{id}`, and in the list) is the
+usual one with `"panel": "meta"`, `"holdsReceiver": true`, `"block":
+"11D"` and `meta`, the ensemble's feed:
+
+```json
+{"sync": true, "complete": true,
+ "ensemble": {"id": "C1CE", "label": "Shack Test Mux", "shortLabel": "ShackTes"},
+ "services": [{"sid": "C221", "label": "Shack MP2 Tone", "shortLabel": "ShackMP2", "bitrate": 128,
+               "kind": "dab", "subchannel": 1, "protection": "3", "why": null, "whyText": "", "needs": []},
+              {"sid": "C3A7", "label": "Shack DAB+ Data", "shortLabel": "ShackDAB", "bitrate": 64,
+               "kind": "dab+", "subchannel": 2, "protection": "3-A", "why": "needs_codec:faad2",
+               "whyText": "Needs faad2: install it to hear DAB+ stations. Radio never includes it: see Help › Codecs.",
+               "needs": ["faad2"]}],
+ "playing": "C221", "why": null, "whyText": "", "audio": {"codec": "mp2"}, "block": "11D",
+ "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right"}
+```
+
+`ensemble` is null and `services` empty until heard. `dls` is the playing
+station's programme text, null until one is complete and cleared when the
+station changes (it needs no faad2). `audio.codec` is `mp2`, `he-aac`,
+`he-aac-v2` or `aac-lc`. The same feed arrives as `decoder` items of
+`type` `meta` (`fields` is the feed) on `api/events?kinds=…,decoder`
+whenever it changes. `stats` adds DAB's counters (`frames`, `fibsOk`,
+`fibsBad`, `audioFrames`, `audioErrors`, `superframes`, `aus`,
+`auErrors`).
+
+**The codes** (the feed's `why`, a service's, the session's), each with
+its sentence in `whyText`; prefer your own translation of the code:
+
+| Code | `whyText` |
+|---|---|
+| `no_signal` | No DAB signal on this block. |
+| `no_sync` | A signal, but not DAB, or too weak to lock to. |
+| `fic_errors` | DAB heard, but too weak to read the station list. |
+| `service_not_found` | This station is not on this block. |
+| `needs_codec:faad2` | desktop: "Needs faad2: install it to hear DAB+ stations. Radio never includes it: see Help › Codecs."; controller: "Needs faad2: ask your controller's administrator to install it (Controller › Optional libraries) to hear DAB+ stations."; a controller too old for host libraries: "Update the controller to use SDRplay radios and DAB+" |
+| `codec_config`, `codec_open` | faad2 could not play this station's sound. |
+| `unsupported_protection` | This station uses a coding Radio cannot read. |
+
+Without faad2 the ensemble is still found and listed and old DAB plays; a
+DAB+ station chosen says `needs_codec:faad2` and is silent. faad2
+installed later is picked up after `POST api/decoders/codecs/rescan`.
+
+**The simulator** carries one ensemble on 11D (222.064 MHz), shack_sdr's
+DAB transmitter model's test ensemble, the one in the example above (old
+DAB C221 with programme text, a 1 kHz tone left and 1.5 kHz right; DAB+
+C3A7), heard when the simulator runs at 2.4 MS/s (`sampleRate`).
+
+## Host libraries (store form)
+
+What the image may not carry comes from the controller's host:
+`store/radio/module.yaml` declares `host_libraries: [faad2, sdrplay-api]`,
+and a controller that knows the key (platform beta.9 or later) mounts each
+at `/opt/hostlibs/<name>` read-only and sets `SHACK_HOSTLIBS`. Its
+administrator installs them (Controller › Optional libraries); Radio can
+only say so. `hostLibs` in `api/status` and `api/state`:
+
+```json
+{"supported": true, "root": "/opt/hostlibs", "libraries": {"faad2": true, "sdrplay-api": false}, "why": ""}
+```
+
+On an older controller, which installs the app with the key ignored and
+mounts nothing, it is `{"supported": false, "root": null, "libraries": {},
+"why": "Update the controller to use SDRplay radios and DAB+"}`. The status
+page shows that sentence, and it replaces "ask your administrator" for the
+RSP, the faad2 codec and a DAB+ station's `whyText`, because nothing an
+administrator installed would reach the app. Nothing else changes and the
+app runs on. `{}` outside the store form.
+
 ## Wide FM and listening outside the amateur bands (Radio)
 
 What openhamshack-remote `docs/RADIO-LISTEN-CONTRACT.md` §1-2 asked of the
@@ -410,6 +563,17 @@ server, as built on 23/10/2026 (code `ohscore/dsp/wfm.py`,
   before the broker is asked. The image runs SDRplay's API service beside
   the server (store/radio/entrypoint.sh) and asks for the USB bus; the
   controller needs a udev rule for the RSP (Host -> Hardware, plugdev).
+  **Since 23/10/2026 the image carries neither SDRplay's API nor
+  SoapySDRPlay3** (SoapySDRPlay3 is built against SDRplay's headers, which
+  come only in its installer): the API and its service are the
+  controller's host library `sdrplay-api` ("Host libraries" above), and
+  `device` soapy with `driver=sdrplay` opens the RSP through shack_sdr's
+  own binding to that API instead, with nothing in the station's settings
+  changed: `serial=` picks the RSP, `rfgain_sel=` is the LNA state, and
+  the antenna names are SoapySDRPlay3's. `deviceStatus` then has `"via":
+  "sdrplay-api"`. Where SoapySDR does have an SDRplay module (a desktop
+  with SoapySDRPlay3, an image built with `SHACK_STORE_DROP_SDRPLAY=0`),
+  SoapySDR opens it as before.
 - Radio's other receive-only receivers go through shack_sdr's own
   bindings, not SoapySDR (RADIO-SDR-PLAN §6): `device` rtlsdr is the
   broker's `rtlsdr-1` (an RTL-SDR, 0bda:2838; the image carries Debian's
@@ -420,11 +584,11 @@ server, as built on 23/10/2026 (code `ohscore/dsp/wfm.py`,
   names - "Antenna A/B/C", "Hi-Z", "Tuner 1/2 ..."), both reported and
   switched through `soapyAntenna` exactly as the soapy path above is.
   `device` libresdr is the broker's `libresdr-1`, opened by the Pluto
-  driver at the address the claim gives (`plutoUri`). SDRplay's API stays
-  in the image until the platform stages it as a host library (§6.3); an
-  image built with
-  `SHACK_STORE_DROP_SDRPLAY=1` carries none and starts the service from
-  `/opt/hostlibs/sdrplay-api/`, and without it the RSP says "Ask your
-  controller's administrator to install SDRplay's API".
+  driver at the address the claim gives (`plutoUri`). The image starts
+  SDRplay's service from `/opt/hostlibs/sdrplay-api/`; without the host
+  library the RSP says "Ask your controller's administrator to install
+  SDRplay's API (Controller › Optional libraries) to use this radio", and
+  on a controller too old for host libraries "Update the controller to use
+  SDRplay radios and DAB+".
 - Hermes-Lite 2 discovery uses a LAN broadcast the container's network may
   not pass; give its address in the broker's device instead.
