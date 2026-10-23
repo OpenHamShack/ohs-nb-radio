@@ -886,7 +886,15 @@ operator's own entries.
   "sdrplay-api"`. `rxGain` keeps SoapySDRPlay3's meaning on this path
   (since 0.1.22-beta.3's fix): the same gRdB and LNA state for the same
   settings, and `deviceStatus` `gain` is SoapySDR's overall figure, with
-  `gRdB` and `lnaState` beside it. Where SoapySDR does have an SDRplay module (a desktop
+  `gRdB` and `lnaState` beside it. Since shack_sdr's SDRplay source opens
+  the RSP exactly as SoapySDRPlay3 does (ohs-libs shack_sdr README
+  "SDRplay: parity with SoapySDRPlay3"), `deviceStatus` also carries three
+  counters for telling a hot signal from a starved one: `overloads` (the
+  API's power-overload events, now acknowledged and so corrected, where
+  they were silently ignored before 23/10/2026) and `apiGaps`/`apiLost`
+  (packets the API's callback dropped before shack_sdr read them, counted
+  from its own sample numbering - never 0 only because nothing arrived).
+  Where SoapySDR does have an SDRplay module (a desktop
   with SoapySDRPlay3, an image built with `SHACK_STORE_DROP_SDRPLAY=0`),
   SoapySDR opens it as before.
 - Radio's other receive-only receivers go through shack_sdr's own
@@ -898,6 +906,9 @@ operator's own entries.
   "RX"; `sdrplay`'s inputs depend on the RSP model (SoapySDRPlay3's own
   names - "Antenna A/B/C", "Hi-Z", "Tuner 1/2 ..."), both reported and
   switched through `soapyAntenna` exactly as the soapy path above is.
+  `device` sdrplay's `deviceStatus` carries the same `overloads`/`apiGaps`/
+  `apiLost` counters as the soapy path above - the same source, just with
+  its own (not SoapySDRPlay3's) gain sense.
   `device` libresdr is the broker's `libresdr-1`, opened by the Pluto
   driver at the address the claim gives (`plutoUri`). The image starts
   SDRplay's service from `/opt/hostlibs/sdrplay-api/`; without the host
