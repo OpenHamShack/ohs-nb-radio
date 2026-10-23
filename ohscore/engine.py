@@ -601,6 +601,11 @@ class Engine:
         # while the operator has it: {session, by, block, centre, prior}.
         self.held: dict | None = None
         self._hold_tls = threading.local()
+        # Called with a word for what happened whenever a person (or a
+        # client) does something with the radio: a set() that changes
+        # something, a listener arriving, a key-up, a recording... (Radio's
+        # band scanner keeps "idle" with it; client_activity).
+        self.activity_hooks: list = []
         self.play_said_end = False
         # An auto-tune or best-audio request listening to the receive
         # channel (auto_tune, best_audio): set on the caller's thread,
@@ -733,8 +738,14 @@ class Engine:
             if spec["auth"] and not authorise:
                 raise ValueError(_("{key} can only be changed from Settings").format(key=k))
             clean[k] = self.STATE.coerce(k, v)
+        holder = getattr(self._hold_tls, "on", False)
+        if not holder and any(clean[k] != self.st.get(k) for k in clean):
+            # A person's change (the holder's own and a restore are not):
+            # a hold that gives way (a band scan) gives way to it first,
+            # and puts back what it moved before this change applies.
+            self.client_activity("set")
         held = self.held
-        if held is not None and not getattr(self._hold_tls, "on", False):
+        if held is not None and not holder:
             moved = [k for k in self.HELD_KEYS if k in clean and clean[k] != self.st.get(k)]
             if moved:
                 raise ReceiverHeld(self._held_why(held, "tune"))
@@ -1044,6 +1055,9 @@ class Engine:
     def stop(self) -> None:
         if not self.running:
             return
+        # A hold that gives way puts the operator's settings back while the
+        # radio still runs, so the save below writes theirs.
+        self.preempt_receiver("stop")
         self.keyer.shutdown()
         self.tx_clear("keyer")
         self._unkey("", None, "radio stopped")
@@ -1129,6 +1143,13 @@ class Engine:
                     # Playing: what the recording set is not the operator's.
                     spec = self.STATE.spec
                     cfg.update({k: v for k, v in self.play_saved.items() if spec[k]["persist"]})
+                held = self.held
+                if held is not None:
+                    # Held (DAB, a band scan): the dial on disk stays the
+                    # operator's, so a crash meanwhile does not leave the
+                    # radio on Band III at the next start.
+                    spec = self.STATE.spec
+                    cfg.update({k: v for k, v in held["prior"].items() if spec[k]["persist"]})
                 cfg["memories"] = list(self.mem.user)
                 self.dirty = self.dirty_locks = False
                 self.last_save = now
@@ -1628,7 +1649,12 @@ class Engine:
         # hearing your own downlink is how QO-100 is operated.
         vol = 0.0 if s["mute"] else s["volume"] * self._rx_audio_gain(s)
         if held is not None:
-            sound = self.decoders.held_audio(len(audio) / AUDIO_RATE, self.OUT_RATE)
+            if held.get("feed") is not None:
+                # A hold that only listens (a band scan) makes no sound:
+                # silence, so a stream stays a stream.
+                sound = np.zeros(len(audio) * self.OUT_RATE // AUDIO_RATE, np.float32)
+            else:
+                sound = self.decoders.held_audio(len(audio) / AUDIO_RATE, self.OUT_RATE)
             if sound is not None:
                 with self.play_lock:
                     self.audio.play(sound * np.float32(vol))
@@ -1650,8 +1676,12 @@ class Engine:
             except queue.Full:
                 pass
 
-        # Zoom scope around the dial.
+        # Zoom scope around the dial (around the receiver's centre while a
+        # hold that leaves the dial alone has it elsewhere: the dial is
+        # then outside the span, and the zoom would show an alias).
         zc = rx_dial + s["zoomPan"]
+        if held is not None and not held.get("dial", True):
+            zc = held["centre"] + s["zoomPan"]
         self.zoom_ch.set_freq(self._off(zc))
         zy = self.zoom_ch.take(X, starts)
         for _, db in self.zoom_scope.process(zy):
@@ -1665,7 +1695,10 @@ class Engine:
         # retune that gave it the receiver has reached them.
         self.decoders.rx(X, starts, utc)
         if held is not None:
-            self.decoders.rx_held(raw, utc, self._rx_settled())
+            if held.get("feed") is not None:
+                held["feed"](raw, self._rx_settled())
+            else:
+                self.decoders.rx_held(raw, utc, self._rx_settled())
 
         if now >= self.meter_due:
             self.meter_due = now + 0.1
@@ -1711,18 +1744,37 @@ class Engine:
     # tuned, and DAB's centre carrier is the one place in the block that
     # carries nothing, so a receiver centred on it loses nothing to its own
     # DC spur, where a block off to one side would.
-    def hold_receiver(self, sid: str, by: str, centre: float, label: str, min_rate: float) -> None:
+    #
+    # A hold may instead **give way** (`yields`, Radio's band scan): it
+    # takes the receiver only while nobody wants it, and the moment anyone
+    # does - a set() that changes anything, a key-up, a decoder, a
+    # recording, a listener (client_activity) - `yields(why)` is called on
+    # that caller's thread, which gives the receiver back (restoring what
+    # it moved) before that caller goes on. Such a hold refuses nothing, so
+    # it never shows in txBlocked. It may also keep more of the operator's
+    # settings to put back (`keep`), and is fed the device's samples
+    # (`feed(raw, settled)`) instead of a decoder session; it plays silence.
+    # With `dial=False` it moves only the receiver's centre and leaves the
+    # dial where the operator put it: what the transmit guard judges, what
+    # a client shows and what a key-up returns to stay theirs throughout.
+    def hold_receiver(self, sid: str, by: str, centre: float, label: str, min_rate: float, *,
+                      yields=None, feed=None, keep: tuple = (), dial: bool = True) -> None:
         """Give the receiver to session `sid` (a `by` decoder on `label`,
         centred on `centre` Hz, needing `min_rate` S/s). Raises
         decoders.Refused with the code and sentence when it cannot."""
+        # One that gives way gives way to this one, before the lock: giving
+        # way puts settings back through set().
+        self.preempt_receiver(by)
         with self.lock:
             why = self._hold_refusal(centre, min_rate)
             if why is not None:
                 raise Refused(*why)
-            prior = {k: self.st[k] for k in self.HOLD_PRIOR}
-            self.held = {"session": sid, "by": by, "block": label, "centre": float(centre), "prior": prior}
+            prior = {k: self.st[k] for k in self.HOLD_PRIOR + tuple(keep) if k in self.st}
+            self.held = {"session": sid, "by": by, "block": label, "centre": float(centre), "prior": prior,
+                         "yields": yields, "feed": feed, "dial": dial}
         try:
-            self._set_holding(vfo=float(centre))
+            if dial:
+                self._set_holding(vfo=float(centre))
         except ValueError as e:
             with self.lock:
                 self.held = None
@@ -1741,7 +1793,13 @@ class Engine:
                 return
             self.held = None
         try:
-            self.set(**h["prior"])
+            # All of it in one set(), so a value that follows another (the
+            # repeater offset arriving back on a band) is the one kept, and
+            # as the holder: Settings-only keys a band scan keeps, such as
+            # the sample rate, are put back by the engine, never refused as
+            # if a client had asked; unchanged, they change nothing.
+            if any(self.st.get(k) != v for k, v in h["prior"].items()):
+                self._set_holding(authorise=True, **h["prior"])
         except ValueError as e:
             # A dial the radio can no longer reach (another device since):
             # the receiver is the operator's again wherever it is.
@@ -1761,13 +1819,52 @@ class Engine:
                 self.held["session"] = sid
         self._status(rxOwner=self._owner_view())
 
-    def _set_holding(self, **changes) -> dict:
+    def move_hold(self, sid: str, centre: float, label: str | None = None) -> bool:
+        """The holder `sid` retunes the receiver it holds (a band scan's
+        next hop): the dial and the receiver's centre to `centre`. False,
+        and nothing moved, when `sid` no longer holds it."""
+        with self.lock:
+            h = self.held
+            if h is None or h["session"] != sid:
+                return False
+            h["centre"] = float(centre)
+            if label is not None:
+                h["block"] = label
+        if h.get("dial", True):
+            self._set_holding(vfo=float(centre))
+        self._status(rxOwner=self._owner_view())
+        self._held_retune()
+        return True
+
+    def preempt_receiver(self, why: str) -> bool:
+        """A hold that gives way (`yields`) gives the receiver back now,
+        on this thread; True if one did. Nothing for any other hold."""
+        h = self.held
+        fn = h.get("yields") if h is not None else None
+        if fn is None:
+            return False
+        fn(why)
+        return True
+
+    def client_activity(self, what: str) -> None:
+        """Someone did something with the radio (`what`: "set", "listener",
+        "transmit", "decoder", "recording", "playback", "tune"): a hold
+        that gives way does, and the activity hooks hear of it."""
+        if not getattr(self._hold_tls, "on", False):
+            self.preempt_receiver(what)
+        for fn in list(self.activity_hooks):
+            try:
+                fn(what)
+            except Exception:  # noqa: BLE001 - a hook's fault costs the hook, never the caller
+                self.log.warning("activity hook failed", exc_info=True)
+
+    def _set_holding(self, authorise: bool = False, **changes) -> dict:
         """set() on behalf of the session holding the receiver, which alone
         may tune it. A flag of this thread's, so an operator's set() arriving
         on another thread meanwhile is still refused."""
         self._hold_tls.on = True
         try:
-            return self.set(**changes)
+            return self.set(authorise=authorise, **changes)
         finally:
             self._hold_tls.on = False
 
@@ -1780,12 +1877,20 @@ class Engine:
 
     def _held_why(self, h: dict, doing: str) -> str:
         """The sentence for what a held receiver refuses: `doing` "tune" (a
-        set() that would move it) or "transmit" (a key-up)."""
+        set() that would move it) or "transmit" (a key-up). A hold that
+        gives way refuses neither; its sentence says what it is doing."""
+        if h.get("yields") is not None:
+            return self._yielding_why(h)
         if doing == "transmit":
             return _("The receiver is playing DAB from block {block}: stop the DAB station to transmit").format(
                 block=h["block"])
         return _("The receiver is playing DAB from block {block}: stop the DAB station to tune or change "
                  "mode").format(block=h["block"])
+
+    def _yielding_why(self, h: dict) -> str:
+        """What a hold that gives way says it is doing (rxOwner's text)."""
+        return _("The receiver is busy on {label}; it is yours again the moment you use it").format(
+            label=h["block"])
 
     def _hold_refusal(self, centre: float, min_rate: float) -> tuple[str, str] | None:
         """(code, sentence) when the receiver cannot be held now, else None
@@ -1876,6 +1981,7 @@ class Engine:
                 else _("Already listening for best audio"))
 
     def _listen_start(self, kind: str, dial: float | None) -> None:
+        self.client_activity("tune")
         what = self.LISTEN_KINDS[kind]
         if kind == "tune" and dial is None and self._try_guess():
             return
@@ -2368,7 +2474,7 @@ class Engine:
         if not self.running:
             return "The radio is not running"
         held = self.held
-        if held is not None:
+        if held is not None and held.get("yields") is None:
             # Before everything else: the receiver is tuned to a broadcast
             # block, wherever the dial was, and keying there means nothing.
             return self._held_why(held, "transmit")
@@ -2657,6 +2763,10 @@ class Engine:
         return None
 
     def _key(self, req: dict):
+        # Every key-up comes through here: a hold that gives way (a band
+        # scan) gives the receiver back, and the dial with it, before the
+        # guard judges the over.
+        self.client_activity("transmit")
         with self.lock:
             why = self._tx_blocked(req.get("occupied"), req)
             if why:
@@ -3079,6 +3189,7 @@ class Engine:
             self._diag_tick(now)
             self._rec_tick()
             self._play_tick()
+            self._app_tick(now)
             with self.lock:
                 changes, self.pending = self.pending, {}
             if changes:
@@ -3122,6 +3233,10 @@ class Engine:
         """Status the supervisor republishes ten times a second."""
         return {}
 
+    def _app_tick(self, now: float) -> None:
+        """The app's own work on the supervisor, ten times a second while
+        the radio runs (Radio: the nightly band scan)."""
+
     # ------------------------------------------------------------- recording
     def recordings_dir(self) -> Path:
         return host.recordings_dir(self.data_dir)
@@ -3133,6 +3248,8 @@ class Engine:
         setting; 0 is no limit). Returns the .sigmf-data path. Raises
         ValueError with a sentence: not running, already recording, or the
         folder cannot be written. Never touches the transmitter."""
+        # Recording what is heard: a band scan gives the receiver back first.
+        self.client_activity("recording")
         with self.lock:
             if not self.running:
                 raise ValueError(_("Start the radio before recording"))
@@ -3324,6 +3441,7 @@ class Engine:
         is as it was."""
         if self.rec is not None:
             raise ValueError(_("Stop recording before playing a recording"))
+        self.client_activity("playback")
         dev = self._play_device(Path(path), realtime)
         if loop is not None:
             self.set(playLoop=bool(loop))

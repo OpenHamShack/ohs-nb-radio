@@ -291,6 +291,9 @@ class Decoders:
             raise Refused("decoder_unavailable", _why_text(entry.get("why")), needs=(entry.get("needs") or [None])[0])
         if not entry.get("fixed"):
             raise Refused("decoder_unavailable", _why_text("mode_only"))
+        # A decoder wants the receiver where the operator left it: a band
+        # scan holding it gives it back first (Engine.client_activity).
+        self.engine.client_activity("decoder")
         if self.holds_receiver(decoder):
             return self._start_held(m, entry, freq_hz, params)
         try:
