@@ -86,11 +86,12 @@ class MainWindow(BaseWindow):
     # decodersview.py, RADIO-SDR-PLAN §4.5), Ctrl+Shift+D. The labels are
     # translated where the window shows them, under MainWindow. Last, what
     # there is to listen to near the station (ohsradio/ui/localview.py),
-    # Ctrl+Shift+L; like Decoders it leaves the tab row in Tight.
+    # Ctrl+Shift+L; it leaves the tab row below Full (View menu, Ctrl+Shift+L).
     EXTRA_VIEWS = [("cwskim", QT_TRANSLATE_NOOP("MainWindow", "CW Activity"), "Ctrl+K"),
                    ("decoders", QT_TRANSLATE_NOOP("MainWindow", "Decoders"), "Ctrl+Shift+D"),
                    ("local", QT_TRANSLATE_NOOP("MainWindow", "Local"), "Ctrl+Shift+L")]
     TIGHT_MENU_VIEWS = ("decoders", "local")
+    COMPACT_MENU_VIEWS = ("local",)
 
     def watch_view(self) -> str:
         """Watch opens on CW Activity, the band view; Decoders came after it."""
