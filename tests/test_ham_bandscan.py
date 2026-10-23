@@ -475,8 +475,10 @@ class OverTheApi(unittest.TestCase):
     def test_refusals(self):
         s, a = self.req("POST", "/api/scan", {"band": "lw"})
         self.assertEqual((s, a["code"]), (400, "bad_params"))
-        # Automatic transmit armed: only the server knows.
-        self.assertEqual(self.req("POST", "/api/set", {"mode": "ft8", "vfo": 14_074_000.0})[0], 200)
+        # Automatic transmit armed: only the server knows. CW needs no ohsdigi
+        # encoder (autotx.py defaults its "encode" check to True for cw), so
+        # this proves the refusal on a source-tree run with no encoder built.
+        self.assertEqual(self.req("POST", "/api/set", {"mode": "cw", "vfo": 14_060_000.0})[0], 200)
         s, a = self.req("POST", "/api/autotx", {"on": True, "remote": "tab1"}, level="transmit")
         self.assertEqual(s, 200, a)
         s, a = self.req("POST", "/api/scan", {"band": "fm"})
