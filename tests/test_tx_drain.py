@@ -99,15 +99,8 @@ class EchoKeepsTheLastCharacter(unittest.TestCase):
         heard = self.echo("rtty", "CQ DE GM4BRI PSE K", DATA_DIAL, postamble=0.0)
         self.assertIn("PSE K", heard)
 
-    def test_psk31_last_character_with_a_short_idle_tail(self):
-        # Four symbols of idle (0.13 s), not none: shack_sdr's PSK decoder
-        # (Radio's SDR milestone 2) weighs each character with the symbols
-        # after it, so that the end of an over prints no noise, and a
-        # carrier that stops dead on the last bit loses that character on
-        # any channel - psk.py printed it. Real stations send idle at the
-        # end (our encoder's default is a second); a drain that emptied the
-        # queue (up to ~225 ms here) would still cut the K.
-        heard = self.echo("psk31", "CQ DE GM4BRI PSE K", DATA_DIAL, postamble=0.13)
+    def test_psk31_last_character_with_no_idle_tail(self):
+        heard = self.echo("psk31", "CQ DE GM4BRI PSE K", DATA_DIAL, postamble=0.0)
         self.assertIn("PSE K", heard)
 
 
