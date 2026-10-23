@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 
 from .i18n.text import _
 
@@ -309,7 +310,7 @@ def calibrate(store, st: dict, measured_dbfs: float | None, known_dbm: float, wh
         raise ValueError(_(
             "The receiver is within 3 dB of full scale and may be clipping; lower its gain or the signal."))
     out = clean_cal(store)
-    entry = {"offset": round(known_dbm - measured_dbfs, 2), "gain": g, "when": when}
+    entry = {"offset": round(known_dbm - measured_dbfs, 2), "gain": g, "when": when or time.strftime("%Y-%m-%d")}
     stage = extra_stage(st)
     if stage is not None:
         entry["extraName"], entry["extraValue"] = stage
