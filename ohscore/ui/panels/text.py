@@ -1,8 +1,9 @@
 """CW, PSK and RTTY: a terminal, type-ahead transmit, macros - and for the
 keyboard modes a signal browser that lists the carriers in the passband.
 
-PSK decodes several stations at once (shack_sdr's psk decoder, Radio's SDR
-milestone 2): the terminal is the mode's own channel, the one the dial puts
+With sdr.PSK_ON_SHACK_SDR on (it is off: sdr.py says why), PSK decodes
+several stations at once (shack_sdr's psk decoder, Radio's SDR milestone
+2): the terminal is the mode's own channel, the one the dial puts
 at its offset and transmit answers on; each further station - a click on
 it on the zoom, kept in pskChannels - is a line under "Also decoding" with
 the end of what it is sending, and its text is on the zoom at its signal."""
@@ -14,6 +15,7 @@ import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QWidget
 
+from ... import sdr
 from .. import theme
 from ..controls import Button, Card, Slider
 from ..prefs import expand_macro, macro_missing
@@ -239,7 +241,9 @@ class TextPanel(ModePanel):
     def _show_stations(self):
         """The "Also decoding" list: PSK only, one line per further station
         (pskChannels), what it last sent beside its frequency."""
-        psk = self.st("mode") in PSK_MODES
+        # Only the Rust PSK decoder hears more than one station (sdr.py
+        # PSK_ON_SHACK_SDR says why it is off): with psk.py the list stays hidden.
+        psk = self.st("mode") in PSK_MODES and sdr.PSK_ON_SHACK_SDR
         for w in (self.more_title, self.more_clear, self.more):
             w.setVisible(psk)
         chans = [float(c) for c in (self.st("pskChannels") or [])] if psk else []

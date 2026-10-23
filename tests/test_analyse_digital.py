@@ -24,7 +24,6 @@ from ohscore.devices import simsignals
 from ohscore.dsp.bank import Geometry, Source, Synthesis
 from ohscore.modes import ft8 as ft8mod
 from ohscore.modes import js8 as js8mod
-from ohscore import sdr
 from ohscore.modes import psk as pskmod
 from ohscore.modes import q65 as q65mod
 
@@ -116,12 +115,12 @@ class Q65RealDecode(unittest.TestCase):
         self.assertAlmostEqual(q65["dial_mhz_seen"][0], (dial + self.OFFSET_HZ) / 1e6, delta=0.0005)
 
 
-@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+@unittest.skipUnless(pskmod.FS, "psk module import failed")
 class Psk31RealDecode(unittest.TestCase):
     """A real PSK31 message, placed in the "digimodes (2.7 kHz max)"
     segment, decoded by _psk_report's own find_carriers-then-Decoder path
     on *demodulated real audio* (the bug this module's own docstring
-    explains: the PSK decoder was given real audio, not complex IQ)."""
+    explains: psk.Decoder does not take complex IQ)."""
 
     TEXT = "CQ CQ DE GM4BRI GM4BRI PSE K"
     CENTER_HZ = 1200.0

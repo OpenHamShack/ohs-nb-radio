@@ -10,6 +10,7 @@ changed later, change it here too: this is a record, not a cage.
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import unittest
 
+from ohscore import sdr
 from ohscore.state import Registry, add_shared_keys
 from ohsnb import state
 
@@ -239,9 +240,9 @@ ADDED_SINCE = {"txRadio", "civPort", "civBaud", "civAddress", "rigctldHost", "ri
                # milestone 1): how many, their processor share, the saved
                # sessions, and their status.
                "decodersMax", "decodeCpuMax", "decoderSessions", "decoders",
-               # Milestone 2 (ohscore/decoders.py, modes/sdrmode.py): how many
-               # decoded pictures are kept, and PSK's extra stations.
-               "decoderFilesKeep", "pskChannels",
+               # Milestone 2 (ohscore/decoders.py): how many decoded pictures
+               # are kept. (PSK's extra stations, pskChannels, below.)
+               "decoderFilesKeep",
                # The receive passband in state (23/10/2026, Engine._rx_passband):
                # wide FM's 180 kHz, which no client could know, for Remote's overlay.
                "rxFilterLo", "rxFilterHi",
@@ -253,6 +254,10 @@ ADDED_SINCE = {"txRadio", "civPort", "civBaud", "civAddress", "rigctldHost", "ri
                # sessions pin it (23/10/2026, Radio's pinned span; always {}
                # in NB).
                "span"}
+# PSK's extra stations: a key only while the Rust PSK decoder is switched on
+# (ohscore/sdr.py PSK_ON_SHACK_SDR, off while its library fix is parked).
+if sdr.PSK_ON_SHACK_SDR:
+    ADDED_SINCE.add("pskChannels")
 # Keys removed since, deliberately: the LNB's LO and the IC-9700's
 # upconverter LO and side became converter choices (07/10; ohsnb/config.py
 # migrates them - upconverterLo and upconverterSide had been added after

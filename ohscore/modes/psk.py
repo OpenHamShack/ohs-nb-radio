@@ -1,17 +1,6 @@
 """PSK31/63/125: BPSK, differential encoding, Varicode framing, 12 kHz mono
 float32 audio.
 
-This is the transmit half, the Varicode table and the carrier browser
-(find_carriers). Receive is shack_sdr's Rust `psk` decoder since Radio's
-SDR milestone 2 (modes/sdrmode.py PskDecoder), which hears several
-stations at once: the Python decoder that lived here was removed once its
-scores on a synthetic sweep were captured as the golden numbers the Rust
-one must never fall below (ohs-libs shack_sdr testdata/psk/golden.json,
-from this module at 27d591b). Its notes on why a receiver
-mixes with a phase-continuous NCO, why the coarse AFC works on a wide
-branch and why idle zeros are not counted in pairs went with it into the
-Rust decoder's own comments (src/psk/mod.rs).
-
 Three design choices worth writing down because they are not obvious from
 the wire format alone:
 
@@ -53,6 +42,7 @@ Everything here is the plain differential-BPSK branch only.
 from __future__ import annotations
 
 import numpy as np
+from typing import Callable
 
 FS = 12_000.0
 
@@ -186,6 +176,307 @@ class Encoder:
         audio = (shaped * carrier).astype(np.float32)
         peak = float(np.max(np.abs(audio))) or 1.0
         return (audio / peak * 0.95).astype(np.float32)
+
+
+class Decoder:
+    """Differential BPSK receiver, built the way fldigi's is rather than the
+    way the first version of this module was:
+
+    1. **Mix to baseband with a phase-continuous NCO** -- the phase is an
+       accumulator, advanced by `freq * n` for each chunk, so the AFC can
+       change `freq` without moving the phase of anything already mixed.
+    2. **Matched filter, then decimate** to 24 samples a symbol. The filter is
+       the transmit pulse itself (one symbol of rectangle convolved with one
+       symbol of Hann -- exactly what Encoder.render shapes with), with a
+       zero-forcing correction folded in (see __init__), about 2 baud wide:
+       everything else in a 3 kHz passband is thrown away before any
+       decision is made.
+    3. **AFC in two parts.** A coarse one (_acquire) squares a wider branch
+       of the baseband -- z^2 removes the +-180 deg data, leaving a tone at
+       twice the offset -- and FFTs a second of it: wide capture range, high
+       processing gain, used to get onto a signal. A fine one (in _decide)
+       nudges the NCO by the doubled phase change between symbols, at a low
+       gain, to follow drift once on it.
+    4. **Symbol timing from the envelope.** Each symbol's |z| is accumulated
+       into a 24-bin histogram indexed by absolute sample position modulo a
+       symbol; idle reversals dip to zero at symbol boundaries, so the
+       circular centroid of that histogram is the symbol centre. It is
+       re-estimated every symbol, which tracks a sound card whose clock is
+       not quite 12 kHz as well as finding the timing in the first place;
+       runs of unreversed symbols add a flat floor that does not bias it.
+    5. **Differential detection** at the chosen sample: a 0 bit is a phase
+       reversal since the previous symbol, which needs no carrier phase.
+
+    A squelch -- the smoothed mean of cos(2 * phase change), 1 for a clean
+    BPSK signal and 0 for noise (fldigi's "quality" metric) -- decides
+    whether decoded characters are emitted, so noise between overs does not
+    print a stream of garbage; everything else runs regardless so the loops
+    are already settled when a signal appears.
+
+    Why the rewrite: the previous decoder mixed each block with
+    `exp(-2j*pi*freq*n/FS)` using the *absolute* sample count n, so every AFC
+    step, however small, rotated the constellation by 2*pi*dfreq*n/FS -- an
+    angle that grows with time since reset. Clean audio never moved the AFC,
+    so loopback tests passed; with noise the AFC jittered by hundredths of a
+    hertz, which after ten seconds is tens of degrees at every block edge,
+    and copy fell apart at an SNR any PSK31 receiver copies perfectly. It
+    also took its frequency and timing once, from the first 1.5 s it was
+    fed, and never again: a decoder started on noise (the engine creates it
+    when the mode is selected, long before our own echo comes back) was
+    locked to nothing for ever. And it counted idle zeros in pairs, so an
+    odd-length preamble ate the first character's leading bit.
+
+    Measured (tests/test_modes_psk.py has the cases): complete copy of a
+    28-character message at 10 dB SNR in the symbol bandwidth (-10 dB in
+    3 kHz) on frequency, 10 Hz off, and drifting; within 1-2 dB of the
+    DBPSK bit-error-rate bound below that.
+
+    Nothing here loops per audio sample: work is done in whole-symbol
+    chunks with numpy, and the Python loop runs once per symbol (31-125 per
+    second)."""
+
+    SPS = 24             # decimated samples per symbol
+    ACQ_SYMS = 32        # coarse AFC looks at this many symbols (1 s at PSK31)...
+    ACQ_EVERY = 8        # ...every this many
+    ACQ_PROMINENCE = 20.0  # spectral peak over median before it is believed (13 dB)
+    AFC_GAIN = 0.08      # fine AFC, per symbol
+    LOST_SYMS = 32       # symbols below the squelch before the coarse AFC may take over again
+    SQUELCH = 0.3        # quality below which characters are not emitted
+
+    def __init__(self, emit: Callable[[dict], None], variant: str = "psk31", center: float = 1000.0,
+                 afc_range: float = 15.0, **_opts):
+        self.emit = emit
+        self.variant = variant
+        self.baud = BAUDS[variant]
+        self.center0 = center
+        self.afc_range = afc_range
+        self.t_n = int(round(FS / self.baud))
+        self.dec = self.t_n // self.SPS
+        hann = 0.5 - 0.5 * np.cos(2 * np.pi * (np.arange(self.t_n) + 0.5) / self.t_n)
+        pulse = np.convolve(np.ones(self.t_n), hann / hann.sum())
+        # The matched filter alone leaves 13 % of each neighbouring symbol at
+        # the sampling instant (the pulse is two symbols long, so pulse *
+        # pulse is four), which closes the eye of idle reversals by a quarter
+        # -- 2.6 dB lost on exactly the pattern a weak signal is acquired on.
+        # A five-tap zero-forcing correction folded into the same FIR (taps
+        # a symbol apart, solved from the pulse's own autocorrelation) takes
+        # the ISI to 0.2 % for about 0.15 dB of noise bandwidth.
+        # Autocorrelation at 0 and 1 symbol; at 2 and beyond it is exactly 0
+        # (the pulse is shorter than two symbols).
+        r = [float(np.dot(pulse[m * self.t_n:], pulse[:len(pulse) - m * self.t_n])) for m in range(2)]
+        K = 2
+        G = np.array([[r[abs(i - j)] if abs(i - j) < 2 else 0.0 for j in range(2 * K + 1)]
+                      for i in range(2 * K + 1)])
+        c = np.linalg.solve(G, np.eye(2 * K + 1)[K])
+        h = np.zeros(len(pulse) + 2 * K * self.t_n)
+        for j, cj in enumerate(c):
+            h[j * self.t_n:j * self.t_n + len(pulse)] += cj * pulse
+        self._h = h / h.sum()
+        # The AFC's own, wider filter: flat to well past +-(afc_range + baud/2)
+        # and symmetric about the NCO, so that a signal sitting off-centre
+        # keeps both of its sidebands. See _acquire for why the matched filter
+        # cannot be used there.
+        n = np.arange(len(h)) - (len(h) - 1) / 2   # same length as _h: one sliding window serves both
+        cut = 2.5 * self.baud / FS
+        w = 2 * cut * np.sinc(2 * cut * n) * np.hamming(len(h))
+        self._h_afc = w / w.sum()
+        self.reset()
+
+    def reset(self) -> None:
+        self._raw = np.zeros(0, dtype=np.float64)        # audio not yet a whole symbol
+        self._phase = 0.0                                # NCO phase, cycles
+        self._freq = self.center0
+        self._hist = np.zeros(len(self._h) - 1, dtype=np.complex128)  # filter memory
+        self._z = np.zeros(0, dtype=np.complex128)       # decimated baseband, matched-filtered
+        self._w = np.zeros(0, dtype=np.complex128)       # decimated baseband, AFC branch
+        self._wf = np.zeros(0)                           # the NCO frequency each _w sample was mixed at
+        self._z0 = 0                                     # absolute index of _z[0]
+        self._next = float(self.SPS)                     # absolute index of the next symbol centre
+        self._env = np.zeros(self.SPS)
+        self._n_sym = 0
+        self._chunks = 0
+        self._locked = False      # the coarse AFC has seen a carrier and put us on it
+        self._lost = 0            # consecutive symbols with quality below the squelch
+        self._q = 0.0
+        self._prev = 0j
+        self._bits = ""
+        self._text = ""
+
+    @property
+    def text(self) -> str:
+        return self._text
+
+    @property
+    def freq(self) -> float:
+        return self._freq
+
+    @property
+    def quality(self) -> float:
+        return self._q
+
+    def feed(self, audio: np.ndarray, t: float) -> None:
+        self._raw = np.concatenate([self._raw, np.asarray(audio, dtype=np.float64)])
+        n = len(self._raw) // self.t_n
+        for k in range(n):
+            self._chunk(self._raw[k * self.t_n:(k + 1) * self.t_n])
+        self._raw = self._raw[n * self.t_n:]
+
+    def _chunk(self, x: np.ndarray) -> None:
+        """One symbol's worth of audio: mix, filter, decimate, AFC, then
+        whatever symbol decisions the new samples complete."""
+        ph = self._phase + self._freq * np.arange(len(x)) / FS
+        self._phase = (self._phase + self._freq * len(x) / FS) % 1.0
+        buf = np.concatenate([self._hist, x * np.exp(-2j * np.pi * ph)])
+        self._hist = buf[len(x):]
+        L = len(self._h)
+        win = np.lib.stride_tricks.sliding_window_view(buf, L)[self.dec - 1::self.dec]
+        y = win @ self._h
+        self._z = np.concatenate([self._z, y])
+        keep = self.ACQ_SYMS * self.SPS
+        self._w = np.concatenate([self._w, win @ self._h_afc])[-keep:]
+        self._wf = np.concatenate([self._wf, np.full(len(y), self._freq)])[-keep:]
+        self._chunks += 1
+        if self._chunks % self.ACQ_EVERY == 0 and len(self._w) >= keep:
+            self._acquire()
+        self._symbols()
+
+    def _acquire(self) -> None:
+        """Coarse AFC: where is the carrier, to a quarter of a hertz, over the
+        last ACQ_SYMS symbols? Squaring the wide branch removes the BPSK
+        data and leaves a tone at twice the offset; an FFT of a second of it
+        has enough processing gain to find that tone at an SNR
+        where the per-symbol loop below cannot yet be trusted, and a capture
+        range of the whole AFC window.
+
+        It only moves the NCO when nothing else has the signal: before the
+        first lock, or after the fine loop has been incoherent for LOST_SYMS
+        symbols. Allowed to overrule a working fine loop it does harm, because
+        it measures the past: when the transmitting station's TX lock stepped
+        its frequency 6 Hz mid-preamble (our own echo through the simulator
+        does exactly that), the fine loop followed within half a second and
+        this pulled it back to where the signal *had* been, three times.
+
+        On the wide branch, not the matched filter: PSK31 idle is two tones
+        at carrier +-baud/2, and with the carrier 10 Hz off-centre the matched
+        filter (about +-1 baud wide) passes one of them far more than the
+        other, so a squaring estimator behind it finds that sideband --
+        15.6 Hz out, which differential detection cannot even notice (half a
+        turn per symbol looks like a lock) and which inverts every bit.
+        Measured, not theorised: the first cut of this loop did exactly that
+        with a 10 Hz offset."""
+        # (No mean removal: when we are already on frequency the tone *is*
+        # the mean, and subtracting it once made this jump 15 Hz away to a
+        # sideband of the idle pattern.)
+        # The NCO has moved while this buffer filled (the fine loop follows
+        # drift, and a jump moves it at once), so a tone that sat still in
+        # the air is smeared across it. Re-mix every sample to the current
+        # NCO frequency first -- a running phase of (now - then) -- and the
+        # buffer reads as if it had been taken at one frequency. Without
+        # this, the estimate after the transmitting station's own TX lock
+        # stepped its frequency mid-preamble landed 5 Hz wrong, twice.
+        rate = self.SPS * self.baud
+        corr = np.cumsum(self._freq - self._wf) / rate
+        sq = (self._w * np.exp(-2j * np.pi * corr)) ** 2
+        nfft = 4 * len(sq)
+        spec = np.abs(np.fft.fft(sq * np.hanning(len(sq)), nfft)) ** 2
+        f2 = np.fft.fftfreq(nfft, 1.0 / rate) / 2               # offset each bin means
+        lo, hi = self.center0 - self.afc_range, self.center0 + self.afc_range
+        band = np.abs(f2) <= self.afc_range + 2.0
+        k = int(np.argmax(np.where(band, spec, 0.0)))
+        if spec[k] < self.ACQ_PROMINENCE * float(np.median(spec[band])):
+            if self._q < self.SQUELCH:
+                self._locked = False       # no carrier here any more
+            return
+        if self._locked and self._lost < self.LOST_SYMS:
+            return
+        self._locked = True
+        # Parabolic interpolation between bins (on log power): a jump that
+        # lands within a fraction of a bin leaves the fine loop nothing to do.
+        a, b, c = (np.log(spec[(k + m) % nfft] + 1e-30) for m in (-1, 0, 1))
+        frac = 0.5 * (a - c) / (a - 2 * b + c) if (a - 2 * b + c) < 0 else 0.0
+        offset = (f2[k] + frac * rate / nfft / 2)
+        new = float(np.clip(self._freq + offset, lo, hi))
+        if abs(new - self._freq) > self.baud / 10:
+            self._freq = new
+            # Every decision so far was made off frequency: forget them, and
+            # the quality they earned, rather than print what they spelt.
+            self._bits = ""
+            self._q = 0.0
+            self._lost = 0
+
+    def _symbols(self) -> None:
+        half = self.SPS // 2
+        bins = np.arange(self.SPS)
+        rot = np.exp(2j * np.pi * bins / self.SPS)
+        while True:
+            c = int(round(self._next))
+            i = c - self._z0
+            if i + half > len(self._z):
+                break
+            w = self._z[i - half:i + half]
+            idx = (np.arange(c - half, c + half)) % self.SPS
+            a = max(1.0 / (self._n_sym + 1), 1.0 / 16)
+            self._env[idx] = (1 - a) * self._env[idx] + a * np.abs(w)
+            tau = (np.angle(np.sum(self._env * rot)) / (2 * np.pi) * self.SPS) % self.SPS
+            err = (tau - self._next % self.SPS + half) % self.SPS - half
+            z = self._z[i]
+            self._next += self.SPS + 0.5 * err
+            self._n_sym += 1
+            self._decide(z)
+        keep = int(round(self._next)) - half - self._z0 - 1
+        if keep > 0:
+            self._z = self._z[keep:]
+            self._z0 += keep
+
+    def _decide(self, z: complex) -> None:
+        d = z * np.conj(self._prev)
+        self._prev = z
+        mag = abs(d)
+        if mag > 0:
+            c2 = complex(d * d) / (mag * mag)
+            self._q = 0.95 * self._q + 0.05 * c2.real
+            self._lost = self._lost + 1 if self._q < self.SQUELCH else 0
+            # Fine AFC: the phase change between symbols, doubled to remove
+            # the data, is 4*pi*offset*T. Per symbol, at a low gain -- a time
+            # constant of ~12 symbols -- because each estimate is as noisy as
+            # the symbol itself, and an AFC that follows the noise rotates
+            # the constellation by its own jitter (a 2.7 Hz rms wobble at
+            # 10 dB, measured, with the faster wide-band loop this replaced).
+            # Its range is +-baud/4; _acquire handles anything further out,
+            # and until it has, this loop stays still: outside its range it
+            # walks the wrong way (measured), and it would smear the very
+            # buffer _acquire is about to measure.
+            err = np.angle(c2) / (4 * np.pi) * self.baud if self._locked else 0.0
+            self._freq = float(np.clip(self._freq + self.AFC_GAIN * err,
+                                       self.center0 - self.afc_range, self.center0 + self.afc_range))
+        bit = "1" if d.real >= 0 else "0"
+        if bit == "0" and not self._bits:
+            # Every varicode character starts with a 1, so zeros before one
+            # are idle, whatever their number. Counting them in pairs instead
+            # (the earlier rule) made the first character after an odd-length
+            # idle run -- which is any real station's preamble half the time --
+            # lose its leading bit and decode as something else.
+            return
+        self._bits += bit
+        if self._bits.endswith("00"):
+            code = self._bits[:-2]
+            self._bits = ""
+            ch = REVERSE_VARICODE.get(code) if code else None
+            if ch and self._locked and self._q >= self.SQUELCH:
+                self._text += ch
+                self.emit({"mode": self.variant, "center": self._freq, "df": self._freq,
+                           "snr": round(self._snr_db(), 1), "text": ch})
+        elif len(self._bits) > 24:
+            # Runaway: no terminator in 24 bits cannot be a character (the
+            # table tops out well short of that) -- noise; drop it.
+            self._bits = ""
+
+    def _snr_db(self) -> float:
+        """Rough SNR in the symbol-rate bandwidth from the phase scatter:
+        for Gaussian phase noise E[cos 2x] = exp(-2 var), and the variance of
+        a phase *difference* is about 1/(Es/N0)."""
+        q = min(max(self._q, 1e-3), 0.999)
+        return 10 * np.log10(1.0 / (-0.5 * np.log(q)))
 
 
 def find_carriers(audio: np.ndarray, fs: float = FS, min_hz: float = 200.0,

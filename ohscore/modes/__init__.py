@@ -62,8 +62,9 @@ _rtty_entry = ModeInfo(
 
 
 def _psk_entry(variant: str, label: str, passband: tuple[float, float]) -> ModeInfo:
-    """PSK31/63/125: shack_sdr's Rust `psk` decoder for receive (RADIO-SDR-PLAN
-    §8.5 M2), several stations at once (modes/sdrmode.py PskDecoder);
+    """PSK31/63/125 with sdr.PSK_ON_SHACK_SDR on: shack_sdr's Rust `psk`
+    decoder for receive (RADIO-SDR-PLAN §8.5 M2), several stations at once
+    (modes/sdrmode.py PskDecoder);
     psk.py's encoder for Enable TX and send(), unchanged - it renders all
     three speeds, so PSK125 transmits as the other two do."""
     return ModeInfo(
@@ -166,9 +167,14 @@ _kgstv_entry = ModeInfo(
 MODES: dict[str, ModeInfo] = {
     "cw": _text_entry("cw", "CW", cw, offset=700.0, passband=(400.0, 1000.0)),
     "rtty": _rtty_entry,
-    "psk31": _psk_entry("psk31", "PSK31", (970.0, 1030.0)),
-    "psk63": _psk_entry("psk63", "PSK63", (940.0, 1060.0)),
-    "psk125": _psk_entry("psk125", "PSK125", (875.0, 1125.0)),
+    **({"psk31": _psk_entry("psk31", "PSK31", (970.0, 1030.0)),
+        "psk63": _psk_entry("psk63", "PSK63", (940.0, 1060.0)),
+        "psk125": _psk_entry("psk125", "PSK125", (875.0, 1125.0))} if sdr.PSK_ON_SHACK_SDR else
+       # psk.py's decoder and encoder, as before milestone 2 (sdr.PSK_ON_SHACK_SDR says why).
+       {"psk31": _text_entry("psk31", "PSK31", psk, offset=1000.0, passband=(970.0, 1030.0), variant="psk31"),
+        "psk63": _text_entry("psk63", "PSK63", psk, offset=1000.0, passband=(940.0, 1060.0), variant="psk63"),
+        "psk125": _text_entry("psk125", "PSK125", psk, offset=1000.0, passband=(875.0, 1125.0),
+                              variant="psk125")}),
     "ft8": _ft8_entry,
     "ft4": _ft4_entry,
     "q65": _q65_entry,

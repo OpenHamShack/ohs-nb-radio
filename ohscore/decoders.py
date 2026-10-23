@@ -347,6 +347,8 @@ class Decoders:
         out = []
         lends = bool(getattr(self.engine, "HOLDS_RECEIVER", False))
         for e in m.catalogue():
+            if e["id"] in switched_off():
+                continue
             e = dict(e)
             if not lends and _takes_receiver(e):
                 # QO-100 NB: its receiver never leaves the transponder.
@@ -383,7 +385,7 @@ class Decoders:
         if m is None:
             raise Refused("decoder_unavailable", sdr.why())
         params = dict(params or {})
-        entry = next((e for e in m.catalogue() if e["id"] == decoder), None)
+        entry = next((e for e in m.catalogue() if e["id"] == decoder and e["id"] not in switched_off()), None)
         if entry is None:
             raise Refused("unknown_decoder", _("There is no decoder called {name}").format(name=repr(decoder)))
         if not entry["available"]:
@@ -1148,6 +1150,13 @@ def sessions_text(sessions: list[dict]) -> str:
     """Several sessions' labels in one phrase ("RTTY on 14.0933 MHz, APRS
     on 144.8000 MHz")."""
     return ", ".join(s["label"] for s in sessions)
+
+
+def switched_off() -> set[str]:
+    """Decoders the library has that this app does not offer yet: `psk`
+    while sdr.PSK_ON_SHACK_SDR is off (sdr.py says why). Not listed, and
+    a session of one is refused as unknown_decoder."""
+    return set() if sdr.PSK_ON_SHACK_SDR else {"psk"}
 
 
 def _catalogue_entry(decoder: str) -> dict | None:

@@ -19,8 +19,7 @@ why).
 PSK31 is not slotted, so it is treated differently: every `window_s`
 (default 10 minutes), ohscore.modes.psk.find_carriers looks for PSK-shaped
 carriers in the band-plan segments digital traffic is allowed in, and each
-candidate is decoded for that window by shack_sdr's psk decoder, every
-candidate a channel of one session (ohscore.modes.sdrmode.PskDecoder) -
+candidate is decoded for that window with ohscore.modes.psk.Decoder -
 counted here is characters actually decoded (squelch open, varicode
 framed), the nearest PSK has to a discrete "message" without following a
 whole QSO frame by frame. A non-PSK tone `find_carriers` also notices
@@ -40,8 +39,6 @@ from ohscore.modes import ft8 as ft8mod
 from ohscore.modes import js8 as js8mod
 from ohscore.modes import psk as pskmod
 from ohscore.modes import q65 as q65mod
-from ohscore.modes import sdrmode
-from ohscore import sdr
 
 from . import bandplan
 from .analyse import _audio_blocks, _audio_fed_before, _chunk_grid, _CorrAt, _owns, _wait_for_room
@@ -239,34 +236,25 @@ def _psk_window_decodes(w: np.ndarray, centre: float) -> list[tuple[float, int]]
     snippet_n = min(len(w), int(PSK_CANDIDATE_S * pskmod.FS))
     sa = len(w) // 2 - snippet_n // 2
     candidates = pskmod.find_carriers(w[sa:sa + snippet_n], fs=pskmod.FS, n_peaks=PSK_PEAKS_PER_SEGMENT)
-    if not candidates:
-        return []
-    # One session hears every candidate at once (shack_sdr's psk decoder,
-    # several channels; modes/sdrmode.py PskDecoder) rather than a decoder
-    # per candidate as psk.py's needed. Candidates closer together than a
-    # channel are one station, and it counts once.
-    heard: dict[float, int] = {}
+    out = []
+    for cand_hz in candidates:
+        heard = {"n": 0}
 
-    def emit(ev):
-        heard[ev["channel"]] = heard.get(ev["channel"], 0) + 1
-    try:
-        dec = sdrmode.PskDecoder(emit, variant="psk31", center=candidates[0], channels=candidates[1:])
-    except RuntimeError:            # no shack_sdr here: _psk_report says so
-        return []
-    try:
+        def emit(ev, heard=heard):
+            heard["n"] += 1
+        dec = pskmod.Decoder(emit, variant="psk31", center=cand_hz)
         chunk = int(1.0 * pskmod.FS)
         for k in range(0, len(w), chunk):
-            dec.feed(w[k:k + chunk], k / pskmod.FS)
-        dec.drain()
-    finally:
-        dec.close()
-    return [(round((centre + c) / 1e6, 6), heard[c]) for c in dec.channels if heard.get(c)]
+            dec.feed(w[k:k + chunk], 0.0)
+        if heard["n"]:
+            out.append((round((centre + cand_hz) / 1e6, 6), heard["n"]))
+    return out
 
 
 def _psk_report(view, scale: float, n: int, fs: float, caps: list, info: dict, rx_corr_est: float,
                beacon_hist: list[dict], bucket_s: float, window_s: float) -> dict:
-    """PSK31's decoder (shack_sdr's, through ohscore.modes.sdrmode, and
-    psk.find_carriers before it) both work on *demodulated* real audio - the same generic 100-
+    """PSK31's decoder (ohscore.modes.psk.Decoder, and find_carriers before
+    it) both work on *demodulated* real audio - the same generic 100-
     3200 Hz digital passband every mode here uses live (ohscore.dsp.demod.
     passband falls through to DIGITAL_FILTER for any mode string it does
     not special-case, PSK31 included), not the complex IQ Channel.take()
@@ -345,6 +333,5 @@ def _psk_summary(segs: list[list[tuple[float, list]]], n: int, fs: float, bucket
                 dials.append(dial_mhz)
     nbuck = max(1, int(math.ceil((n / fs) / bucket_s)))
     buckets = [{"t0": round(i * bucket_s, 1), "decodes": by_bucket.get(i, 0)} for i in range(nbuck)]
-    ok = sdr.available()
-    return {"available": ok, "why": sdr.why(), "dial_mhz": None, "total": total, "buckets": buckets,
+    return {"available": True, "why": "", "dial_mhz": None, "total": total, "buckets": buckets,
             "dial_mhz_seen": dials}

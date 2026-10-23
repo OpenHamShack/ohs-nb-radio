@@ -36,6 +36,9 @@ from ohscore import sdr
 from ohscore.devices import simsignals as sg
 from ohscore.modes import psk
 
+PARKED = "PSK library fix parked (ohs-libs fix/psk-tail-and-step)"
+RUST_PSK = sdr.available() and sdr.PSK_ON_SHACK_SDR
+
 DIAL = 14_101_000.0            # USB; the simulator's own stations are off (simSignals False)
 # dBFS: a good signal, among the simulator's own (-68 to -52). Much
 # stronger (-42) and the receiver's AGC, lifting the noise by up to 40 dB
@@ -76,7 +79,7 @@ def radio(**over):
     return make_radio(**cfg)
 
 
-@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+@unittest.skipUnless(RUST_PSK, PARKED)
 class PskAsTheMode(unittest.TestCase):
     def setUp(self):
         self.r = radio(mode="psk31")
@@ -151,7 +154,7 @@ class PskAsTheMode(unittest.TestCase):
         self.assertIn("PSK125 TEST DE G4EEE", by_channel(got, "psk125").get(1000.0, ""))
 
 
-@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+@unittest.skipUnless(RUST_PSK, PARKED)
 class PskAsASession(unittest.TestCase):
     def test_one_session_copies_several_stations_away_from_the_dial(self):
         r = radio(vfo=DIAL)
@@ -262,6 +265,36 @@ class SstvAsASession(unittest.TestCase):
         view = r.decoders.session(sess["id"])
         self.assertEqual(view["meta"]["state"], "done")
         self.assertEqual(view["meta"]["file"], done["file"])
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class PskAsShipped(unittest.TestCase):
+    """With the Rust PSK decoder switched off (ohscore/sdr.py
+    PSK_ON_SHACK_SDR): the PSK modes decode with psk.py as before
+    milestone 2, `psk` is no decoder session, and there is no pskChannels."""
+
+    def test_the_mode_copies_with_psk_py_and_psk_sessions_are_not_offered(self):
+        from ohscore.decoders import Refused
+        r = radio(mode="psk31")
+        self.addCleanup(close, r)
+        events = r.subscribe("events", 20000)
+        r.start()
+        r.dev.add_station("own", DIAL, psk_air("CQ CQ DE G4AAA G4AAA K ", 1000.0), LEVEL)
+        got = []
+
+        def heard():
+            got.extend(e for e in events.drain() if e.get("mode") == "psk31")
+            return "G4AAA G4AAA K" in "".join(e.get("text", "") for e in got)
+        pump(r, 90, until=heard)
+        self.assertIn("CQ CQ DE G4AAA G4AAA K", "".join(e.get("text", "") for e in got))
+        self.assertNotIn("channel", got[0])
+        self.assertEqual(type(r.decoder).__module__, "ohscore.modes.psk")
+        self.assertEqual(r.decoders.sessions(), [])               # no "vfo": psk.py is not a session
+        self.assertNotIn("psk", [e["id"] for e in r.decoders.catalogue()])
+        with self.assertRaises(Refused) as cm:
+            r.decoders.start("psk", DIAL + 1000.0)
+        self.assertEqual(cm.exception.code, "unknown_decoder")
+        self.assertNotIn("pskChannels", r.state())
 
 
 class FilesCap(unittest.TestCase):

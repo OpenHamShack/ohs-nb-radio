@@ -2,7 +2,8 @@
 driven as an operator would, on the band simulator with known stations on
 the air (HamSim.add_station; test_ham_psk_sstv has the engine side):
 
-- **PSK, several stations:** a click on a station on the zoom decodes it
+- **PSK, several stations** (skipped while the Rust PSK decoder is
+  switched off, ohscore/sdr.py; then a click tunes, as before): a click on a station on the zoom decodes it
   too - its mark on the scope, its line under "Also decoding" with what
   it sends - a second click stops it, and shift-click still tunes it onto
   the decoder's own channel, whose text stays in the terminal.
@@ -10,7 +11,7 @@ the air (HamSim.add_station; test_ham_psk_sstv has the engine side):
   finished one joins its gallery.
 - **The Decoders view:** an SSTV session's card paints its picture and
   then shows it among its recent ones; a PSK session with two stations
-  shows a line for each.
+  shows a line for each (skipped likewise).
 
 Nothing here keys."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
@@ -31,6 +32,8 @@ from ohscore import sdr
 from ohscore.devices import simsignals as sg
 from ohscore.modes import psk
 
+PARKED = "PSK library fix parked (ohs-libs fix/psk-tail-and-step)"
+RUST_PSK = sdr.PSK_ON_SHACK_SDR
 DIAL = 14_101_000.0
 LEVEL = -58.0
 
@@ -105,6 +108,7 @@ class PskAndSstvWindow(unittest.TestCase):
         mods = Qt.KeyboardModifier.ShiftModifier if shift else Qt.KeyboardModifier.NoModifier
         QTest.mouseClick(z, Qt.MouseButton.LeftButton, mods, QPoint(x, y))
 
+    @unittest.skipUnless(RUST_PSK, PARKED)
     def test_a_click_on_the_zoom_decodes_a_station_too_and_a_second_stops_it(self):
         win, bridge, radio = self.window(mode="psk31")
         radio.dev.add_station("own", DIAL, psk_air("CQ DE G4AAA G4AAA K ", 1000.0), LEVEL)
@@ -137,6 +141,7 @@ class PskAndSstvWindow(unittest.TestCase):
         self.assertTrue(self.settle_until(lambda: abs(radio.st["vfo"] - (DIAL + 630.0)) <= 10.0))
         self.assertEqual(radio.st["pskChannels"], [])
 
+    @unittest.skipUnless(RUST_PSK, PARKED)
     def test_stop_all_and_rtty_has_no_stations_list(self):
         win, bridge, radio = self.window(mode="psk63")
         radio.set(pskChannels=[1400.0, 2200.0])
@@ -147,6 +152,20 @@ class PskAndSstvWindow(unittest.TestCase):
         self.assertTrue(self.settle_until(lambda: radio.st["pskChannels"] == []))
         bridge.set(mode="rtty")
         self.assertTrue(self.settle_until(lambda: not panel.more.isVisible()))
+
+    @unittest.skipIf(RUST_PSK, "the Rust PSK decoder is switched on")
+    def test_psk_as_shipped_a_click_tunes_and_there_are_no_extra_stations(self):
+        # psk.py decodes one station (ohscore/sdr.py PSK_ON_SHACK_SDR): a
+        # click on the zoom tunes it onto the decoder, as before milestone 2.
+        win, bridge, radio = self.window(mode="psk31")
+        panel = win.panels["text"]
+        self.settle_until(lambda: win.zoom.width() > 0)
+        self.click_zoom(win, 1630.0)
+        self.assertTrue(self.settle_until(lambda: abs(radio.st["vfo"] - (DIAL + 630.0)) <= 10.0))
+        self.assertFalse(panel.more.isVisible())
+        self.assertNotIn("pskChannels", radio.st)
+        win.show_view("decoders")
+        self.assertEqual(win.decoders_view.pick.findData("psk"), -1)
 
     def test_sstv_mode_paints_the_picture_and_adds_it_to_the_gallery(self):
         win, bridge, radio = self.window(mode="sstv")
@@ -185,6 +204,7 @@ class PskAndSstvWindow(unittest.TestCase):
         self.assertTrue(self.settle_until(lambda: radio.st["mode"] == "sstv"))
         self.assertAlmostEqual(radio.st["vfo"], DIAL, delta=1.0)
 
+    @unittest.skipUnless(RUST_PSK, PARKED)
     def test_the_decoders_view_shows_a_line_per_psk_station(self):
         win, bridge, radio = self.window()
         there = DIAL + 20_000.0

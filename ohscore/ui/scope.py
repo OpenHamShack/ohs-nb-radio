@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import QApplication, QToolTip, QWidget
 from ..dsp.demod import passband as demod_passband
 from ..modegroups import is_slot, js8_slot, slot_spec
 from . import layoutrules, palettes, scopelook, theme
+from .. import sdr
 from ..i18n import fmt
 from .scopecore import HANN_ENBW, FreqMap, PeakMarkers, Waterfall, hang_decay, rbw_line, resample
 
@@ -842,7 +843,7 @@ class ScopeView(QWidget):
             if 100.0 <= off <= 3200.0:
                 self.offset_clicked.emit(round(off), bool(e.modifiers() & Qt.KeyboardModifier.ShiftModifier))
                 return
-        if (not self.wide and self._st("mode") in PSK_MODES
+        if (sdr.PSK_ON_SHACK_SDR and not self.wide and self._st("mode") in PSK_MODES
                 and not e.modifiers() & Qt.KeyboardModifier.ShiftModifier):
             # PSK hears several stations at once (shack_sdr's psk decoder): a
             # click on one in the passband decodes it too, a click on one

@@ -33,7 +33,7 @@ import math
 from contextlib import contextmanager
 from typing import Callable
 
-from . import licences, pskreporter
+from . import licences, pskreporter, sdr
 
 from .i18n.text import _
 
@@ -398,9 +398,10 @@ def add_shared_keys(reg: Registry) -> None:
     # PSK's extra stations (modes/sdrmode.py PskDecoder): a click on the
     # zoom in PSK adds one, and the mode's own channel at its offset is
     # always decoded beside them. Not kept: the stations on a band now.
-    k("pskChannels", "list", [], "control", persist=False, validate=_clean_psk_channels,
-      help="More PSK stations to decode at once, beside the one on the mode's offset: audio frequencies in Hz above "
-           "the dial.")
+    if sdr.PSK_ON_SHACK_SDR:          # only the Rust PSK decoder hears more than one (sdr.py says why it is off)
+        k("pskChannels", "list", [], "control", persist=False, validate=_clean_psk_channels,
+          help="More PSK stations to decode at once, beside the one on the mode's offset: audio frequencies in Hz "
+               "above the dial.")
 
     # --- IQ recording (ohscore/sigmf.py) --------------------------------------------
     k("recLimitMin", "float", 0.0, "setting", lo=0.0, hi=600.0, unit="min",

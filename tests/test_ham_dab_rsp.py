@@ -40,11 +40,12 @@ an input that puts this shack_sdr into the state ohs-box was found in.
   its own (refused on every receiver before 23/10/2026: every unheld
   session started at 12 kHz).
 
-- **PSK and SSTV (Radio's SDR milestone 2)** at 2.4 MS/s: a PSK session
-  copies two stations on its two channels, an SSTV session paints a
-  picture and saves it, nothing dropped; and as the mode's own decoders,
-  fed the engine's 12 kHz audio while the receive audio is 48 kHz, PSK
-  copies a station on its own channel and one more, and SSTV a picture.
+- **PSK and SSTV (Radio's SDR milestone 2)** at 2.4 MS/s: an SSTV session
+  paints a picture and saves it, nothing dropped (and a PSK session its two
+  stations, skipped while the Rust PSK decoder is switched off,
+  ohscore/sdr.py); and as the mode's own decoders, fed the engine's 12 kHz
+  audio while the receive audio is 48 kHz, PSK copies its station (psk.py
+  as shipped; the Rust one one more) and SSTV a picture.
 """
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import logging
@@ -69,6 +70,7 @@ HOME = 145_500_000.0
 RTTY_HZ = 145_300_000.0             # both inside the span around HOME (+-1.08 MHz at 2.4 MS/s)
 CW_HZ = 145_700_000.0
 WFM_HZ = 144_800_000.0             # a broadcast-shaped station on the test air, 700 kHz below the dial
+PARKED = "PSK library fix parked (ohs-libs fix/psk-tail-and-step)"
 PSK_HZ = 145_200_000.0             # two PSK31 stations, 1000 and 1650 Hz above this USB dial
 SSTV_HZ = 145_400_000.0            # an SSTV picture's 1900 Hz leader
 TEXT = "CQ TEST DE GM4BRI"
@@ -390,6 +392,19 @@ class PskAndSstvThroughTheRsp(unittest.TestCase):
         RspStandIn.AIR = [*psk_stations(PSK_HZ), self.sstv]
         RspStandIn.DIP = False
 
+    def test_an_sstv_session_at_2_4_ms(self):
+        r, _audio = rsp_radio(self)
+        sst = r.decoders.start("sstv", SSTV_HZ)
+        self.assertTrue(wait(r, lambda: any(i.get("event") == "done" for i in r.decoders.session(sst["id"])["results"]),
+                             timeout=90.0), r.decoders.session(sst["id"]))
+        done = next(i for i in r.decoders.session(sst["id"])["results"] if i.get("event") == "done")
+        from shack_sdr import sstv
+        self.assertGreater(sstv.score(self.sstv.sent, sstv.png_rgb(r.decoders.file(done["file"])))["psnr"], 20.0)
+        view = r.decoders.session(sst["id"])
+        self.assertIsNone(view["why"], view)
+        self.assertEqual(view["stats"]["dropped"], 0, view)
+
+    @unittest.skipUnless(sdr.PSK_ON_SHACK_SDR, PARKED)
     def test_psk_and_sstv_sessions_at_2_4_ms(self):
         r, _audio = rsp_radio(self)
         psk = r.decoders.start("psk", PSK_HZ + 1000.0, {"channels": "0,650"})
@@ -415,7 +430,9 @@ class PskAndSstvThroughTheRsp(unittest.TestCase):
         r, audio = rsp_radio(self, mode="psk31", vfo=PSK_HZ)
         self.assertEqual(r.OUT_RATE, 48_000)
         events = r.subscribe("events", 50000)
-        r.set(pskChannels=[1650.0])
+        rust = sdr.PSK_ON_SHACK_SDR
+        if rust:
+            r.set(pskChannels=[1650.0])
         got = []
 
         def heard(mode, cond):
@@ -423,9 +440,11 @@ class PskAndSstvThroughTheRsp(unittest.TestCase):
                 got.extend(e for e in events.drain() if e.get("mode") == mode)
                 return cond()
             return check
-        by = lambda c: "".join(e["text"] for e in got if e.get("channel") == c)  # noqa: E731
-        self.assertTrue(wait(r, heard("psk31", lambda: "G4AAA G4AAA K" in by(1000.0) and "M0BBB M0BBB" in by(1650.0))),
-                        (by(1000.0), by(1650.0)))
+        # psk.py (the shipped decoder, ohscore/sdr.py PSK_ON_SHACK_SDR) hears
+        # the station on its own channel; the Rust one, switched on, both.
+        by = lambda c: "".join(e["text"] for e in got if e.get("channel", 1000.0) == c)  # noqa: E731
+        self.assertTrue(wait(r, heard("psk31", lambda: "G4AAA G4AAA K" in by(1000.0)
+                                      and (not rust or "M0BBB M0BBB" in by(1650.0)))), (by(1000.0), by(1650.0)))
         # The receive audio is 48 kHz all along; the decoders hear 12.
         self.assertEqual(audio.out_rate, 48_000)
         self.assertTrue(audio.chunks)

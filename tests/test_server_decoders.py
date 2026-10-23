@@ -4,8 +4,9 @@ than real time, with a fixed RTTY session copying the simulated 20 m RTTY
 station. Levels (view reads, control starts and stops), every error code,
 recovery by `rev`, the pinned span, the session limit, the codecs and their
 rescan, the `decoder` events on api/events, and decoders in api/status.
-Then milestone 2's: a PSK session's several channels, and an SSTV
-session's picture - its rows on api/events as base64, the PNG on
+Then milestone 2's: a PSK session's several channels (skipped while the
+Rust PSK decoder is switched off, ohscore/sdr.py; then psk is not offered),
+and an SSTV session's picture - its rows on api/events as base64, the PNG on
 api/decoders/files."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import json
@@ -189,6 +190,7 @@ class PskAndSstvApi(test_server.ServerTest):
             time.sleep(0.05)
         return False
 
+    @unittest.skipUnless(sdr.PSK_ON_SHACK_SDR, "PSK library fix parked (ohs-libs fix/psk-tail-and-step)")
     def test_a_psk_session_copies_each_of_its_channels(self):
         self.radio.dev.add_station("a", self.DIAL, _psk_air("ALPHA DE G4AAA G4AAA ", 1000.0), self.LEVEL)
         self.radio.dev.add_station("b", self.DIAL, _psk_air("BRAVO DE M0BBB M0BBB ", 1900.0), self.LEVEL)
@@ -218,6 +220,17 @@ class PskAndSstvApi(test_server.ServerTest):
         s, a = self.req("POST", f"/api/decoders/sessions/{sess['id']}",
                         {"params": {"channels": ",".join(str(10 * k) for k in range(40))}}, level="control")
         self.assertEqual((s, a["code"]), (400, "bad_params"))
+
+    def test_psk_is_not_offered_while_its_library_fix_is_parked(self):
+        if sdr.PSK_ON_SHACK_SDR:
+            self.skipTest("the Rust PSK decoder is switched on")
+        s, a = self.req("GET", "/api/decoders", level="view")
+        self.assertNotIn("psk", [d["id"] for d in a["decoders"]])
+        s, a = self.req("POST", "/api/decoders/sessions", {"decoder": "psk", "freqHz": self.DIAL + 1000.0},
+                        level="control")
+        self.assertEqual((s, a["code"]), (404, "unknown_decoder"))
+        s, a = self.req("POST", "/api/set", {"pskChannels": [1500]}, level="control")
+        self.assertEqual(s, 400, a)
 
     def test_an_sstv_session_sends_rows_and_its_picture_is_a_file(self):
         import base64

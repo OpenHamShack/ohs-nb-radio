@@ -2786,17 +2786,17 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>QsoFields</name>
     <message>
-        <location filename="../ui/panels/text.py" line="60" />
+        <location filename="../ui/panels/text.py" line="62" />
         <source>Their call</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="67" />
+        <location filename="../ui/panels/text.py" line="69" />
         <source>Report sent ({RST})</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="68" />
+        <location filename="../ui/panels/text.py" line="70" />
         <source>QSO</source>
         <translation type="unfinished" />
     </message>
@@ -3217,27 +3217,27 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>ScopeView</name>
     <message>
-        <location filename="../ui/scope.py" line="457" />
+        <location filename="../ui/scope.py" line="458" />
         <source>RBW {rbw}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/scope.py" line="703" />
+        <location filename="../ui/scope.py" line="704" />
         <source>Adjust</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/scope.py" line="706" />
+        <location filename="../ui/scope.py" line="707" />
         <source>Adjust the wide scope: scale, peaks, waterfall levels and palette</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/scope.py" line="707" />
+        <location filename="../ui/scope.py" line="708" />
         <source>Adjust the zoom scope: scale, peaks, waterfall levels and palette</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/scope.py" line="1493" />
+        <location filename="../ui/scope.py" line="1494" />
         <source>Span held for decoders</source>
         <translation type="unfinished" />
     </message>
@@ -3891,93 +3891,93 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>TextPanel</name>
     <message>
-        <location filename="../ui/panels/text.py" line="87" />
+        <location filename="../ui/panels/text.py" line="89" />
         <source>Keyboard</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="91" />
+        <location filename="../ui/panels/text.py" line="93" />
         <source>Type to transmit — Enter sends (Morse)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="92" />
+        <location filename="../ui/panels/text.py" line="94" />
         <source>Type to transmit — Enter sends</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="111" />
+        <location filename="../ui/panels/text.py" line="113" />
         <source>Keyer</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="111" />
+        <location filename="../ui/panels/text.py" line="113" />
         <source>Signals</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="113" />
+        <location filename="../ui/panels/text.py" line="115" />
         <source>Speed</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="116" />
+        <location filename="../ui/panels/text.py" line="118" />
         <source>Pitch</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="119" />
+        <location filename="../ui/panels/text.py" line="121" />
         <source>Filter</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="224" />
-        <location filename="../ui/panels/text.py" line="124" />
+        <location filename="../ui/panels/text.py" line="226" />
+        <location filename="../ui/panels/text.py" line="126" />
         <source>Decoder speed —</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="129" />
+        <location filename="../ui/panels/text.py" line="131" />
         <source>Carriers in the passband. Click one to tune it to the decoder.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="138" />
+        <location filename="../ui/panels/text.py" line="140" />
         <source>Also decoding</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="142" />
+        <location filename="../ui/panels/text.py" line="144" />
         <source>Stop all</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="143" />
+        <location filename="../ui/panels/text.py" line="145" />
         <source>Stop decoding the stations below; the decoder's own channel carries on</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="149" />
+        <location filename="../ui/panels/text.py" line="151" />
         <source>Click a station on the zoom to decode it too, and again to stop. Shift-click puts it on the decoder's own channel.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="216" />
+        <location filename="../ui/panels/text.py" line="218" />
         <source>Decoder hears {wpm} wpm</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="255" />
+        <location filename="../ui/panels/text.py" line="259" />
         <source>Click a station on the zoom to decode it too</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="316" />
+        <location filename="../ui/panels/text.py" line="320" />
         <source>{signal}   ◀ decoding</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="319" />
+        <location filename="../ui/panels/text.py" line="323" />
         <source>No carriers heard</source>
         <translation type="unfinished" />
     </message>
