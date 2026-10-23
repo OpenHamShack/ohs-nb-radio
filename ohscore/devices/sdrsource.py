@@ -343,8 +343,10 @@ class SoapySdrplayDevice(SdrplayDevice):
     had set gRdB 59 at LNA state 1, and the noise floor rose 13 dB (-74.4
     to -61.2 dBFS) with deviceStatus reporting 39. A station that moved
     paths without touching a setting must hear the same thing and keep its
-    S-meter calibration, so this class reproduces SoapySDRPlay3 exactly
-    (`soapy_gain_split`, `SoapyGainSource` below):
+    S-meter calibration, so this class asks `SdrplaySource` for
+    SoapySDRPlay3's own gain semantics (`gain_model="soapysdrplay3"`,
+    ohs-libs shack_sdr README "SDRplay's gain models and switches") rather
+    than computing the split itself:
 
     - manual: AGC off, then the overall gain split the way SoapySDR's base
       Device::setGain splits it for a driver that does not override it,
@@ -356,7 +358,14 @@ class SoapySdrplayDevice(SdrplayDevice):
       (or soapyArgs' agc_setpoint), with gRdB and the LNA state left where
       they were - rfgain_sel at open, the last manual split after one;
     - the gain reported (status `gain`, rx_gain_now) is SoapySDR's overall
-      getGain: (gRdB - 20) + LNA state, read from the API's structure.
+      getGain: (gRdB - 20) + LNA state, read from the API's structure
+      (`SdrplaySource.gain_now`).
+
+    This also picks up the source's parity with SoapySDRPlay3's DC-offset
+    tracking and overload acknowledgement (ohs-libs shack_sdr README
+    "SDRplay: parity with SoapySDRPlay3"), and its `overloads`, `apiGaps`
+    and `apiLost` counters, with nothing further to do here: `status()`
+    passes the source's own status straight through (SourceDevice.status).
 
     Without rfgain_sel the LNA state opens at 0, as SoapySDRPlay3 opened it
     (`sdrplayLna` was never read on this path, and is not now). The other
@@ -381,31 +390,33 @@ class SoapySdrplayDevice(SdrplayDevice):
         super().__init__(cfg, fs)
 
     def _gain(self, mode: str, db: float):
-        # SoapySDR's overall gain, split at the source (SoapyGainSource),
-        # where the model - and so RFGR's range - is known.
+        # SoapySDR's overall gain: SdrplaySource's own gain_model="soapysdrplay3"
+        # splits it, once the model - and so RFGR's range - is known.
         return None if mode != "manual" else float(db)
 
     def _make(self):
         from shack_sdr.sources import SdrplaySource
         serial = str(self.cfg.get("sdrSerial") or "").strip() or None
         gain = self._gain(self.cfg.get("rxGainMode", "slow_attack"), float(self.cfg.get("rxGain", 40.0)))
-        src = soapy_gain_source(SdrplaySource)(self.rx_if or 145_000_000.0, self.fs, gain, serial=serial,
-                                               lna_state=int(self.cfg.get("sdrplayLna", 0)),
-                                               antenna=self._saved_antenna() or None)
-        src.agc_setpoint = self.agc_setpoint
-        return src
+        return SdrplaySource(self.rx_if or 145_000_000.0, self.fs, gain, serial=serial,
+                             lna_state=int(self.cfg.get("sdrplayLna", 0)),
+                             antenna=self._saved_antenna() or None,
+                             gain_model="soapysdrplay3", agc_setpoint=self.agc_setpoint)
 
     def gain_sense(self) -> dict:
-        dev = getattr(self.src, "device", None) if self.src is not None else None
-        hw = int(dev.hwVer) if dev is not None else 4
-        return {"gainIsReduction": True, "gainModel": "soapysdrplay3", "rfgrRange": list(soapy_rfgr_range(hw))}
+        # The source already knows SoapySDRPlay3's sense for the model it
+        # opened (SdrplaySource.gain_sense); before open there is no model
+        # yet, so fall back to an RSPdx's range as the source itself does.
+        if self.src is not None:
+            return self.src.gain_sense()
+        return {"gainIsReduction": True, "gainModel": "soapysdrplay3", "rfgrRange": list(soapy_rfgr_range(4))}
 
     def rx_gain_now(self) -> float | None:
         src = self.src
-        if src is None or not hasattr(src, "soapy_gain"):
+        if src is None:
             return None
         try:
-            return src.soapy_gain()
+            return src.gain_now()
         except Exception:  # noqa: BLE001 - "cannot say", as SoapyDevice.rx_gain_now
             return None
 
@@ -424,7 +435,6 @@ class SoapySdrplayDevice(SdrplayDevice):
 SOAPY_IFGR = (20, 59)
 SOAPY_RFGR_TOP = {1: 3, 2: 8, 3: 9, 255: 9, 6: 9, 4: 27, 7: 27}
 SOAPY_AGC_SETPOINT = -30
-AGC_DISABLE, AGC_CTRL_EN = 0, 4        # sdrplay_api_control.h sdrplay_api_AgcControlT
 
 
 def soapy_gain_split(gain: float, hw_ver: int) -> tuple[int, int]:
@@ -464,72 +474,3 @@ def soapy_gain_of(grdb: int, lna: int, hw_ver: int) -> float:
     less its range's minimum, summed (lib/Device.cpp getGain)."""
     rf_lo = 0 if hw_ver in SOAPY_RFGR_TOP else SOAPY_IFGR[0]
     return float((grdb - SOAPY_IFGR[0]) + (lna - rf_lo))
-
-
-def soapy_gain_source(base):
-    """shack_sdr's SdrplaySource with SoapySDRPlay3's gain semantics
-    (SoapySdrplayDevice's docstring says why).
-
-    A subclass here rather than a change to shack_sdr: the library's own
-    sense (a number is gRdB, the LNA state fixed, AGC at 50 Hz) is right
-    for `device sdrplay` and for Packet Radio, and this mapping exists only
-    so ohs-box's settings keep their meaning. It overrides
-    `_set_gain_fields`, which SdrplaySource calls at open (before Init,
-    once the model is known) and on every set_gain before it pushes
-    Update(Tuner_Gr | Ctrl_Agc) - the one place the gain fields are
-    written. That is a private method of the vendored library, so
-    tests/test_sdr_receivers.py drives this against a stand-in SDRplay API
-    and reads back the API's own fields: a shack_sdr that renamed it would
-    fail there, not on air. The clean form is a `gain_mode="soapy"` option
-    in shack_sdr itself; until then, this.
-
-    Made per call, not once: the base is looked up when the device opens
-    (shack_sdr loads lazily, and a test may stand a fake in for it)."""
-
-    class SoapyGainSource(base):
-        agc_setpoint = SOAPY_AGC_SETPOINT
-
-        def _hw(self) -> int:
-            dev = getattr(self, "device", None)
-            return int(dev.hwVer) if dev is not None else 4
-
-        def _set_gain_fields(self, ch) -> None:
-            if self.gain is None:
-                ch.ctrlParams.agcEnable = AGC_CTRL_EN
-                ch.ctrlParams.setPoint_dBfs = int(self.agc_setpoint)
-            else:
-                ch.ctrlParams.agcEnable = AGC_DISABLE
-                grdb, self.lna_state = soapy_gain_split(self.gain, self._hw())
-                ch.tunerParams.gain.gRdB = grdb
-            # Under AGC the LNA state stays whatever it last was, exactly as
-            # SoapySDRPlay3's structure kept it: rfgain_sel at open, the last
-            # manual split after one.
-            ch.tunerParams.gain.LNAstate = self.lna_state
-
-        def _live(self) -> bool:
-            # The API's structure is only ours to read while the stream
-            # runs: after Uninit/Close the pointer is the service's again.
-            return bool(getattr(self, "_running", False)) and getattr(self, "params", None) is not None
-
-        def soapy_gain(self) -> float | None:
-            """What SoapySDRPlay3's getGain would say: from the API's own
-            structure while running (under AGC its gRdB is whatever is
-            there, as SoapySDRPlay3 read it), else from the gain asked for
-            (None under AGC: nothing to say before the API has a value)."""
-            if self._live():
-                g = self._ch().tunerParams.gain
-                return soapy_gain_of(int(g.gRdB), int(g.LNAstate), self._hw())
-            if self.gain is None:
-                return None
-            grdb, lna = soapy_gain_split(self.gain, self._hw())
-            return soapy_gain_of(grdb, lna, self._hw())
-
-        def status(self) -> dict:
-            st = super().status()
-            st["gain"] = self.soapy_gain()
-            if self._live():
-                g = self._ch().tunerParams.gain
-                st.update(gRdB=int(g.gRdB), lnaState=int(g.LNAstate))
-            return st
-
-    return SoapyGainSource
