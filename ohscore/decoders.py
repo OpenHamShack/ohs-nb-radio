@@ -958,7 +958,7 @@ class Decoders:
             if it.get("type") == "state" and it.get("why"):
                 it = dict(it, whyText=_why_text(it["why"]))
             elif it.get("type") == "meta" and isinstance(it.get("fields"), dict):
-                it = dict(it, fields=_worded_meta(it["fields"]))
+                it = dict(it, fields=self._meta(it["fields"]))
             elif it.get("type") == "image":
                 # A picture's rows are bytes, which no feed client can read:
                 # base64, as the SSTV events' rows always were; and a saved
@@ -1082,8 +1082,22 @@ class Decoders:
         if f.held or f.panel == "meta" or "meta" in f.outputs:
             # The decoder's last feed (DAB's ensemble, wide FM's RDS, PSK's
             # channels, the SSTV picture being received).
-            view["meta"] = _worded_meta(st["meta"]) if isinstance(st.get("meta"), dict) else None
+            view["meta"] = self._meta(st["meta"]) if isinstance(st.get("meta"), dict) else None
         return view
+
+    def _meta(self, fields: dict) -> dict:
+        """A session's feed as clients get it: worded (_worded_meta), then
+        whatever the app adds (Radio names DAB's transmitters from their
+        TII codes: Engine.decoder_meta). What an app adds is never worth the
+        feed: if it fails, the feed goes out without it."""
+        out = _worded_meta(fields)
+        add = getattr(self.engine, "decoder_meta", None)
+        if add is not None:
+            try:
+                out = add(out)
+            except Exception:  # noqa: BLE001 - see above
+                log.warning("the app's addition to a decoder feed failed", exc_info=True)
+        return out
 
     def _vfo_view(self, vfo) -> dict:
         sid, dec = vfo
@@ -1098,7 +1112,7 @@ class Decoders:
                 "rev": st.get("rev", 0), "stats": _stats(st.get("stats") or {}),
                 "panel": entry.get("panel", "text"), "mode": True}
         if "meta" in (entry.get("outputs") or ()):
-            view["meta"] = _worded_meta(st["meta"]) if isinstance(st.get("meta"), dict) else None
+            view["meta"] = self._meta(st["meta"]) if isinstance(st.get("meta"), dict) else None
         # The mode decoder's IQ is the dial's audio, centred where the host's
         # adapter put it: PSK's channel offsets are from there (sdrmode.py).
         centre = getattr(dec, "host_center", None)

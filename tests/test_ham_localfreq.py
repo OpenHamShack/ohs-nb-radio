@@ -357,6 +357,9 @@ def fixture_fetch(calls, fail=()):
             return (FIX / "overpass.json").read_bytes()
         if "openaip" in url:
             return (FIX / "openaip.json").read_bytes()
+        if "ofcom" in url:
+            # Radio's refresh brings the DAB transmitter list too (dabtx.py).
+            return (FIX.parent / "dabtx" / "txparamsdab.csv").read_bytes()
         raise AssertionError(url)
     return fetch
 

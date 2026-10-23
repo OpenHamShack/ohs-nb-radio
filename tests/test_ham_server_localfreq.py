@@ -115,7 +115,7 @@ class LocalFrequenciesApi(unittest.TestCase):
             s, a = self.req("POST", "/api/local-frequencies/refresh", level="control", admin=True)
         self.assertEqual(s, 200, a)
         self.assertEqual({r["source"]: r["ok"] for r in a["results"]},
-                         {"ourairports": True, "osm-marine": True, "openaip": True})
+                         {"ourairports": True, "osm-marine": True, "openaip": True, "ofcom-dab": True})
         self.assertTrue([c for c in self.calls if c[1].get("x-openaip-api-key") == "module-key"])
         self.assertEqual([x["source"] for x in a["sources"]], list(lf.SOURCES))
         s, a = self.req("GET", "/api/local-frequencies?radiusKm=100&category=enroute")

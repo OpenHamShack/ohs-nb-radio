@@ -107,6 +107,29 @@ def mhz_text(hz: float) -> str:
     return fmt.frequency(int(round(hz)), "MHz", 4)
 
 
+def transmitters_text(meta: dict) -> str:
+    """A DAB session's transmitters heard (its feed's `transmitters`, Radio's
+    names for the TII codes), a line each, strongest first: the site, how
+    far and which way from the station, and its share of the signal. A
+    code no list knows shows as itself."""
+    lines = []
+    for t in meta.get("transmitters") or []:
+        n = round(float(t["levelDb"])) if t.get("levelDb") is not None else None
+        db = "?" if n is None else f"{n:+d}" if n else "0"
+        if not t.get("site"):
+            lines.append(QCoreApplication.translate("DecodersView", "TII {main}/{sub} (not in the list), {db} dB")
+                         .format(main=t.get("main"), sub=t.get("sub"), db=db))
+        elif t.get("distanceKm") is None:
+            lines.append(QCoreApplication.translate("DecodersView", "{site}, {db} dB").format(site=t["site"], db=db))
+        else:
+            lines.append(QCoreApplication.translate("DecodersView", "{site}, {km} km at {deg}°, {db} dB")
+                         .format(site=t["site"], km=f"{float(t['distanceKm']):.0f}",
+                                 deg=f"{int(t['bearingDeg']):03d}", db=db))
+    if not lines:
+        return ""
+    return QCoreApplication.translate("DecodersView", "Transmitters heard:") + "\n" + "\n".join(lines)
+
+
 class DecodersStore(QObject):
     """The engine's sessions and what each has copied."""
 
@@ -347,12 +370,16 @@ class SessionCard(QFrame):
             return
         lines = self.view.store.lines.get(self.sid) or {}
         multi = sess.get("decoder") == "psk" and len(psk_channels(sess.get("params") or {})) > 1
-        self.lines.setVisible(multi)
+        # DAB names the transmitters it hears, under its state.
+        heard = transmitters_text(sess.get("meta") or {}) if sess.get("decoder") == "dab" else ""
+        self.lines.setVisible(multi or bool(heard))
         self.term.setVisible(not multi)
         if multi:
             self.lines.setText("\n".join(f"{c:+6.0f} Hz  {lines.get(c, '').strip()}"
                                           for c in psk_channels(sess.get("params") or {})))
             return
+        if heard:
+            self.lines.setText(heard)
         if text != self.shown:
             if text.startswith(self.shown):
                 self.term.put(text[len(self.shown):])

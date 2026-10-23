@@ -688,7 +688,15 @@ usual one with `"panel": "meta"`, `"holdsReceiver": true`, `"block":
                "whyText": "Needs faad2: install it to hear DAB+ stations. Radio never includes it: see Help › Codecs.",
                "needs": ["faad2"]}],
  "playing": "C221", "why": null, "whyText": "", "audio": {"codec": "mp2"}, "block": "11D",
- "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right"}
+ "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right",
+ "tii": [{"main": 11, "sub": 1, "levelDb": -0.5, "confidence": 1.0},
+         {"main": 1, "sub": 7, "levelDb": -8.5, "confidence": 1.0}],
+ "transmitters": [{"main": 11, "sub": 1, "levelDb": -0.5, "confidence": 1.0, "site": "Crystal Palace",
+                   "area": "London", "ensemble": "SDL National", "erpKw": 5.73, "lat": 51.42417, "lon": -0.07494,
+                   "distanceKm": 4.2, "bearingDeg": 7, "match": "eid"},
+                  {"main": 1, "sub": 7, "levelDb": -8.5, "confidence": 1.0, "site": "Wrotham",
+                   "area": "North West Kent", "ensemble": "SDL National", "erpKw": 25.0, "lat": 51.3207,
+                   "lon": 0.2877, "distanceKm": 30.1, "bearingDeg": 117, "match": "eid"}]}
 ```
 
 `ensemble` is null and `services` empty until heard. `dls` is the playing
@@ -699,6 +707,34 @@ station changes (it needs no faad2). `audio.codec` is `mp2`, `he-aac`,
 whenever it changes. `stats` adds DAB's counters (`frames`, `fibsOk`,
 `fibsBad`, `audioFrames`, `audioErrors`, `superframes`, `aus`,
 `auErrors`).
+
+**Transmitters heard** (`transmitters`, with the decoder's own `tii`
+beside it). Every DAB transmitter sends a code of its own (TII, EN 300 401
+§14.8: a main identifier 0-69 and a sub identifier 0-23) in the gaps
+between frames, so a receiver can tell the transmitters of a
+single-frequency network apart. shack_sdr reads them (ohs-libs
+`rust/shack_sdr/README.md` "DAB", `tii`); Radio names each from Ofcom's
+list of UK DAB transmitters, bundled (`ohsradio/data/dabtx/`, Open
+Government Licence v3.0) and refreshed with the local frequencies below.
+Strongest first; empty until about 1.5 s after sync, then updated every
+3 s at most, and only when something in it changes. Each entry:
+
+| Field | Meaning |
+|---|---|
+| `main`, `sub` | The TII code as numbers (Ofcom's list writes them in hex: "0B"/"01" is 11/1). |
+| `levelDb` | That transmitter's share of the signal received, dB, to 0.5: 0 for a lone one, about -3 each for two equal ones. |
+| `confidence` | 0-1, to 0.1: how clearly its code stands above the noise (two transmitters with one sub identifier are a best fit, at most 0.7). |
+| `site`, `area`, `ensemble` | The site's name, its area and the multiplex, from the list; all null for a code the list does not have (an Irish one, a new site). |
+| `erpKw` | Its licensed effective radiated power, kW (null if the list has none). |
+| `lat`, `lon` | The site, degrees. |
+| `distanceKm`, `bearingDeg` | From the station's locator (great circle, to 0.1 km; bearing from true north, whole degrees); null without a locator or a site. |
+| `match` | How it was found: `eid` (the ensemble's id and the code: certain), `block` (the code on this block, nearest the station, because the list has no row for this ensemble id), or null. |
+
+A TV might show "Crystal Palace, 4 km N, 0 dB" a line each. Nothing about
+it is needed to play a station. The simulator's ensemble on 11D is sent
+by two transmitters, with the codes of Sound Digital's Crystal Palace
+and, 8 dB down, Wrotham (its EId, C1CE, is Sound Digital's), as in the
+example above.
 
 **The codes** (the feed's `why`, a service's, the session's), each with
 its sentence in `whyText`; prefer your own translation of the code:
@@ -1115,6 +1151,10 @@ synchronously (allow a minute: OurAirports is 14 MB of CSV):
 - openAIP airspaces with frequencies within the radius, if the module
   setting `OPENAIP_API_KEY` is set (sent only as the
   `x-openaip-api-key` header), added to the bundled copy.
+
+- in Radio, Ofcom's DAB transmitter list (`ofcom-dab` in `results`,
+  "Transmitters heard" above), replacing the bundled copy; it lands in
+  `/data/dabtx/`.
 
 Each lands in `/data/localfreq/` and succeeds or fails alone; a failed or
 unreadable one leaves the bundled copy in use. Never run at start-up, never

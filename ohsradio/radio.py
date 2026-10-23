@@ -1167,10 +1167,32 @@ class Radio(Engine):
         return self.localfreq.listing(self.st.get("locator", ""), r, category)
 
     def local_refresh(self, fetch, openaip_key: str | None = None) -> dict:
-        """Refresh the downloadable sources (an administrator's action)."""
+        """Refresh the downloadable sources (an administrator's action), and
+        with them the DAB transmitter list: one action for every download
+        the release's data can be brought up to date by."""
         key = self.st.get("openAipKey", "") if openaip_key is None else openaip_key
-        return self.localfreq.refresh(fetch, self.st.get("locator", ""), float(self.st.get("localRadiusKm", 100)),
-                                      key)
+        summary = self.localfreq.refresh(fetch, self.st.get("locator", ""), float(self.st.get("localRadiusKm", 100)),
+                                         key)
+        summary["results"].append(self.dabtx.refresh(fetch))
+        return summary
+
+    # ------------------------------------------------------------------ DAB transmitters
+    @property
+    def dabtx(self):
+        """The DAB transmitter list (ohsradio/dabtx.py), read on first use."""
+        tx = self.__dict__.get("_dabtx")
+        if tx is None:
+            from . import dabtx
+            tx = self.__dict__["_dabtx"] = dabtx.Transmitters(self.data_dir)
+        return tx
+
+    def decoder_meta(self, meta: dict) -> dict:
+        """A decoder feed as clients get it (Decoders._meta): a DAB feed's
+        TII codes (`tii`) named as `transmitters`, with each site's distance
+        and bearing from the station's locator."""
+        if "tii" not in meta:
+            return meta
+        return dict(meta, transmitters=self.dabtx.describe(meta, self.st.get("locator", "")))
 
     def _demodulate(self, X, starts, rx_dial: float):
         if self.st["mode"] == "wfm":
