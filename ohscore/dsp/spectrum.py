@@ -12,6 +12,14 @@ import numpy as np
 from .fir import _good_size
 
 
+class Line(tuple):
+    """A spectrum feed item, (t, start_hz, bin_hz, db) as ever, so every
+    consumer that unpacks four still does; `dc_bins` is (lo, hi), the bins
+    of `db` (inclusive) the engine filled in over the receiver's DC spike
+    for display, or None (Engine._dc_mask; SERVER-API `dcBins`)."""
+
+    dc_bins = None
+
 class Scope:
     """Lines at `fps` from a stream at `rate`. Each line averages `avg`
     Hann-windowed FFTs of size `nfft` with 50 % overlap, ending at the line's

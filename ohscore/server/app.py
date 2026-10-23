@@ -112,8 +112,14 @@ def spectrum_item(kind: str, item) -> dict:
     base64, about a tenth of the bytes of a JSON list."""
     t, start, bin_hz, db = item
     cdb = np.clip(np.round(np.asarray(db, np.float32) * 100.0), -32768, 32767).astype("<i2")
-    return {"kind": kind, "t": t, "startHz": float(start), "binHz": float(bin_hz), "n": int(cdb.size),
-            "cdb": base64.b64encode(cdb.tobytes()).decode()}
+    out = {"kind": kind, "t": t, "startHz": float(start), "binHz": float(bin_hz), "n": int(cdb.size),
+           "cdb": base64.b64encode(cdb.tobytes()).decode()}
+    dc = getattr(item, "dc_bins", None)
+    if dc is not None:
+        # The bins the engine filled in over the receiver's DC spike
+        # (inclusive): a client may mask them its own way.
+        out["dcBins"] = [int(dc[0]), int(dc[1])]
+    return out
 
 
 class AppInfo:

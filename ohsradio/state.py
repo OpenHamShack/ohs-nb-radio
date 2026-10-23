@@ -55,6 +55,11 @@ with REG.after("sampleRate"):
     _k("sdrplayLna", "int", 4, "setting", lo=0, hi=27, restart=True,
        help="The SDRplay RSP's LNA state: higher attenuates more. 4 suits an HF dipole in the evening; the "
             "range each band allows is in SDRplay's API notes.")
+    # The zero-IF receivers' DC spike (ohscore/dsp/dcblock.py; Brian,
+    # 23/10/2026): auto takes it out where the radio makes one.
+    _k("dcBlock", "enum", "auto", "setting", choices=["auto", "on", "off"],
+       help="Take out the line a receiver's own DC offset puts at the centre of the span. Automatic: on for the "
+            "Pluto family, RTL-SDR, SDRplay and SoapySDR receivers, off for the Hermes-Lite 2 and the simulator.")
     _k("hl2Address", "str", "", "setting", auth=True, restart=True,
        help="Hermes-Lite 2 address (ip or ip:port). Empty: find it by broadcast on port 1024.")
     _k("hl2Rate", "enum", 192_000, "setting", choices=HL2_RATES, unit="S/s", restart=True,

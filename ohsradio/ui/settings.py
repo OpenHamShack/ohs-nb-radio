@@ -30,7 +30,7 @@ class SettingsDialog(core.SettingsDialog):
              ("link", "Controller", "page_controller"), ("keyboard", "Control pad", "page_pad"),
              ("gear", "Simulator", "page_simulator")]
     LABELS = {**core.LABELS,
-              "sdrSerial": "Receiver serial", "sdrplayLna": "RSP LNA state",
+              "sdrSerial": "Receiver serial", "sdrplayLna": "RSP LNA state", "dcBlock": "DC spike removal",
               "decodersMax": "Decoders at once", "decodeCpuMax": "Processor share for decoders",
               "hl2Address": "Hermes-Lite 2 address", "hl2Rate": "Hermes-Lite 2 rate", "hl2Lna": "HL2 receiver gain",
               "hl2Pa": "HL2 power amplifier", "hl2TxSwapIQ": "Swap HL2 transmit I/Q",
@@ -48,6 +48,7 @@ class SettingsDialog(core.SettingsDialog):
                                 "hl2": "Hermes-Lite 2", "rtlsdr": "RTL-SDR (RX only)",
                                 "sdrplay": "SDRplay RSP (RX only)", "soapy": "SoapySDR (RX only)"},
                      "sampleRate": {1200000: "1.2 MS/s", 2400000: "2.4 MS/s"},
+                     "dcBlock": {"auto": "Automatic", "on": "On", "off": "Off"},
                      "hl2Rate": {48000: "48 k", 96000: "96 k", 192000: "192 k", 384000: "384 k"},
                      "plan": {plans.AUTO: "Follow the country", **{pid: p.SHORT for pid, p in plans.PLANS.items()}},
                      "planGuard": {"warn": "Warn", "enforce": "Enforce", "off": "Off"},
@@ -137,6 +138,7 @@ class SettingsDialog(core.SettingsDialog):
         self._show_sdr_why(str(self.st.get("device", "sim")))
         self._section(box, self.tr("Calibration"))
         self._add(box, "ppm")
+        self._add(box, "dcBlock")
         lay.insertWidget(at, tmp)
         return sc
 

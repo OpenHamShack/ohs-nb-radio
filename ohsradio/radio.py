@@ -72,6 +72,7 @@ from ohscore.decoders import Refused, sessions_text
 from ohscore.i18n import fmt
 from ohscore.dsp import wfm
 from ohscore.dsp.bank import Channel, Geometry, Source
+from ohscore.dsp.demod import passband
 from ohscore.dsp.fm import FM_RATE, FmDemod, FmMod
 from ohscore.dsp.mod import AmMod
 from ohscore.engine import AUDIO_RATE, Engine, SpanPinned, TxRefused
@@ -101,6 +102,11 @@ DC_GUARD = 15_000.0    # a band that fits keeps DC this far below its lower edge
 TX_OFFSET = 0.25       # of fs: the signal sits this far above the TX LO
 TX_REACH = 0.40        # of fs: furthest the NCO may put the signal from the LO
 DEVICE_FULL_W = {"pluto": 0.0045, "hl2": 5.0, "soapy": 0.0}
+# Receivers that mix straight to zero IF and so make a DC spike at the
+# centre of every span (dcBlock auto). The HL2 samples the antenna and
+# mixes digitally (no spike); the simulator makes none; a recording played
+# back is a "file" and was kept raw, so auto leaves it as it was.
+ZERO_IF = ("pluto", "libresdr", "rtlsdr", "sdrplay", "soapy")
 SWR_MIN_FWD = 0.05     # W: below this the reflected reading is noise (Quisk's figure)
 MEASURING = ("hl2", "sim")   # devices whose telemetry reports forward power
 OVER_READINGS = 2      # consecutive readings over the licence before unkeying
@@ -641,22 +647,60 @@ class Radio(Engine):
         b = bands.band_at(rx)
         conv = self._conv_at(rx, rx=True)
         rr = self._air_range(self._ranges()[0], conv)
-        want = plan_centre(rx, b, fs, rr)
+        planned = plan_centre(rx, b, fs, rr)
+        edge = self._dial_edge(self.st)
+        want = self._clear_of_dc(rx, edge, planned, half, rr)
         # A band the span holds whole has one centre whatever the dial: snap to it.
-        band_based = b is not None and plan_centre(b.lo, b, fs, rr) == plan_centre(b.hi, b, fs, rr) == want
+        band_based = b is not None and plan_centre(b.lo, b, fs, rr) == plan_centre(b.hi, b, fs, rr) == planned
         # Into or out of a converter's band, the device retunes whatever the centre.
         other = conv != (self.pending_conv if pending else self.rx_conv)
-        edge = self._dial_edge(self.st)
-        if c is None or other or not (c - half + edge <= rx <= c + half - edge) or (band_based and c != want):
+        if c is None or other or not (c - half + edge <= rx <= c + half - edge) or (band_based and c != want) \
+                or abs(rx - c) < edge + spanfit.DC_GUARD_HZ:
             self.pending_conv = conv
             self.pending_centre = want
 
     @staticmethod
+    def _clear_of_dc(rx: float, edge: float, centre: float, half: float, rr: tuple[float, float]) -> float:
+        """`centre`, or the nearest centre to it that keeps the receive
+        dial's passband clear of DC (the DC keep-out, below)."""
+        if abs(rx - centre) >= edge + spanfit.DC_GUARD_HZ:
+            return centre
+        moved = spanfit.choose_centre([(rx, edge)], half, prefer=centre, lo=rr[0], hi=rr[1])
+        return centre if moved is None else moved
+
+    # The DC keep-out (Brian, 23/10/2026), one rule for a centre that
+    # follows the dial and one pinned for decoders alike: the receiver's
+    # centre - its DC, where a zero-IF radio's own spike and LO leakage
+    # sit - never comes within the dial's passband plus
+    # spanfit.DC_GUARD_HZ of the dial. Following the dial, a tune that
+    # would land there moves the centre instead (offset tuning,
+    # _maybe_recentre); pinned, the pin moves the least that clears it
+    # (_pin_check); a session is fitted by the same numbers (pin_plan).
+    # The DC blocker (ohscore/dsp/dcblock.py) takes the spike out; this
+    # keeps what is left of it, and the LO's phase noise around it, out of
+    # what the operator hears.
+    @staticmethod
     def _dial_edge(s: dict) -> float:
-        """How far either side of the receive dial what it hears reaches.
-        Wide FM's channel reaches 90 kHz either side of the dial; it has to
-        stay inside the span too, not only the dial."""
-        return wfm.HALF_WIDTH + 10_000.0 if s["mode"] == "wfm" else 3_000.0
+        """How far either side of the receive dial what it hears reaches,
+        by mode: the demodulator's passband (SSB's filter, CW's at its
+        pitch, AM's width), FM's channel filter (its deviation plus 5 kHz,
+        _configure_consumers), and wide FM's 90 kHz channel with 10 kHz to
+        spare, which has to stay inside the span too, not only the dial.
+        Never under 3 kHz."""
+        mode = s["mode"]
+        if mode == "wfm":
+            return wfm.HALF_WIDTH + 10_000.0
+        lo, hi = passband(mode, s["filterLo"], s["filterHi"], s["cwPitch"], s["cwWidth"], s["amWidth"])
+        edge = max(abs(lo), abs(hi))
+        if mode == "fm":
+            edge = max(edge, float(s.get("fmDeviation", 5000.0)) + 5000.0)
+        return max(3_000.0, edge)
+
+    def _dc_block_wanted(self) -> bool:
+        how = self.st.get("dcBlock", "auto")
+        if how in ("on", "off"):
+            return how == "on"
+        return self._kind() in ZERO_IF
 
     # ------------------------------------------------------------ the pinned span
     # Brian, 23/10/2026 (RADIO-SDR-PLAN §8.5, "fixed sessions against a
@@ -1091,6 +1135,10 @@ class Radio(Engine):
             self.rx_if = self._dev_freq(c, self.rx_conv)
             self.dev.set_rx_if(self.rx_if)
             self.settle_at = self.rx_samples + int(RETUNE_SETTLE * self.geo.fs)
+            if self.dcblock is not None:
+                # A zero-IF radio's DC moves with its LO: start the estimate
+                # afresh rather than follow the step for 0.1 s.
+                self.dcblock.reset()
             lo, hi = self.wide_span()
             self._status(spanLo=lo, spanHi=hi, span=self.span_view())
 

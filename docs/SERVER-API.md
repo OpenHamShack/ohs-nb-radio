@@ -48,7 +48,7 @@ the desktop apps.
 | `POST api/halt` | control | stop transmitting now, whoever keyed |
 | `GET api/memories`, `POST api/recall {"name"}` | view, control | memories |
 | `GET api/log`, `POST api/log`, `GET api/log.adi` | view, control, view | the station's shared logbook as this app shows it (ENGINE-API `log_qso`), and ADIF |
-| `GET api/events?kinds=state,toast,meter,lock,events` | view | WebSocket: one JSON message per feed item, `{"kind": …, …item}`; first `{"kind": "hello", "status": …}`. `wide` and `zoom` only when asked: `{"kind", "t", "startHz", "binHz", "n", "cdb"}`, `cdb` the bins as little-endian int16 centi-dB in base64. A decode (`events`) that names a sender (`call`) also carries its DXCC entity when cty.dat can place it: `country` (cty.dat's name), `dxcc` (primary prefix), `continent`; absent otherwise. |
+| `GET api/events?kinds=state,toast,meter,lock,events` | view | WebSocket: one JSON message per feed item, `{"kind": …, …item}`; first `{"kind": "hello", "status": …}`. `wide` and `zoom` only when asked: `{"kind", "t", "startHz", "binHz", "n", "cdb"}`, `cdb` the bins as little-endian int16 centi-dB in base64; a `wide` item may add `dcBins: [lo, hi]`, the bins (inclusive, into `cdb`) filled in over the receiver's DC spike (Radio: "The DC spike" below). A decode (`events`) that names a sender (`call`) also carries its DXCC entity when cty.dat can place it: `country` (cty.dat's name), `dxcc` (primary prefix), `continent`; absent otherwise. |
 | `GET api/events` (state resync) | view | A `state` item is a diff, published once, and a client too slow to drain its queue loses the oldest. When that has happened the server sends the whole state before any later diff: a `state` message in the usual shape, `{"kind": "state", "changes": {…every key…}, "full": true}`. `full` is new and optional (absent on ordinary diffs); a client that merges `changes` as it always has needs no change, and one that wants to can replace its copy instead. Diffs it had not yet received are folded into the snapshot, not sent after it. Other kinds (meter, spectrum, events) still drop oldest-first. |
 | `GET api/events?kinds=…,cwskim,cwspot` | view | Radio's CW skimmer (ENGINE-API `cwskim`, `cwspot`). Neither kind is in the default set, so a client that does not ask never gets them. `cwskim` comes once a second, at most `cwSkimMax` channels (about 8 kB/s at 64). `cwspot` is coalesced to at most 5 items a second. A slow client loses snapshots, which do no harm, and spots, which it recovers through `rev`. |
 | `GET api/cwskim` | view | Radio only: `{"state", "why"?, "band", "segment", "cover", "channels", "carriers", "spotsRev", "spots": [...]}`. That is the `cwskim` item, plus every spot of the last 30 minutes (at most 500, newest first, each a `cwspot` `spot`). Fetch it when a view opens, and after a gap in `rev`. It is `{"state": "off", ...}` with empty lists while `cwSkim` is false. A tap on a spot or channel only tunes: one `POST api/set {"mode": "cw", "vfo": dial}` at Control level, never a reply and never Enable TX (Brian, 13/10/2026). |
@@ -182,9 +182,10 @@ tuned away, so while one runs the centre is **pinned** (Brian,
                                      "label": "APRS on 144.8000 MHz"}]}
   ```
 - **Where it is pinned**, when a session starts: the centre it has now, if
-  every session (each its channel's width) and the dial (3 kHz each side;
-  wide FM 100 kHz) fit inside the span and none of them is within 5 kHz
-  of the centre itself (DC, where the receiver's own spike is); otherwise
+  every session (each its channel's width) and the dial (its passband by
+  mode, as "The DC spike" below says) fit inside the span and none of
+  them is within 5 kHz of the centre itself (DC, where the receiver's own
+  spike is); otherwise
   the middle of the sessions and the dial, moved the least that keeps them
   all off DC, on a whole kHz where it can; otherwise the session is
   refused `409 outside_span` with the sentence ("7.0500 MHz is too far
@@ -227,6 +228,42 @@ tuned away, so while one runs the centre is **pinned** (Brian,
   local oscillator, never the capture: a repeater's input 600 kHz below a
   pinned span keys and transmits as ever, and `txBlocked` judges the
   transmit dial as before.
+
+## The DC spike (Radio)
+
+A receiver that mixes straight to zero IF - the Pluto family, the RTL-SDR,
+an SDRplay RSP, a SoapySDR receiver - puts its own DC offset and LO
+leakage at the exact centre of its span: a carrier that is not on the air,
+on the trace and down the waterfall (Brian, 23/10/2026: the RSPdx with
+SDRplay's own correction at dcCal 4, trackTime 63 still showed it). Three
+things deal with it; code `ohscore/dsp/dcblock.py`, `Engine._dc_mask`,
+`Radio._dial_edge`; tests `tests/test_dc_spike.py`.
+
+- **A DC blocker** on the receive IQ before anything looks at it (scopes,
+  demodulator, decoders): first order, its corner 5 Hz. It follows a
+  residue that wanders within a tenth of a second and leaves a signal
+  1 kHz from the centre as it was (0.0001 dB, 0.3°). Recordings keep what
+  the radio sent. The setting `dcBlock` (Settings › Radio, `api/spec`):
+  `auto` (the default: on for those receivers, off for the Hermes-Lite 2,
+  which mixes digitally, the simulator and a recording played back), `on`
+  or `off`.
+- **The wide scope fills in its bins over DC** while the blocker runs:
+  the two either side of the centre bin and itself, a straight line
+  between their neighbours, so the residue and the LO's phase noise round
+  it (a bin or two at 586 Hz a bin) never stand as a line. Display only.
+  The `wide` item says which: `"dcBins": [lo, hi]`, indices into its
+  bins, inclusive; absent when nothing was filled in (blocker off, or DC
+  outside the item). A client may mask them its own way.
+- **The DC keep-out** (offset tuning), one rule whether the centre
+  follows the dial or background decoders pin it ("The pinned span"
+  above): the centre never comes within the dial's passband plus 5 kHz of
+  the receive dial. The passband by mode: SSB and the digital modes their
+  filter (3 kHz at least), CW its filter at the pitch, AM `amWidth`, FM its
+  channel (`fmDeviation` + 5 kHz), wide FM its 90 kHz channel plus 10 kHz
+  (105 kHz clear of DC in all). A tune that would land the dial there
+  moves the centre instead, the least that clears it; pinned, the pin
+  moves likewise while every session still fits. `span` says where the
+  centre is.
 
 ## Receive audio format
 

@@ -117,7 +117,8 @@ from .dsp.demod import Demod, NoiseBlanker, passband
 from .dsp.nr import NoiseReduction
 from .dsp.mod import SsbMod
 from .dsp.multirate import Interpolator
-from .dsp.spectrum import Scope, wide_nfft
+from .dsp.dcblock import DcBlocker
+from .dsp.spectrum import Line, Scope, wide_nfft
 from .keyer import Keyer, VOICE_MODES
 from .logbook import Logbook
 from . import station as station_mod
@@ -359,6 +360,12 @@ class Engine:
     # receiver is on the transponder whatever the dial does, so there is
     # nothing to pin and its sessions keep the `outside` rule.
     PINS_SPAN = False
+    # How many bins either side of DC the wide scope fills in for display
+    # while the DC blocker runs (_dc_mask): the blocker leaves a residue a
+    # bin wide, and a zero-IF receiver's LO phase noise a skirt of a bin or
+    # two around it at the wide scope's resolution (2.4 MS/s over 4096 bins
+    # is 586 Hz a bin), so +-2 bins hides the line and nothing wider.
+    DC_MASK_BINS = 2
 
     # Supplied by the app's subclass.
     STATE = None                 # ohscore.state.Registry
@@ -639,6 +646,9 @@ class Engine:
         # while the operator has it: {session, by, block, centre, prior}.
         self.held: dict | None = None
         self._hold_tls = threading.local()
+        # The receive IQ's DC blocker while _dc_block_wanted (made and
+        # dropped by _configure_rx on the receive thread).
+        self.dcblock: DcBlocker | None = None
         # Called with a word for what happened whenever a person (or a
         # client) does something with the radio: a set() that changes
         # something, a listener arriving, a key-up, a recording... (Radio's
@@ -1432,6 +1442,11 @@ class Engine:
                     self.dev.set_antenna(want_ant)
                 except DeviceError as e:
                     self.toast(_("Antenna not changed: {error}").format(error=e), "warn")
+        if self._dc_block_wanted():
+            if self.dcblock is None or self.dcblock.fs != float(self.geo.fs):
+                self.dcblock = DcBlocker(self.geo.fs)
+        else:
+            self.dcblock = None
         lo, hi = passband(s["mode"], s["filterLo"], s["filterHi"], s["cwPitch"], s["cwWidth"], s["amWidth"])
         self.demod.configure(s["mode"], lo, hi, s["agc"], s["rfGain"])
         self.nb.threshold = s["nbThreshold"]
@@ -1458,6 +1473,11 @@ class Engine:
         if want != self.decoder_mode:
             self._swap_decoder(s["mode"])
             self.decoder_mode = want
+
+    def _dc_block_wanted(self) -> bool:
+        """Whether the receive IQ goes through the DC blocker (the app's
+        rule: Radio's dcBlock setting and its device); never here."""
+        return False
 
     def _configure_consumers(self, s: dict) -> None:
         """Apply settings to the app's own receive consumers."""
@@ -1715,7 +1735,14 @@ class Engine:
         self.rx_samples += len(x)
         rec = self.rec
         if rec is not None:
+            # What the radio sent, DC and all: a recording is evidence, and
+            # playing it back takes it through the blocker again.
             self._rec_push(rec, x)
+        blk = self.dcblock
+        if blk is not None:
+            # A zero-IF receiver's DC spike out before anything looks at the
+            # samples: scopes, demodulators, decoders (ohscore/dsp/dcblock.py).
+            x = blk(x)
         t_stream = self.rx_samples / self.geo.fs
         if self.rx_invert:
             x = np.conj(x)
@@ -1742,7 +1769,8 @@ class Engine:
         # Wide scope: crop to the app's span, report its corrected start.
         w_lo, w_hi = self.wide_span()
         for _, db in self.wide.process(x):
-            self._publish("wide", self._crop(db, self.wide.bin_hz, 0.0, w_lo, w_hi, now))
+            dc = self._dc_mask(db) if blk is not None else None
+            self._publish("wide", self._crop(db, self.wide.bin_hz, 0.0, w_lo, w_hi, now, dc=dc))
         self._rx_wide(x)
 
         # VFO audio.
@@ -2547,10 +2575,12 @@ class Engine:
         return e0 + self.rx_samples / self.geo.fs - n / AUDIO_RATE
 
     def _crop(self, db: np.ndarray, bin_hz: float, centre_dl: float, lo_dl: float, hi_dl: float, t: float,
-              centred: bool = False):
+              centred: bool = False, dc: tuple[int, int] | None = None):
         """Spectrum item (t, start_dial_hz, bin_hz, db) covering [lo_dl, hi_dl].
         For the wide scope, centre_dl is unused: bins are placed through the
-        app's frequency model (NB's puts beacons on their nominal frequencies)."""
+        app's frequency model (NB's puts beacons on their nominal frequencies).
+        `dc`: the bins of `db` _dc_mask filled in, carried into the item's
+        own numbering as `dc_bins` when any of them is in it."""
         n = len(db)
         if centred:
             # Zoom: DC of the zoom channel is exactly centre_dl (corrected).
@@ -2564,7 +2594,26 @@ class Engine:
             i0, i1 = max(0, i0), min(n, i1)
             # bin i sits at offset (i - n/2) * bin_hz from DC.
             start = self._dial_at((i0 - n // 2) * bin_hz)
-        return (t, float(start), float(bin_hz), db[i0:i1].copy())
+        line = Line((t, float(start), float(bin_hz), db[i0:i1].copy()))
+        if dc is not None:
+            lo, hi = max(dc[0], i0) - i0, min(dc[1], i1 - 1) - i0
+            if lo <= hi:
+                line.dc_bins = (lo, hi)
+        return line
+
+    def _dc_mask(self, db: np.ndarray) -> tuple[int, int] | None:
+        """Fill in the wide scope's bins over DC (bin n/2 of the shifted
+        spectrum) with a straight line between their neighbours, in place:
+        display only, so the line the blocker leaves - and the LO's phase
+        noise around it - never stands down the waterfall. Answers the bins
+        filled (inclusive), for the feed's `dcBins`."""
+        n, k = len(db), self.DC_MASK_BINS
+        lo, hi = n // 2 - k, n // 2 + k
+        if lo < 1 or hi > n - 2:
+            return None
+        a, b = float(db[lo - 1]), float(db[hi + 1])
+        db[lo:hi + 1] = np.linspace(a, b, hi - lo + 3, dtype=np.float32)[1:-1]
+        return lo, hi
 
     def _decode_loop(self):
         while not self.stop_ev.is_set():
