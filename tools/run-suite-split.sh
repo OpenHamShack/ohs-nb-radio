@@ -66,10 +66,23 @@ run_one() {
 }
 
 # A plain job pool: -j N keeps N modules running (the Qt ones are heavy,
-# so the default is one at a time).
+# so the default is one at a time). The pool counts its own PIDs: `jobs -p`
+# inside $(...) runs in a subshell, which in dash (this host's /bin/sh)
+# sees no jobs at all, so -j 4 once started all ~240 modules at once and
+# took the machine's memory with it (23/10/2026).
+pids=""
 for m in "$@"; do
-    while [ "$(jobs -p | wc -l)" -ge "$JOBS" ]; do sleep 1; done
+    while :; do
+        live=""; n=0
+        for p in $pids; do
+            if kill -0 "$p" 2>/dev/null; then live="$live $p"; n=$((n + 1)); fi
+        done
+        pids=$live
+        [ "$n" -lt "$JOBS" ] && break
+        sleep 1
+    done
     run_one "$m" &
+    pids="$pids $!"
 done
 wait
 
