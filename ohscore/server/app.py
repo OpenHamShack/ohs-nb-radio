@@ -42,7 +42,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.parse
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import numpy as np
 
@@ -1066,6 +1066,27 @@ class _Handler(BaseHTTPRequestHandler):
     def post_codecs_rescan(self, who, q):
         self._send(200, {"codecs": self.srv.radio.decoders.codecs(rescan=True)})
 
+    def get_decoder_files(self, who, q):
+        """GET api/decoders/files: the pictures decoders saved (SSTV's),
+        newest first, by name; each is fetched from api/decoders/files/{name}."""
+        self._send(200, {"files": self.srv.radio.decoders.files()})
+
+    def get_decoder_file(self, who, q):
+        """GET api/decoders/files/{name}: one saved picture, as PNG
+        (`download=1` asks a browser to save it rather than show it). The
+        name must be one the list gives: anything else is 404, a path
+        included (the host refuses any name that could leave its folder)."""
+        name = unquote(self._session_id())
+        data = self.srv.radio.decoders.file(name)
+        if data is None:
+            self._error(404, _("There is no decoded picture called {name}").format(name=name), "no_file")
+            return
+        extra = {}
+        if q.get("download", [""])[0] in ("1", "true"):
+            extra["Content-Disposition"] = f'attachment; filename="{name}"'
+        self._send(200, data, "image/png" if name.lower().endswith(".png") else "application/octet-stream",
+                   extra)
+
     # ---------------------------------------------------------- the band scan
     # Radio's FM and DAB station lists (ohsradio/bandscan.py,
     # docs/SERVER-API.md "Station lists"). NB has none: 404.
@@ -1557,6 +1578,7 @@ ROUTES = {
     ("GET", "/api/decoders"): ("view", _Handler.get_decoders),
     ("POST", "/api/decoders/sessions"): ("control", _Handler.post_decoder_session),
     ("POST", "/api/decoders/codecs/rescan"): ("control", _Handler.post_codecs_rescan),
+    ("GET", "/api/decoders/files"): ("view", _Handler.get_decoder_files),
     ("GET", "/api/recordings"): ("view", _Handler.get_recordings),
     ("GET", "/api/recordings/status"): ("view", _Handler.get_recordings_status),
     ("GET", "/api/recordings/file"): ("view", _Handler.get_recordings_file),
@@ -1574,6 +1596,7 @@ PREFIX_ROUTES = {
     ("GET", "/api/decoders/sessions/"): ("view", _Handler.get_decoder_session),
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
     ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),
+    ("GET", "/api/decoders/files/"): ("view", _Handler.get_decoder_file),
     ("PUT", "/api/local-frequencies/mine/"): ("control", _Handler.put_local_mine),
     ("DELETE", "/api/local-frequencies/mine/"): ("control", _Handler.delete_local_mine),
 }

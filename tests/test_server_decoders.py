@@ -3,7 +3,10 @@ RADIO-SDR-PLAN §4.4): Radio's store form on its band simulator, faster
 than real time, with a fixed RTTY session copying the simulated 20 m RTTY
 station. Levels (view reads, control starts and stops), every error code,
 recovery by `rev`, the pinned span, the session limit, the codecs and their
-rescan, the `decoder` events on api/events, and decoders in api/status."""
+rescan, the `decoder` events on api/events, and decoders in api/status.
+Then milestone 2's: a PSK session's several channels, and an SSTV
+session's picture - its rows on api/events as base64, the PNG on
+api/decoders/files."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import json
 import tempfile
@@ -140,6 +143,134 @@ class DecodersApi(test_server.ServerTest):
             sock.close()
         self.assertTrue(all(m["session"] == sess["id"] for m in msgs))
         self.assertIn("CQ TEST", "".join(m.get("text", "") for m in msgs))
+
+
+def _psk_air(text, centre, variant="psk31"):
+    import numpy as np
+    from ohscore.devices import simsignals as sg
+    from ohscore.modes import psk
+    a = psk.Encoder().render(text=text, variant=variant, center=centre)
+    return sg.analytic(np.concatenate([np.zeros(12_000, np.float32), a, np.zeros(24_000, np.float32)]))
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class PskAndSstvApi(test_server.ServerTest):
+    """PSK and SSTV sessions as a client drives them (SERVER-API "Decoders":
+    psk's channels, sstv's rows and files)."""
+    broker = False
+    ws = test_server.Streams.ws
+    frame = staticmethod(test_server.Streams.frame)
+    DIAL = 14_230_000.0        # USB, inside the span around 14.070 MHz
+    LEVEL = -56.0
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.audio = StreamAudio(realtime=False)
+        cfg = {"device": "sim", "audioBackend": "null", "simRealtime": False, "simSeed": 2, "simHourUtc": 14.0,
+               "callsign": "GM4BRI", "licenceClass": "full", "vfo": 14_070_000.0, "mode": "usb"}
+        self.radio = Radio(cfg, persist=False, data_dir=self.tmp.name, audio=self.audio)
+        self.srv = Server(self.radio, ham_server.info("9.9.9"), self.audio, secret="test-proxy-secret")
+        self.port = self.srv.serve("127.0.0.1", 0).server_address[1]
+        self.addCleanup(self.srv.shutdown)
+        self.assertEqual(self.srv.start_radio(), "")
+
+    def results(self, sid):
+        s, a = self.req("GET", f"/api/decoders/sessions/{sid}", level="view")
+        self.assertEqual(s, 200, a)
+        return a
+
+    def until(self, cond, timeout=90.0):
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            self.radio.heartbeat()
+            if cond():
+                return True
+            time.sleep(0.05)
+        return False
+
+    def test_a_psk_session_copies_each_of_its_channels(self):
+        self.radio.dev.add_station("a", self.DIAL, _psk_air("ALPHA DE G4AAA G4AAA ", 1000.0), self.LEVEL)
+        self.radio.dev.add_station("b", self.DIAL, _psk_air("BRAVO DE M0BBB M0BBB ", 1900.0), self.LEVEL)
+        s, sess = self.req("POST", "/api/decoders/sessions",
+                           {"decoder": "psk", "freqHz": self.DIAL + 1000.0,
+                            "params": {"baud": 31.25, "channels": "0,900"}}, level="control")
+        self.assertEqual(s, 201, sess)
+        self.assertEqual(sess["params"], {"baud": 31.25, "channels": "0,900"})
+
+        def per_channel():
+            out = {}
+            for r in self.results(sess["id"])["results"]:
+                if r["type"] == "text":
+                    k = 900 if r["offsetHz"] > 450 else 0
+                    out[k] = out.get(k, "") + r["text"]
+            return out
+        self.until(lambda: "G4AAA G4AAA" in per_channel().get(0, "") and "M0BBB M0BBB" in per_channel().get(900, ""))
+        got = per_channel()
+        self.assertIn("ALPHA DE G4AAA G4AAA", got.get(0, ""), got)
+        self.assertIn("BRAVO DE M0BBB M0BBB", got.get(900, ""), got)
+        meta = self.results(sess["id"])["meta"]
+        self.assertEqual([c["offsetHz"] for c in meta["channels"]], [0.0, 900.0])
+        # A waterfall click adds a third, live (POST .../{id} params).
+        s, a = self.req("POST", f"/api/decoders/sessions/{sess['id']}", {"params": {"channels": "0,900,1500"}},
+                        level="control")
+        self.assertEqual((s, a["params"]["channels"]), (200, "0,900,1500"))
+        s, a = self.req("POST", f"/api/decoders/sessions/{sess['id']}",
+                        {"params": {"channels": ",".join(str(10 * k) for k in range(40))}}, level="control")
+        self.assertEqual((s, a["code"]), (400, "bad_params"))
+
+    def test_an_sstv_session_sends_rows_and_its_picture_is_a_file(self):
+        import base64
+        import numpy as np
+        from shack_sdr import sstv
+        from ohscore.devices import simsignals as sg
+        audio, _sent = sstv.testsig("robot36", rate=12_000.0, lead_s=1.0, tail_s=2.0)
+        self.radio.dev.add_station("sstv", self.DIAL,
+                                   sg.analytic(np.concatenate([audio, np.zeros(len(audio), np.float32)])),
+                                   self.LEVEL)
+        s, files = self.req("GET", "/api/decoders/files", level="view")
+        self.assertEqual((s, files), (200, {"files": []}))
+        s, sess = self.req("POST", "/api/decoders/sessions",
+                           {"decoder": "sstv", "freqHz": self.DIAL + 1900.0}, level="control")
+        self.assertEqual((s, sess["panel"]), (201, "image"))
+        sock, f = self.ws("/api/events?kinds=decoder")
+        msgs = []
+        try:
+            json.loads(self.frame(f)[1])                        # hello
+            end = time.monotonic() + 120
+            while time.monotonic() < end and not any(m.get("event") == "done" for m in msgs):
+                self.radio.heartbeat()
+                msgs.append(json.loads(self.frame(f)[1]))
+        finally:
+            sock.close()
+        mine = [m for m in msgs if m["session"] == sess["id"] and m["type"] == "image"]
+        start = next(m for m in mine if m["event"] == "start")
+        self.assertEqual((start["width"], start["height"]), (320, 240))
+        rows = [m for m in mine if m["event"] == "lines"]
+        self.assertTrue(rows)
+        self.assertEqual(len(base64.b64decode(rows[0]["rgb"])) % (320 * 3), 0)
+        done = next(m for m in mine if m["event"] == "done")
+        self.assertNotIn("path", done)
+        # The picture, on api/decoders/files, view level.
+        s, files = self.req("GET", "/api/decoders/files", level="view")
+        self.assertEqual(s, 200)
+        self.assertEqual([x["name"] for x in files["files"]], [done["file"]])
+        self.assertEqual(set(files["files"][0]), {"name", "session", "decoder", "t", "size"})
+        self.assertEqual((files["files"][0]["session"], files["files"][0]["decoder"]), (sess["id"], "sstv"))
+        s, png = self.req("GET", f"/api/decoders/files/{done['file']}", level="view")
+        self.assertEqual(s, 200)
+        self.assertEqual(sstv.png_rgb(png).shape, (240, 320, 3))
+        self.assertEqual(len(png), files["files"][0]["size"])
+        for bad in ("nothing.png", "..%2F..%2Fetc%2Fpasswd", ".hidden.png"):
+            with self.subTest(bad=bad):
+                s, a = self.req("GET", f"/api/decoders/files/{bad}", level="view")
+                self.assertEqual((s, a["code"]), (404, "no_file"))
+        # Still there to look at once the radio has stopped.
+        self.radio.stop()
+        s, files = self.req("GET", "/api/decoders/files", level="view")
+        self.assertEqual([x["name"] for x in files["files"]], [done["file"]])
+        s, png2 = self.req("GET", f"/api/decoders/files/{done['file']}?download=1", level="view")
+        self.assertEqual((s, png2), (200, png))
 
 
 if __name__ == "__main__":
