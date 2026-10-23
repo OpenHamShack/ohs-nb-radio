@@ -38,7 +38,7 @@ msgstr ""
 msgid "An IQ recording is being made"
 msgstr ""
 
-#: ohsradio/bandscan.py:517
+#: ohsradio/bandscan.py:526
 msgid "Band III (DAB)"
 msgstr ""
 
@@ -61,7 +61,7 @@ msgstr ""
 msgid "Connecting to {host}…"
 msgstr ""
 
-#: ohsradio/bandscan.py:556
+#: ohsradio/bandscan.py:565
 #, python-brace-format
 msgid "DAB: block {block} ({n} of {of})"
 msgstr ""
@@ -87,8 +87,8 @@ msgstr ""
 msgid "FIR / sample rate"
 msgstr ""
 
-#: ohsradio/bandscan.py:527
-#: ohsradio/bandscan.py:532
+#: ohsradio/bandscan.py:536
+#: ohsradio/bandscan.py:541
 #, python-brace-format
 msgid "FM: {mhz:.2f} MHz ({n} of {of})"
 msgstr ""
@@ -190,7 +190,7 @@ msgstr ""
 msgid "Start the radio before scanning"
 msgstr ""
 
-#: ohsradio/bandscan.py:494
+#: ohsradio/bandscan.py:503
 #, python-brace-format
 msgid "Stopped: the radio was wanted ({why})"
 msgstr ""
@@ -254,7 +254,7 @@ msgstr ""
 msgid "The receiver is in use: {text}"
 msgstr ""
 
-#: ohsradio/bandscan.py:468
+#: ohsradio/bandscan.py:477
 msgid "The receiver stopped delivering samples"
 msgstr ""
 
@@ -424,7 +424,7 @@ msgstr ""
 msgid "still restarting"
 msgstr ""
 
-#: ohsradio/bandscan.py:517
+#: ohsradio/bandscan.py:526
 msgid "the FM band"
 msgstr ""
 
