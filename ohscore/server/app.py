@@ -156,6 +156,23 @@ class Server:
         # Without shack_rec (a desktop build run with --server) it is
         # NoRecordings, which refuses rather than stopping the server.
         self.recordings = server_recordings(radio, audio, info, **(recordings or {}))
+        # Radio's band scan (ohsradio/bandscan.py) runs only while nobody is
+        # using the radio: it hears of the listeners here, and of what only
+        # the server knows makes the radio busy. A listener arriving is
+        # someone using it (Engine.client_activity: the scan gives way).
+        scan = getattr(radio, "bandscan", None)
+        if scan is not None:
+            scan.listeners = audio.listeners
+            scan.probes.append(self._scan_busy)
+        audio.on_listen = lambda: radio.client_activity("listener")
+
+    def _scan_busy(self) -> str:
+        """The band scan's reasons to wait that only the server knows."""
+        if self.digi.remote is not None:
+            return _("Automatic transmit is armed")
+        if self.recordings.summary().get("active"):
+            return _("An audio recording is being made")
+        return ""
 
     # ---------------------------------------------------------- lifecycle
     def device(self) -> str:
@@ -864,6 +881,8 @@ class _Handler(BaseHTTPRequestHandler):
         if not REMOTE_RE.match(remote):
             raise ValueError(_("remote must be 1 to 64 letters, digits, '.', '_', ':' or '-'"))
         digi = self.srv.digi
+        # Armed, overs will key: a band scan gives the receiver back now.
+        self.srv.radio.client_activity("transmit")
         try:
             digi.arm(remote, who["device"])
             if body.get("cq"):
@@ -1007,6 +1026,43 @@ class _Handler(BaseHTTPRequestHandler):
     def post_codecs_rescan(self, who, q):
         self._send(200, {"codecs": self.srv.radio.decoders.codecs(rescan=True)})
 
+    # ---------------------------------------------------------- the band scan
+    # Radio's FM and DAB station lists (ohsradio/bandscan.py,
+    # docs/SERVER-API.md "Station lists"). NB has none: 404.
+    SCAN_STATUS = {"bad_params": 400, "receiver_busy": 409, "unsupported": 409, "not_running": 503}
+
+    def _scanner(self):
+        scan = getattr(self.srv.radio, "bandscan", None)
+        if scan is None:
+            self._error(404, _("This app has no station lists."), "not_found")
+        return scan
+
+    def get_fm_stations(self, who, q):
+        scan = self._scanner()
+        if scan is not None:
+            self._send(200, scan.view("fm"))
+
+    def get_dab_stations(self, who, q):
+        scan = self._scanner()
+        if scan is not None:
+            self._send(200, scan.view("dab"))
+
+    def post_scan(self, who, q):
+        scan = self._scanner()
+        if scan is None:
+            return
+        band = self._body().get("band", "both")
+        try:
+            got = scan.scan_now(band if isinstance(band, str) else "")
+        except ValueError as e:
+            # The scanner's Refused (a ValueError with its code): ohscore
+            # never imports an app's package.
+            code = getattr(e, "code", "bad_params")
+            self._error(self.SCAN_STATUS.get(code, 409), str(e), code)
+            return
+        log.info("band scan of %s started by %s", "+".join(got["bands"]), who.get("user", "?"))
+        self._send(202, got)
+
     def get_overpower(self, who, q):
         """NB's over-power and LEILA watch: its list of the last 30 minutes
         and its state (docs/SERVER-API.md). Radio has none."""
@@ -1137,6 +1193,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def post_recordings_start(self, who, q):
         kind = str(self._body().get("kind") or "audio")
+        # What is heard is what is recorded: a band scan gives the receiver back first.
+        self.srv.radio.client_activity("recording")
         try:
             st = self.srv.recordings.start(kind)
         except self.srv.recordings.Refused as e:
@@ -1337,6 +1395,9 @@ ROUTES = {
     ("POST", "/api/autotx"): ("control", _Handler.post_autotx),
     ("POST", "/api/halt"): ("control", _Handler.post_halt),
     ("GET", "/api/cwskim"): ("view", _Handler.get_cwskim),
+    ("GET", "/api/fm/stations"): ("view", _Handler.get_fm_stations),
+    ("GET", "/api/dab/stations"): ("view", _Handler.get_dab_stations),
+    ("POST", "/api/scan"): ("control", _Handler.post_scan),
     ("GET", "/api/overpower"): ("view", _Handler.get_overpower),
     ("POST", "/api/overpower/capture"): ("control", _Handler.post_overpower_capture),
     ("GET", "/api/smeter/calibrate"): ("view", _Handler.get_smeter_cal),

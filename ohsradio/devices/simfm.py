@@ -78,15 +78,18 @@ class FmStation:
 
 
 # The simulator's Band II (sim.py): fictional stations, see the docstring.
+# Levels are carrier dBFS; the simulator's floor is -112 dBFS/Hz, about -60
+# dBFS in a 180 kHz channel, so the weakest here is 13 dB over it - enough
+# for RDS (shack_sdr reads PS down to 10 dB) and for the scan (10 dB).
 BAND = (
     FmStation(88_600_000.0, -38.0, 0xC201, "SIM ONE", "Sim One: a tone of 1 kHz left, 1.5 kHz right", 10,
               True, 1000.0, 1500.0, seed=1),
-    FmStation(91_300_000.0, -56.0, 0xC201, "SIM ONE", "Sim One: a tone of 1 kHz left, 1.5 kHz right", 10,
+    FmStation(91_300_000.0, -47.0, 0xC201, "SIM ONE", "Sim One: a tone of 1 kHz left, 1.5 kHz right", 10,
               True, 1000.0, 1500.0, seed=2),
     FmStation(93_500_000.0, -44.0, 0xC3B4, "SIMNEWS", "The news, read by nobody", 1, False, 700.0, 0.0, seed=3),
     FmStation(97_700_000.0, -46.0, None, stereo=True, left_hz=440.0, right_hz=880.0, seed=4),
     FmStation(100_400_000.0, -41.0, 0xC5C1, "CLASSIC", "A quiet piece in A", 14, True, 440.0, 440.0, seed=5),
-    FmStation(104_900_000.0, -50.0, 0xC6D2, "SIMROCK", "Loud, in stereo", 11, True, 2000.0, 500.0, seed=6),
+    FmStation(104_900_000.0, -44.0, 0xC6D2, "SIMROCK", "Loud, in stereo", 11, True, 2000.0, 500.0, seed=6),
 )
 
 

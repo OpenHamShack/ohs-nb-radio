@@ -214,6 +214,23 @@ with REG.after("pskReporter"):
             "decodes instead of three. Radio already carries a list of calls the Reverse Beacon Network heard "
             "recently. Off: a copy you put in the data folder is still used.")
 
+# --- the band scan (ohsradio/bandscan.py) ----------------------------------------
+# The weekly FM and DAB station lists, made at night while the radio is idle
+# (Brian, 23/10/2026). Control level: none of them transmits or touches more
+# than the receiver, which the scan always gives back.
+with REG.after("cwSkimScp"):
+    _k("scanAuto", "bool", True, "setting",
+       help="Make the FM and DAB station lists by itself: once a week, at night, while nobody is using the radio. "
+            "It gives the radio back the moment anyone does, with everything as it was.")
+    _k("scanHour", "int", 3, "setting", lo=0, hi=23, unit="h",
+       help="The hour of the night (local time) the weekly station scan is tried. Busy then, it tries the next "
+            "night.")
+    _k("scanEveryDays", "int", 7, "setting", lo=1, hi=60, unit="days",
+       help="How old a station list may be before the night's scan makes it again.")
+    _k("scanIdleMinutes", "int", 30, "setting", lo=1, hi=720, unit="min",
+       help="How long the radio must have been left alone (nobody tuning or listening) before a night's scan "
+            "may start.")
+
 # --- status (read-only) -------------------------------------------------------
 _o("rxDial", help="Frequency the receiver is demodulating (vfo + RIT, or the repeater input in reverse).")
 _o("txDial", help="Frequency our transmission is meant to land on (with split, repeater shift and XIT).")
@@ -248,6 +265,10 @@ with REG.after("txDial"):
         ("cwSkimCpu", "float", 0.0, "CW skimmer: its share of one core, per cent."),
         ("cwSkimDropped", "int", 0, "CW skimmer: receive blocks it fell too far behind to take, since it "
                                     "started. Receiving is never held up."),
+        ("bandScan", "dict", {}, "The band scan running now (ohsradio/bandscan.py): {band, percent, phase, "
+                                 "freqHz, text}; {} while none runs."),
+        ("stationsAt", "dict", {}, "When each band's station list was last made: {fm, dab}, ISO 8601 UTC or "
+                                   "null. Changes when a list does (GET api/fm/stations, api/dab/stations)."),
         ("rds", "dict", None, "Wide FM: the station's RDS as the receiver decoded it (shack_sdr), "
                               "{pi, ps, rt, pty, ptyName, ta, tp, ct, af, stereo, ts}; null until a station's "
                               "programme identification is heard, and again on every retune."),

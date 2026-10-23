@@ -71,6 +71,7 @@ from ohscore.engine import AUDIO_RATE, Engine, TxRefused
 from ohsradio.i18n import _
 
 from . import bands, config, guard, power, state, xvtr
+from .bandscan import BandScanner
 from .cwskim import CwSkim, off_item
 from .devices import REGISTRY
 from . import plans
@@ -80,7 +81,8 @@ from .sequencer import Sequencer, SequencerError, make_output
 # cwskim and cwspot: the CW skimmer (cwskim.py, docs/ENGINE-API.md); decoders:
 # the decoder sessions' results (ohscore/decoders.py). Never in the
 # server's default set, so a client gets them only when it asks.
-FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders")
+# stations: a band scan's list changed (bandscan.py), likewise only when asked.
+FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders", "stations")
 # How long after a re-centring the receive channel is taken to hold the
 # new centre's samples (Radio._rx_settled): a device read and the analysis
 # bank's overlap are a few tens of milliseconds at every supported rate;
@@ -218,6 +220,15 @@ class Radio(Engine):
         # 3 s of 10 Hz meter readings, the "current reading" behind
         # Calibrate… and the API's {"dbm": ...} form (smeter_cal.average_dbfs).
         self._smeter_hist: deque = deque(maxlen=30)
+        # The receiver's centre (and converter) before a hold took it, put
+        # back exactly when it ends (_held_retune): the dial alone would
+        # give a band-following centre that need not be the one it had.
+        self._centre_before: tuple | None = None
+        # The weekly FM and DAB scan (bandscan.py), told of everything a
+        # person does so it knows when the radio is idle.
+        self.bandscan = BandScanner(self)
+        self.activity_hooks.append(self.bandscan.touch)
+        self.st["stationsAt"] = self.bandscan.stations_at()
 
     # ------------------------------------------------------------------ licence and plan
     def _plan(self):
@@ -676,8 +687,24 @@ class Radio(Engine):
         # had decoded belongs to the station it was on.
         self._wfm_dial = None
         self._status(rds=None)
+        if self.held is not None:
+            if self._centre_before is None:
+                self._centre_before = (self.centre, self.rx_conv)
+        else:
+            saved, self._centre_before = self._centre_before, None
+            if saved is not None and saved[0] is not None and self.running:
+                # Back where it was; _maybe_recentre still moves it if the
+                # dial put back is not inside that span (another radio's).
+                self.pending_centre, self.pending_conv = saved
         if self.running:
             self._maybe_recentre()
+
+    def _app_tick(self, now: float) -> None:
+        self.bandscan.tick()
+
+    def _yielding_why(self, h: dict) -> str:
+        return _("Radio is scanning {label} for its station list: it is yours again the moment you use it").format(
+            label=h["block"])
 
     def _faster_rate(self, least: float) -> float | None:
         # The HL2 has its own rates, all far below a DAB block; the rest

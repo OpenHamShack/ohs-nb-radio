@@ -54,6 +54,9 @@ the desktop apps.
 | `GET api/cwskim` | view | Radio only: `{"state", "why"?, "band", "segment", "cover", "channels", "carriers", "spotsRev", "spots": [...]}`. That is the `cwskim` item, plus every spot of the last 30 minutes (at most 500, newest first, each a `cwspot` `spot`). Fetch it when a view opens, and after a gap in `rev`. It is `{"state": "off", ...}` with empty lists while `cwSkim` is false. A tap on a spot or channel only tunes: one `POST api/set {"mode": "cw", "vfo": dial}` at Control level, never a reply and never Enable TX (Brian, 13/10/2026). |
 | `GET api/decoders` and the routes under it | view, control | decoder sessions, below ("Decoders") |
 | `GET api/events?kinds=…,decoder` | view | the decoder sessions' results, below |
+| `GET api/fm/stations`, `GET api/dab/stations` | view | Radio only (404 `not_found` elsewhere): the station lists the weekly band scan made, below ("Station lists") |
+| `POST api/scan` | control | Radio only: `{"band": "fm" \| "dab" \| "both"}` scans now; `202 {"bands", "progress"}`, or `400 bad_params`, `409 receiver_busy` / `unsupported` with the sentence, `503 not_running` |
+| `GET api/events?kinds=…,stations` | view | Radio only: `{"kind": "stations", "band", "scannedAt", "count", "t"}` each time a scan has made a band's list anew; not in the default set |
 | `GET api/overpower` | view | QO-100 NB only (404 `not_found` elsewhere): `{"state", "beacon", "marginDb", "capture", "lastCapture", "events": [...]}` - signals over the middle beacon and LEILA sirens of the last 30 minutes, open ones first, each as ENGINE-API `overpower` describes. The same list comes as `overpower` items on `api/events?kinds=…,overpower` (not in the default set) on every change and once a second while anything is active. A `leila` entry is the siren pattern measured on six real sirens; why LEILA marks a station is unknown, so show it as "LEILA?". Tapping an entry only tunes: `POST api/set {"vfo": …}` at Control level, never TX. |
 | `GET`/`POST`/`DELETE api/smeter/calibrate` | view / control / control | Radio only (404 `not_found` elsewhere, like `api/overpower` above): the S-meter calibration table, below. |
 | `POST api/overpower/capture` | control | save the last 20 s of receive IQ now (the LEILA evidence ring; `leilaCapture` must be on): `202 {"ok": true}`, the file then appears in Recordings as `…-LEILA`; `409 nothing_to_save` with the sentence why not. Receive only. |
@@ -410,7 +413,8 @@ runs at a time.
   with it (DC on the block's unused middle carrier). The mode is left as
   it was; nothing at the dial is demodulated.
 - `rxOwner` in `api/state` and `api/status` says who holds it, `{}` while
-  the operator has it:
+  the operator has it (the band scan holds it too, `"by": "scan"`, but
+  gives it back at once: "Station lists" below):
   `{"by": "dab", "session": "ds_3f2a", "block": "11D", "freqHz": 222064000,
   "prior": {"vfo": 145500000, "mode": "fm", "rptOffsetHz": 600000},
   "text": "<the tuning sentence below>"}`.
@@ -488,6 +492,103 @@ installed later is picked up after `POST api/decoders/codecs/rescan`.
 DAB transmitter model's test ensemble, the one in the example above (old
 DAB C221 with programme text, a 1 kHz tone left and 1.5 kHz right; DAB+
 C3A7), heard when the simulator runs at 2.4 MS/s (`sampleRate`).
+
+## Station lists (Radio)
+
+Radio scans the FM band and DAB's Band III by itself once a week, at night,
+while nobody is using the radio, and keeps what it finds (code
+`ohsradio/bandscan.py`, tests `tests/test_ham_bandscan.py`; Brian,
+23/10/2026). Receive only: nothing here keys, and the scan never stands in
+anybody's way.
+
+**When.** The first moment after `scanHour` o'clock local time (3 by
+default) and within the hour, a band whose list is older than
+`scanEveryDays` (7; the same night a week later counts) is scanned if Radio
+is idle: no `api/audio/rx` listener, nothing changed for `scanIdleMinutes`
+(30), not transmitting or automatic transmit armed, not recording (IQ or
+audio) or playing a recording, no decoder session, the CW skimmer off, and
+nothing holding the receiver (`rxOwner`). Busy, that night is skipped (the
+band's `status` `busy`, `statusText` the reason) and the next night tries
+again. `scanAuto` false stops the nightly scans; `POST api/scan` still
+works. All four are control-level settings in `api/spec`.
+
+**It gives the radio back at once.** The scan holds the receiver
+(`rxOwner` `{"by": "scan", "session": "bandscan", "block": "the FM band"
+| "Band III (DAB)", "freqHz": <the receiver's centre now>, "prior": {…},
+"text": "Radio is scanning the FM band for its station list: it is yours
+again the moment you use it"}`) but moves only the receiver's centre: the
+dial (`vfo`), the mode and every other setting stay as the operator left
+them, and `txBlocked` goes on judging that dial. The moment anyone does
+anything - an `api/set` that changes anything, a listener connecting to
+`api/audio/rx`, a key-up or arming automatic transmit, a decoder session,
+a recording, `api/stop` - the scan ends before that request is handled:
+everything it kept (dial, mode, repeater settings, RIT, gain mode, gain,
+the RSP's LNA state, the antenna, the de-emphasis, the sample rate) and
+the receiver's centre are put back exactly, then the request applies. The
+band's status is then `aborted` and its last list stays. While it runs,
+`api/audio/rx` carries silence. The sample rate is never changed (that
+reopens the radio and, on a controller, hands the broker's claim back).
+
+**How long** (at the RSPdx's 2.4 MS/s, its only rate in Radio): FM is
+eleven hops of 3 s across 87.5-108 MHz (about 35-40 s); DAB is 41 blocks
+(5A-13F) of 1.2 s each, 2.4 s for a block holding an ensemble (about 55 s
+plus 1.2 s per ensemble). At 1.2 MS/s FM takes 26 hops and DAB is refused
+(`unsupported`: it needs 2.048 MS/s).
+
+**Progress** in `api/state` (and its `state` diffs): `bandScan` is
+`{"band": "fm" | "dab", "percent": 0-100, "phase": "tuning" | "listening" |
+"decoding", "freqHz", "text": "FM: 95.15 MHz (5 of 11)"}` while a scan
+runs, `{}` otherwise. `stationsAt` is `{"fm": <ISO UTC> | null, "dab": …}`,
+when each list was last made; it changes with the list, as does the
+`stations` event.
+
+**`GET api/fm/stations`**:
+
+```json
+{"scannedAt": "2026-11-02T03:00:41Z", "nextDue": "2026-11-09T03:00:00Z", "status": "ok", "statusText": "",
+ "stations": [
+  {"pi": "C201", "ps": "SIM ONE ", "pty": 10, "ptyName": "Pop music", "rt": null,
+   "best": {"hz": 88600000, "level": -38.0, "stereo": true},
+   "alts": [{"hz": 91300000, "level": -47.0, "stereo": true}]},
+  {"pi": null, "ps": null, "pty": null, "ptyName": null, "rt": null,
+   "best": {"hz": 97700000, "level": -46.0, "stereo": true}, "alts": []}]}
+```
+
+One entry per programme: stations with the same PI are merged, the
+strongest frequency `best` and the others `alts` (strongest first); a
+station without RDS is one entry of its own with `pi` null. `level` is
+the carrier in dBFS (relative: no calibration), `stereo` whether its pilot
+was heard. `ps` is as sent (8 characters, padded); `rt` is RadioText when
+the 3 s on its hop were enough to read it, often null. By `best.hz`. To
+tune: `POST api/set {"changes": {"mode": "wfm", "vfo": best.hz}}`.
+
+**`GET api/dab/stations`**: the same `scannedAt`, `nextDue`, `status`,
+`statusText`, and
+
+```json
+{"ensembles": [{"block": "11D", "freqHz": 222064000, "id": "C1CE", "label": "Shack Test Mux",
+                "services": [{"sid": "C221", "label": "Shack MP2 Tone", "kind": "dab", "bitrate": 128},
+                             {"sid": "C3A7", "label": "Shack DAB+ Data", "kind": "dab+", "bitrate": 64}]}]}
+```
+
+To play one: `POST api/decoders/sessions {"decoder": "dab", "freqHz":
+freqHz, "params": {"block": block, "service": sid}}` ("DAB" above).
+
+`status` is `never` (not scanned yet), `scanning`, `ok`, `busy` (the night
+was skipped), `aborted` (someone wanted the radio), `unsupported` (this
+radio cannot: "The hl2 does not receive the FM band", the DAB rate
+sentence) or `failed`, with `statusText` the sentence (`""` for `ok`).
+`scannedAt` is null until the first good scan; `nextDue` is when the next
+nightly attempt will be (ISO UTC), null with `scanAuto` off. The lists are
+kept in the app's data folder (`bandscan/fm.json`, `bandscan/dab.json`) and
+survive updates.
+
+**`POST api/scan`** refuses, with the sentence in `error`, while the
+radio is busy as above - except that a listener or a recent change is no
+reason to refuse the person asking: `409 receiver_busy` ("Not scanning
+now: Automatic transmit is armed", "... A band scan is running already"),
+`409 unsupported`, `400 bad_params` for another `band`, `503 not_running`.
+`both` scans what this radio can (`bands` says which).
 
 ## Host libraries (store form)
 

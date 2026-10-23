@@ -56,6 +56,9 @@ class StreamAudio(audio_mod.NullAudio):
         self._lock = threading.Lock()
         self.mic = audio_mod.Ring(int(RATE * MIC_SECONDS))
         self.mic_writer = ""            # the client whose microphone this is
+        # Called as each listener arrives (the server: someone is using the
+        # radio, so Radio's band scan gives way).
+        self.on_listen = None
 
     # ---------------------------------------------------------- out
     def rx_format(self, channels: int = 1) -> dict:
@@ -65,6 +68,9 @@ class StreamAudio(audio_mod.NullAudio):
     def listen(self, channels: int = 1) -> queue.Queue:
         """A queue of PCM blocks in rx_format(channels)."""
         q: queue.Queue = queue.Queue(maxsize=LISTENER_BLOCKS)
+        fn = self.on_listen
+        if fn is not None:
+            fn()
         with self._lock:
             self._listeners.append((q, int(channels)))
         return q
