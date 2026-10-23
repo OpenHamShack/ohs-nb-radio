@@ -265,6 +265,9 @@ class HamSim(SimCore):
         self.out = np.zeros(0, np.complex64)
         self.opened = False
         self.pops: dict[str, list] = {}       # band -> stations, built on arrival
+        # Stations a test (or someone trying a decoder by hand) put on the
+        # air with add_station, whatever band they are on.
+        self.extra: list = []
         self.building: set[str] = set()
         self.pop_lock = threading.Lock()
         self.drive = 0.0
@@ -349,6 +352,17 @@ class HamSim(SimCore):
             self.building.discard(b.name)
             self.repeaters = [s for pop in self.pops.values() for s in pop if isinstance(s, Repeater)]
 
+    def add_station(self, name: str, dial: float, template: np.ndarray, level_db: float) -> Station:
+        """One more signal on the air: `template` complex baseband at 12 kHz
+        (looped) heard on a USB dial of `dial`, at `level_db` dBFS. For the
+        tests that put a known PSK station or SSTV picture through the
+        engine, and for trying a decoder by hand."""
+        st = Station(name, float(dial), np.asarray(template, np.complex64), level_db)
+        st.src = Source(self.geo, int(round(self.fs / sg.RATE)), 0.0)
+        with self.pop_lock:
+            self.extra.append(st)
+        return st
+
     def _level(self, rng, lo, hi, strong=(-48.0, -38.0), p=0.12) -> float:
         return float(rng.uniform(*strong) if rng.random() < p else rng.uniform(lo, hi))
 
@@ -411,8 +425,16 @@ class HamSim(SimCore):
             if narrow and act > 0.2:
                 s = narrow[0]
                 for k in range(2):
+                    # Real Varicode text (sg.psk_text), so the PSK modes and
+                    # their several channels have something to copy, as the
+                    # RTTY station below. psk_like's random draws are still
+                    # made and dropped, and the call read without taking it
+                    # from `ci`, so every other station is as it was.
+                    rng.random(int(40.0 * 31.25) + 2)
+                    p = calls[(len(calls) // 2 + 1 + k) % len(calls)]
                     out.append(Station(f"PSK31 {k}", s.lo + 0.5 * (s.hi - s.lo),
-                                       sg.psk_like(rng, 40.0, 31.25, 600 + 900 * k, (0.08 * k, 0.6 + 0.2 * k)),
+                                       sg.psk_text(f"CQ CQ DE {p} {p} K ", 40.0, 31.25, 600 + 900 * k,
+                                                   (0.08 * k, 0.6 + 0.2 * k)),
                                        self._level(rng, -68.0, -52.0, p=0.05),
                                        presence=Presence(rng, (180.0, 600.0), (120.0, 900.0))))
                 # Real ITA2 text (sg.rtty_text), so the RTTY mode and the
@@ -524,7 +546,7 @@ class HamSim(SimCore):
         t_abs = self.t_epoch + self.n / self.fs
         feeds = []
         with self.pop_lock:
-            stations = [s for pop in self.pops.values() for s in pop]
+            stations = [s for pop in self.pops.values() for s in pop] + list(self.extra)
         keyed = self.tx_active
         for st in stations:
             st.src.freq = st.dl - self.rx_if

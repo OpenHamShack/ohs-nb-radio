@@ -286,6 +286,29 @@ def rtty_text(text: str, seconds: float, baud: float = 45.45, shift: float = 170
     return (z * on).astype(np.complex64)
 
 
+def psk_text(text: str, seconds: float, baud: float = 31.25, centre: float = 1000.0, duty=(0.0, 1.0),
+             gap: float = 3.0) -> np.ndarray:
+    """A PSK station sending `text` over and over, `gap` seconds of silence
+    between overs, inside the `duty` share of `seconds`: Varicode BPSK
+    exactly as our own encoder sends it (modes/psk.py, idle before and
+    after), at `centre` audio Hz (USB). Unlike psk_like's random reversals
+    it decodes, so the simulated band has PSK a decoder can be checked
+    against (Radio's PSK modes, several stations at once, and the Decoders
+    view)."""
+    from ..modes import psk
+    variant = {31.25: "psk31", 62.5: "psk63", 125.0: "psk125"}[float(baud)]
+    # The encoder's baseband (centre 0: the shaped symbol stream itself),
+    # put at `centre` as an analytic signal.
+    over = psk.Encoder().render(text=text, variant=variant, center=0.0, preamble=1.5, postamble=0.5)
+    over = np.concatenate([over, np.zeros(int(gap * RATE), np.float32)])
+    n = int(seconds * RATE)
+    a = np.tile(over, int(np.ceil(n / len(over))))[:n].astype(np.float64)
+    gate = np.zeros(n)
+    gate[int(duty[0] * n):int(duty[1] * n)] = 1
+    z = a * gate * np.exp(2j * np.pi * centre * np.arange(n) / RATE)
+    return z.astype(np.complex64)
+
+
 def psk_like(rng: np.random.Generator, seconds: float, baud: float, centre: float, duty=(0.0, 1.0)) -> np.ndarray:
     """PSK31-like: random phase reversals with the raised-cosine amplitude
     dips of real BPSK31, at `centre` audio Hz."""

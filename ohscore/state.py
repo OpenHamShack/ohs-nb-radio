@@ -209,6 +209,25 @@ def _clean_sessions(value: list) -> list:
         out.append({"decoder": v["decoder"][:32], "freqHz": freq, "params": dict(params)})
     return out
 
+def _clean_psk_channels(value: list) -> list:
+    """pskChannels: audio frequencies in Hz, inside the digital passband,
+    at most 15 (the decoder's 16 less the mode's own channel)."""
+    if not isinstance(value, list) or len(value) > 15:
+        raise ValueError(_("pskChannels must be a list of at most 15 audio frequencies"))
+    out = []
+    for v in value:
+        if isinstance(v, bool):
+            raise ValueError(_("Each PSK channel is an audio frequency in hertz"))
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            raise ValueError(_("Each PSK channel is an audio frequency in hertz")) from None
+        if not 200.0 <= f <= 2900.0:
+            raise ValueError(_("A PSK channel must be between 200 and 2900 Hz above the dial"))
+        out.append(round(f, 1))
+    return out
+
+
 def add_shared_keys(reg: Registry) -> None:
     """The keys both apps have. Help text here is the app-neutral wording;
     an app that means something narrower (a QO-100 downlink dial, say)
@@ -370,6 +389,18 @@ def add_shared_keys(reg: Registry) -> None:
     k("decoderSessions", "list", [], "setting", validate=_clean_sessions,
       help="The decoders running on frequencies of their own, started again with the radio: each one's decoder, "
            "frequency (Hz) and settings.")
+    # Pictures the decoders saved (SSTV), in the data folder's sstv folder:
+    # the oldest go once there are more (ohscore/decoders.py prune_files).
+    # At most about 1 MB a picture (PD290's 800 x 616), so the default
+    # holds a few days of a busy SSTV frequency in under 100 MB.
+    k("decoderFilesKeep", "int", 100, "setting", lo=1, hi=2000,
+      help="How many received pictures to keep. Past it the oldest are deleted.")
+    # PSK's extra stations (modes/sdrmode.py PskDecoder): a click on the
+    # zoom in PSK adds one, and the mode's own channel at its offset is
+    # always decoded beside them. Not kept: the stations on a band now.
+    k("pskChannels", "list", [], "control", persist=False, validate=_clean_psk_channels,
+      help="More PSK stations to decode at once, beside the one on the mode's offset: audio frequencies in Hz above "
+           "the dial.")
 
     # --- IQ recording (ohscore/sigmf.py) --------------------------------------------
     k("recLimitMin", "float", 0.0, "setting", lo=0.0, hi=600.0, unit="min",

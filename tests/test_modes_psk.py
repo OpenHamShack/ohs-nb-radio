@@ -1,19 +1,50 @@
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
+"""PSK31/63/125: psk.py's encoder, Varicode table and carrier browser, and
+the modes' receive, which is shack_sdr's Rust `psk` decoder driven as the
+engine drives it (modes/sdrmode.py PskDecoder) since Radio's SDR milestone
+2. The receive tests are the ones the Python decoder passed, run against
+its replacement - loopback at every speed, off tune, drifting, weak, a
+frequency step, a sound card's clock, noise printing next to nothing -
+plus what is new: several stations in one session, and channels changed
+while it runs. The finer "never worse than psk.py" sweep lives with the
+decoder in ohs-libs (shack_sdr tests/psk.rs), against the golden numbers
+captured from the Python decoder before it went."""
 import unittest
 import numpy as np
 
-from ohscore.modes import psk
+from ohscore import sdr
+from ohscore.modes import MODES, psk
 
 FS = 12_000.0
+# The Rust decoder's trellis and phase smoother print a character about a
+# second after its last symbol (shack_sdr README "PSK"): a receiver keeps
+# hearing the band after an over, so the tests do too.
+TAIL_S = 3.0
+
+
+def _tail(audio, seed=99):
+    """`audio` followed by TAIL_S of quiet band noise, as a receiver hears it."""
+    rng = np.random.default_rng(seed)
+    return np.concatenate([audio.astype(np.float32),
+                           rng.normal(0, 0.003, int(TAIL_S * FS)).astype(np.float32)])
+
+
+def _run(audio, variant="psk31", center=1000.0, channels=(), block=1200):
+    """Every event the mode's decoder sends for `audio` (with its tail)."""
+    events = []
+    dec = MODES[variant].make_decoder(events.append, center=center, channels=channels)
+    try:
+        x = _tail(audio)
+        for i in range(0, len(x), block):
+            dec.feed(x[i:i + block], t=1_000_000.0 + i / FS)
+        dec.drain()
+    finally:
+        dec.close()
+    return events
 
 
 def _decode(audio, variant="psk31", center=1000.0):
-    events = []
-    dec = psk.Decoder(events.append, variant=variant, center=center)
-    block = 1200
-    for i in range(0, len(audio), block):
-        dec.feed(audio[i:i + block], t=i / FS)
-    return dec.text
+    return "".join(e["text"] for e in _run(audio, variant, center))
 
 
 class PskVaricodeTests(unittest.TestCase):
@@ -114,6 +145,7 @@ class PskEncoderTests(unittest.TestCase):
             self.assertEqual(n_pre % 2, 0)
 
 
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
 class PskLoopbackTests(unittest.TestCase):
     MESSAGE = "CQ CQ DE GM4BRI GM4BRI PSE K"
 
@@ -154,20 +186,30 @@ class PskLoopbackTests(unittest.TestCase):
         self.assertEqual(_decode(noisy, variant="psk63", center=1000.0), self.MESSAGE)
 
     def test_reset_clears_state(self):
-        dec = psk.Decoder(lambda e: None, variant="psk31")
-        dec.feed(psk.Encoder().render(text="E"), t=0.0)
-        dec.reset()
-        self.assertEqual(dec.text, "")
+        dec = MODES["psk31"].make_decoder(lambda e: None)
+        try:
+            dec.feed(_tail(psk.Encoder().render(text="E")), t=0.0)
+            dec.drain()
+            dec.reset()
+            self.assertEqual(dec.text, "")
+        finally:
+            dec.close()
 
-    def test_emitted_events_carry_mode_and_text(self):
-        audio = psk.Encoder().render(text="HI", variant="psk31")
-        events = []
-        dec = psk.Decoder(events.append, variant="psk31")
-        for i in range(0, len(audio), 1200):
-            dec.feed(audio[i:i + 1200], t=i / FS)
-        self.assertTrue(events)
-        self.assertEqual(events[0]["mode"], "psk31")
-        self.assertIn("text", events[0])
+    def test_events_keep_the_shape_every_client_reads(self):
+        # The window's text panel and scope tags, Remote and Enable TX's
+        # reply logic read {"mode", "text", "center", "df", "snr"}, center
+        # and df the audio frequency the station is on; `channel` is new.
+        for variant in ("psk31", "psk63", "psk125"):
+            with self.subTest(variant=variant):
+                events = _run(psk.Encoder().render(text="HI HI", variant=variant), variant)
+                self.assertTrue(events)
+                for ev in events:
+                    self.assertEqual(ev["mode"], variant)
+                    self.assertIsInstance(ev["text"], str)
+                    self.assertAlmostEqual(ev["center"], 1000.0, delta=2.0)
+                    self.assertEqual(ev["df"], ev["center"])
+                    self.assertEqual(ev["channel"], 1000.0)
+                    self.assertIn("snr", ev)
 
 
 def _analytic_shift(audio, f0=0.0, rate=0.0, step_at=None, step_hz=0.0):
@@ -196,6 +238,7 @@ def _with_snr(audio, snr_db, baud, seed):
     return (audio + rng.normal(0, sigma, len(audio))).astype(np.float32)
 
 
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
 class PskWeakSignalTests(unittest.TestCase):
     """What a PSK31 receiver is for. Every one of these failed on the
     decoder before the rewrite: it mixed each block with the absolute
@@ -268,13 +311,94 @@ class PskWeakSignalTests(unittest.TestCase):
         self.assertLessEqual(len(_decode(noise)), 3)
 
     def test_events_carry_offset_and_snr(self):
+        # `snr` is still in the symbol's bandwidth, as psk.py gave it: 15 dB
+        # sent reads near 15, not the 2.5 kHz figure 19 dB lower.
         audio = _with_snr(psk.Encoder().render(text="HI HI"), 15.0, 31.25, 0)
-        events = []
-        dec = psk.Decoder(events.append, variant="psk31")
-        dec.feed(audio, t=0.0)
+        events = _run(audio)
         self.assertTrue(events)
         self.assertAlmostEqual(events[-1]["df"], 1000.0, delta=1.0)
-        self.assertGreater(events[-1]["snr"], 5.0)
+        self.assertGreater(events[-1]["snr"], 9.0)
+        self.assertLess(events[-1]["snr"], 21.0)
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class PskChannelsTests(unittest.TestCase):
+    """New with the Rust decoder: one session hears several stations. The
+    mode's own channel is always decoded; pskChannels adds more."""
+
+    def _band(self, stations, snr_db=None, seed=4):
+        """Several stations at once: [(audio Hz, text, variant)]."""
+        parts = [psk.Encoder().render(text=t, variant=v, center=f) for f, t, v in stations]
+        n = max(len(p) for p in parts)
+        x = np.zeros(n, np.float32)
+        for p in parts:
+            x[:len(p)] += p / len(parts)
+        if snr_db is not None:
+            x = _with_snr(x, snr_db, 31.25, seed)
+        return x
+
+    def _by_channel(self, events):
+        out = {}
+        for ev in events:
+            out[ev["channel"]] = out.get(ev["channel"], "") + ev["text"]
+        return out
+
+    def test_three_stations_each_on_its_own_line(self):
+        band = self._band([(1000.0, "CQ DE G4AAA K", "psk31"), (1450.0, "QRZ DE M0BBB", "psk31"),
+                           (2210.0, "TEST DE 2E0CCC", "psk31")])
+        got = self._by_channel(_run(band, channels=[1450.0, 2210.0]))
+        self.assertEqual(got, {1000.0: "CQ DE G4AAA K", 1450.0: "QRZ DE M0BBB", 2210.0: "TEST DE 2E0CCC"})
+
+    def test_a_station_off_its_channel_is_followed_and_named_by_its_channel(self):
+        band = self._band([(1000.0, "ONE", "psk63"), (1709.0, "TWO TWO", "psk63")])
+        events = _run(band, variant="psk63", channels=[1700.0])
+        two = [ev for ev in events if ev["channel"] == 1700.0]
+        self.assertEqual("".join(ev["text"] for ev in two), "TWO TWO")
+        self.assertAlmostEqual(two[-1]["center"], 1709.0, delta=1.5)
+
+    def test_without_channels_only_the_modes_own_station_is_heard(self):
+        band = self._band([(1000.0, "MINE", "psk31"), (1600.0, "NOT MINE", "psk31")])
+        self.assertEqual(self._by_channel(_run(band)), {1000.0: "MINE"})
+
+    def test_a_channel_added_while_it_runs_starts_copying(self):
+        # A waterfall click mid-over: the engine's pskChannels changes and
+        # the session follows live, the mode's own channel undisturbed.
+        late = psk.Encoder().render(text="LATE STATION " * 4, variant="psk31", center=1800.0)
+        own = psk.Encoder().render(text="OWN STATION OWN STATION", variant="psk31", center=1000.0)
+        n = max(len(late), len(own))
+        band = np.zeros(n, np.float32)
+        band[:len(late)] += late / 2
+        band[:len(own)] += own / 2
+        x = _tail(band)
+        events = []
+        dec = MODES["psk31"].make_decoder(events.append)
+        try:
+            half = int(5.0 * FS)            # into the late station's text
+            for i in range(0, half, 1200):
+                dec.feed(x[i:min(i + 1200, half)], t=1_000_000.0 + i / FS)
+            dec.drain()
+            self.assertFalse([ev for ev in events if ev["channel"] == 1800.0])
+            dec.set_channels([1800.0])
+            self.assertEqual(dec.channels, [1000.0, 1800.0])
+            for i in range(half, len(x), 1200):
+                dec.feed(x[i:i + 1200], t=1_000_000.0 + i / FS)
+            dec.drain()
+        finally:
+            dec.close()
+        got = self._by_channel(events)
+        self.assertEqual(got.get(1000.0), "OWN STATION OWN STATION")
+        self.assertIn("LATE STATION LATE STATION", got.get(1800.0, ""))
+
+    def test_channels_are_cleaned_as_the_decoder_takes_them(self):
+        # The mode's own channel is not added twice, nor one a click puts on
+        # a station already decoded, and no more than the decoder's 16.
+        dec = MODES["psk31"].make_decoder(lambda e: None, channels=[1000.0, 1002.0, 1500.0, 1503.0, "x"])
+        try:
+            self.assertEqual(dec.channels, [1000.0, 1500.0])
+            dec.set_channels([300.0 + 150 * k for k in range(20)])
+            self.assertEqual(len(dec.channels), 16)
+        finally:
+            dec.close()
 
 
 class PskCarrierBrowserTests(unittest.TestCase):

@@ -1,5 +1,19 @@
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
+"""SSTV: sstv.py's encoder, VIS header and PNG writer, and the mode's
+receive, which is shack_sdr's Rust `sstv` decoder driven as the engine
+drives it (modes/sdrmode.py SstvDecoder) since Radio's SDR milestone 2.
+
+The receive tests are the ones the Python decoder passed, run against its
+replacement: what our own encoder sends in each of its four modes comes
+back as the picture sent, in noise, from a slow sound card, joined part
+way; noise and a steady tone start nothing; ragged blocks are fine. They
+read the events the SSTV panel and Remote paint from (start, a row at a
+time, done with the PNG). The finer "never worse than sstv.py" sweep, and
+the ten modes sstv.py never had, live with the decoder in ohs-libs
+(shack_sdr tests/sstv.rs), against the golden numbers captured from the
+Python decoder before it went."""
 import base64
+import os
 import struct
 import tempfile
 import unittest
@@ -8,7 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
-from ohscore.modes import sstv
+from ohscore import sdr
+from ohscore.modes import MODES, sstv
 
 FS = 12_000.0
 
@@ -35,18 +50,45 @@ def _read_png(path) -> np.ndarray:
     return np.stack(rows)
 
 
-def _decode_image(img: np.ndarray, mode: str, noise_std: float = 0.0, seed: int = 1):
+def _png(data: bytes) -> np.ndarray:
+    """A PNG the decoder wrote (it filters its rows, which _read_png, made
+    for sstv._write_png's unfiltered ones, does not undo)."""
+    from shack_sdr import sstv as rust
+    return rust.png_rgb(data)
+
+
+def _decode_audio(audio, block=1200, folder=None):
+    """Every event the mode's decoder sends for `audio`, and the folder its
+    pictures went to."""
+    folder = folder or tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
+    events = []
+    dec = MODES["sstv"].make_decoder(events.append, out_dir=folder)
+    try:
+        x = np.concatenate([audio.astype(np.float32), np.zeros(int(2.0 * FS), np.float32)])
+        for i in range(0, len(x), block):
+            dec.feed(x[i:i + block], t=1_000_000.0 + i / FS)
+        dec.drain(quiet_s=0.6)
+    finally:
+        dec.close()
+    return events, folder
+
+
+def _decode_image(img: np.ndarray, mode: str, noise_std: float = 0.0, seed: int = 1, cut: float = 0.0):
     audio = sstv.Encoder().render(image=img, mode=mode)
+    if cut:
+        audio = audio[int(cut * len(audio)):]
     if noise_std:
         rng = np.random.default_rng(seed)
         audio = audio + rng.normal(0, noise_std, len(audio)).astype(np.float32)
-    outdir = tempfile.mkdtemp()
-    events = []
-    dec = sstv.Decoder(events.append, out_dir=outdir)
-    block = 1200
-    for i in range(0, len(audio), block):
-        dec.feed(audio[i:i + block], t=i / FS)
-    return events
+    return _decode_audio(audio)
+
+
+def _picture(events):
+    """The finished picture as the decoder saved it, and its start event."""
+    start = next(e for e in events if e["state"] == "start")
+    done = next(e for e in events if e["state"] == "done")
+    with open(done["path"], "rb") as f:
+        return _png(f.read()), start, done
 
 
 def _gradient_image(h, w):
@@ -87,387 +129,132 @@ class VisCodeTests(unittest.TestCase):
             self.assertEqual(sstv.VIS_TO_MODE[spec["vis"]], name)
 
 
-class Robot36LoopbackTests(unittest.TestCase):
-    def test_solid_colour_recovers_approximately(self):
-        img = np.zeros((240, 320, 3), dtype=np.uint8)
-        img[:, :, 0], img[:, :, 1], img[:, :, 2] = 200, 50, 220
-        events = _decode_image(img, "robot36")
-        self.assertEqual([e["state"] for e in events if e["state"] in ("start", "done")], ["start", "done"])
-        done = next(e for e in events if e["state"] == "done")
-        decoded = _read_png(done["path"])
-        self.assertEqual(decoded.shape, (240, 320, 3))
-        # Not pixel-exact: Robot36's chroma is subsampled 2:1 vertically and
-        # this demodulator necessarily blurs across adjacent pixels (SSTV's
-        # pixel rate -- 3.3 samples/pixel here -- is faster than any filter
-        # long enough to reject noise can cleanly resolve; see _FreqDemod's
-        # docstring). The colour must still clearly be the right colour.
-        mean_err = np.abs(decoded.astype(int) - np.array([200, 50, 220])).mean()
-        self.assertLess(mean_err, 20)
-
-    def test_gradient_correlates_with_source(self):
-        img = _gradient_image(240, 320)
-        events = _decode_image(img, "robot36")
-        done = next(e for e in events if e["state"] == "done")
-        decoded = _read_png(done["path"])
-        corr_r = np.corrcoef(img[:, :, 0].astype(float).flatten(),
-                              decoded[:, :, 0].astype(float).flatten())[0, 1]
-        corr_g = np.corrcoef(img[:, :, 1].astype(float).flatten(),
-                              decoded[:, :, 1].astype(float).flatten())[0, 1]
-        self.assertGreater(corr_r, 0.8)
-        self.assertGreater(corr_g, 0.9)
-
-    def test_modest_noise_still_recovers(self):
-        img = np.zeros((240, 320, 3), dtype=np.uint8)
-        img[:, :, 0], img[:, :, 1], img[:, :, 2] = 180, 90, 60
-        events = _decode_image(img, "robot36", noise_std=0.03)
-        done = [e for e in events if e["state"] == "done"]
-        self.assertTrue(done)
-        decoded = _read_png(done[0]["path"])
-        mean_err = np.abs(decoded.astype(int) - np.array([180, 90, 60])).mean()
-        self.assertLess(mean_err, 30)
-
-    def test_line_events_carry_decodable_base64_rows(self):
-        img = np.full((240, 320, 3), 100, dtype=np.uint8)
-        events = _decode_image(img, "robot36")
-        lines = [e for e in events if e["state"] == "line"]
-        self.assertEqual(len(lines), 240)
-        row = np.frombuffer(base64.b64decode(lines[0]["row"]), dtype=np.uint8)
-        self.assertEqual(len(row), 320 * 3)
-        self.assertEqual(lines[0]["of"], 240)
+# The Rust decoder's ids for sstv.py's four (shack_sdr sstv.modes()).
+RUST_ID = {"robot36": "robot36", "martinm1": "martin1", "scottie_s1": "scottie1", "pd120": "pd120"}
 
 
-class MartinM1LoopbackTests(unittest.TestCase):
-    def test_solid_colour_recovers_closely(self):
-        img = np.zeros((256, 320, 3), dtype=np.uint8)
-        img[:, :, 0], img[:, :, 1], img[:, :, 2] = 10, 200, 90
-        events = _decode_image(img, "martinm1")
-        done = next(e for e in events if e["state"] == "done")
-        decoded = _read_png(done["path"])
-        self.assertEqual(decoded.shape, (256, 320, 3))
-        mean_err = np.abs(decoded.astype(int) - np.array([10, 200, 90])).mean()
-        self.assertLess(mean_err, 10)
-
-    def test_gradient_correlates_strongly(self):
-        # Martin M1's scans are slower (5.5 samples/pixel vs Robot36's 3.3)
-        # and RGB-direct (no chroma subsampling to reconstruct), and comes
-        # out visibly cleaner for it -- this is the mode whose numbers this
-        # module's own tests can hold to the higher bar.
-        img = _gradient_image(256, 320)
-        events = _decode_image(img, "martinm1")
-        done = next(e for e in events if e["state"] == "done")
-        decoded = _read_png(done["path"])
-        for ch in (0, 1):  # channel 2 is a flat 128 in _gradient_image -- no variance to correlate
-            corr = np.corrcoef(img[:, :, ch].astype(float).flatten(),
-                                decoded[:, :, ch].astype(float).flatten())[0, 1]
-            self.assertGreater(corr, 0.97, msg=f"channel {ch}")
-
-    def test_modest_noise_still_recovers(self):
-        img = _gradient_image(256, 320)
-        events = _decode_image(img, "martinm1", noise_std=0.05)
-        done = [e for e in events if e["state"] == "done"]
-        self.assertTrue(done)
-        decoded = _read_png(done[0]["path"])
-        mean_err = np.abs(decoded.astype(int) - img.astype(int)).mean()
-        self.assertLess(mean_err, 20)
+def _psnr(a, b):
+    err = np.mean((a.astype(np.float64) - b.astype(np.float64)) ** 2)
+    return 10 * np.log10(255.0 ** 2 / max(err, 1e-9))
 
 
-class ScottieS1LoopbackTests(unittest.TestCase):
-    """Scottie S1's first line has an extra "starting" sync pulse and its
-    regular sync sits between Blue and Red rather than at the line break
-    (JL Barber's Dayton paper, "SCOTTIE MODES"); these tests exercise line
-    0 and later lines both, not just steady-state."""
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class OurPicturesComeBack(unittest.TestCase):
+    """What sstv.py sends, in each of its four modes, decoded by the Rust
+    decoder: the transmit path is unchanged and must stay readable."""
 
-    def test_solid_colour_recovers_closely(self):
-        img = np.zeros((256, 320, 3), dtype=np.uint8)
-        img[:, :, 0], img[:, :, 1], img[:, :, 2] = 10, 200, 90
-        events = _decode_image(img, "scottie_s1")
-        done = next(e for e in events if e["state"] == "done")
-        decoded = _read_png(done["path"])
-        self.assertEqual(decoded.shape, (256, 320, 3))
-        mean_err = np.abs(decoded.astype(int) - np.array([10, 200, 90])).mean()
-        self.assertLess(mean_err, 10)
-
-    def test_gradient_correlates_strongly(self):
-        img = _gradient_image(256, 320)
-        events = _decode_image(img, "scottie_s1")
-        done = next(e for e in events if e["state"] == "done")
-        decoded = _read_png(done["path"])
-        for ch in (0, 1):
-            corr = np.corrcoef(img[:, :, ch].astype(float).flatten(),
-                                decoded[:, :, ch].astype(float).flatten())[0, 1]
-            self.assertGreater(corr, 0.95, msg=f"channel {ch}")
-
-    def test_first_line_is_not_corrupted_by_its_extra_sync_pulse(self):
-        # Line 0 alone is 9 ms longer than every other line (the "starting"
-        # sync); if that extra pulse weren't accounted for it would shift
-        # every *following* sample by 9 ms, visible as line 1 onward being
-        # wrong even though line 0 itself might look fine. (The very first
-        # pixel or two of *any* scan segment can read low from an ordinary
-        # demod filter transient at a sharp sync-to-scan edge, the same
-        # artifact every other mode's "solid colour" tests tolerate by
-        # checking a mean rather than a single sample -- this test does
-        # the same, past the first few pixels rather than at pixel 0.)
-        img = np.full((256, 320, 3), 77, dtype=np.uint8)
-        img[0, :, :] = 200  # line 0 is visibly different from the rest
-        events = _decode_image(img, "scottie_s1")
-        lines = [e for e in events if e["state"] == "line"]
-        self.assertEqual(len(lines), 256)
-        row0 = np.frombuffer(base64.b64decode(lines[0]["row"]), dtype=np.uint8).reshape(-1, 3)
-        row1 = np.frombuffer(base64.b64decode(lines[1]["row"]), dtype=np.uint8).reshape(-1, 3)
-        self.assertLess(abs(float(row0[10:].mean()) - 200), 10)
-        self.assertLess(abs(float(row1[10:].mean()) - 77), 10)
-
-    def test_modest_noise_still_recovers(self):
-        img = _gradient_image(256, 320)
-        events = _decode_image(img, "scottie_s1", noise_std=0.03)
-        done = [e for e in events if e["state"] == "done"]
-        self.assertTrue(done)
-        decoded = _read_png(done[0]["path"])
-        mean_err = np.abs(decoded.astype(int) - img.astype(int)).mean()
-        self.assertLess(mean_err, 20)
-
-
-class Pd120LoopbackTests(unittest.TestCase):
-    def test_solid_colour_recovers_closely(self):
-        img = np.zeros((496, 640, 3), dtype=np.uint8)
-        img[:, :, 0], img[:, :, 1], img[:, :, 2] = 50, 150, 250
-        events = _decode_image(img, "pd120")
-        done = next(e for e in events if e["state"] == "done")
-        decoded = _read_png(done["path"])
-        self.assertEqual(decoded.shape, (496, 640, 3))
-        mean_err = np.abs(decoded.astype(int) - np.array([50, 150, 250])).mean()
-        self.assertLess(mean_err, 10)
-
-    def test_gradient_correlates_strongly(self):
-        img = _gradient_image(496, 640)
-        events = _decode_image(img, "pd120")
-        done = next(e for e in events if e["state"] == "done")
-        decoded = _read_png(done["path"])
-        for ch in (0, 1):
-            corr = np.corrcoef(img[:, :, ch].astype(float).flatten(),
-                                decoded[:, :, ch].astype(float).flatten())[0, 1]
-            self.assertGreater(corr, 0.95, msg=f"channel {ch}")
-
-    def test_chroma_is_shared_across_its_line_pair(self):
-        # PD120's R-Y/B-Y are each "averaged for two lines" and sent once
-        # per pair (JL Barber, "PD Modes") -- two adjacent output rows of a
-        # flat-coloured image must come out (near enough) identical, since
-        # they share one chroma sample between them. Each row's own Y scan
-        # starts fresh though, so (as with Scottie's first line, above) the
-        # first pixel or two of each row can show an ordinary demod filter
-        # transient independent of the other row's -- and so can the last,
-        # running into the next sync -- compared inside those.
-        img = np.full((496, 640, 3), 130, dtype=np.uint8)
-        events = _decode_image(img, "pd120")
-        lines = [e for e in events if e["state"] == "line"]
-        self.assertEqual(len(lines), 496)
-        row0 = np.frombuffer(base64.b64decode(lines[0]["row"]), dtype=np.uint8).reshape(-1, 3)
-        row1 = np.frombuffer(base64.b64decode(lines[1]["row"]), dtype=np.uint8).reshape(-1, 3)
-        np.testing.assert_allclose(row0[10:-10].astype(int), row1[10:-10].astype(int), atol=8)
-
-    def test_modest_noise_still_recovers(self):
-        img = _gradient_image(496, 640)
-        events = _decode_image(img, "pd120", noise_std=0.03)
-        done = [e for e in events if e["state"] == "done"]
-        self.assertTrue(done)
-        decoded = _read_png(done[0]["path"])
-        mean_err = np.abs(decoded.astype(int) - img.astype(int)).mean()
-        self.assertLess(mean_err, 20)
-
-
-# --- alignment and noise, every mode ------------------------------------------
-
-BARS = np.array([[255, 255, 0], [0, 255, 255], [0, 255, 0], [255, 0, 255],
-                 [255, 0, 0], [0, 0, 255], [0, 0, 0], [128, 128, 128]], dtype=np.uint8)
-
-
-def _bars(h, w):
-    """Eight colour bars (each channel on in a different pattern, so a
-    swapped or misplaced channel shows as the wrong colour) inside a white
-    border (so a picture shifted sideways shows at its edges). No bar is
-    white, so every border edge is an edge."""
-    img = np.zeros((h, w, 3), dtype=np.uint8)
-    for k in range(8):
-        img[:, k * w // 8:(k + 1) * w // 8] = BARS[k]
-    b = w // 40
-    img[:b], img[-b:], img[:, :b], img[:, -b:] = 255, 255, 255, 255
-    return img
-
-
-def _decode_audio(audio):
-    events = []
-    dec = sstv.Decoder(events.append, out_dir=tempfile.mkdtemp())
-    for i in range(0, len(audio), 1200):
-        dec.feed(audio[i:i + 1200], t=i / FS)
-    done = [e for e in events if e["state"] == "done"]
-    return events, (_read_png(done[0]["path"]) if done else None)
-
-
-def _edge_columns(img, rows):
-    """Where, along a row, the picture changes most sharply near each true
-    bar boundary and border edge -- the decoded picture's own edges, found
-    rather than assumed."""
-    prof = img[rows].astype(float).mean(axis=0)               # w x 3
-    grad = np.abs(np.diff(prof, axis=0)).sum(axis=1)          # change between x and x+1
-    w = img.shape[1]
-    b = w // 40
-    truth = [b] + [k * w // 8 for k in range(1, 8)] + [w - b]
-    found = []
-    for x in truth:
-        # (Not the first or last pixel pair: every scan's first and last
-        # pixel carry the demodulator's transient from the tone before it.)
-        lo, hi = max(1, x - w // 20), min(len(grad) - 1, x + w // 20)
-        found.append(lo + int(np.argmax(grad[lo:hi])) + 1)
-    return truth, found
-
-
-class AlignmentAndNoiseTests(unittest.TestCase):
-    """The reported faults, per mode: pictures came out shifted sideways
-    (25-80 px) with the sync pulse as a green band down one side, and no
-    header at all was found at sigma 0.05. Noise here is sigma 0.05 on a
-    full-scale tone, about 23 dB in 3 kHz, *throughout* -- before the header
-    as well, as off the air -- and the transmission starts at an arbitrary
-    sample, not on a convenient boundary."""
-
-    LIMITS = {"robot36": 12, "martinm1": 6, "scottie_s1": 6, "pd120": 10}   # mean |error| per channel, 0-255
-
-    def _run(self, mode, sigma=0.05, seed=4, lead_s=0.4321):
-        spec = sstv.MODES[mode]
-        img = _bars(spec["height"], spec["width"])
-        tx = sstv.Encoder().render(image=img, mode=mode)
-        audio = np.concatenate([np.zeros(int(lead_s * FS), np.float32), tx, np.zeros(int(FS), np.float32)])
-        audio = audio + np.random.default_rng(seed).normal(0, sigma, len(audio)).astype(np.float32)
-        events, dec = _decode_audio(audio)
-        return img, events, dec
-
-    def test_every_mode_decodes_aligned_in_noise(self):
-        for mode in sstv.MODES:
+    def test_every_mode_we_send_decodes_as_the_picture_sent(self):
+        for mode, spec in sstv.MODES.items():
             with self.subTest(mode=mode):
-                img, events, dec = self._run(mode)
-                starts = [e for e in events if e["state"] == "start"]
-                self.assertEqual([e["fmt"] for e in starts], [mode])
-                self.assertIsNotNone(dec)
-                self.assertEqual(dec.shape, img.shape)
-                err = np.abs(dec.astype(int) - img.astype(int)).mean()
-                self.assertLess(err, self.LIMITS[mode])
-                h = img.shape[0]
-                # Top, middle and bottom of the picture: a decoder that only
-                # gets the first line right, or slants, fails one of them.
-                for rows in (slice(h // 20, h // 6), slice(h // 3, 2 * h // 3), slice(5 * h // 6, h - h // 20)):
-                    truth, found = _edge_columns(dec, rows)
-                    for t, f in zip(truth, found):
-                        self.assertLessEqual(abs(t - f), 2, f"{mode}: edge at {t} found at {f}, rows {rows}")
-                # Each bar the right colour: catches a channel swap or a
-                # chroma mix-up that leaves the edges where they belong.
-                w = img.shape[1]
-                for k in range(8):
-                    x0, x1 = k * w // 8 + w // 32, (k + 1) * w // 8 - w // 32
-                    got = dec[h // 4:3 * h // 4, x0:x1].reshape(-1, 3).mean(axis=0)
-                    self.assertLess(np.abs(got - BARS[k]).max(), 40, f"{mode} bar {k}: {got}")
+                img = _gradient_image(spec["height"], spec["width"])
+                events, _ = _decode_image(img, mode)
+                got, start, _done = _picture(events)
+                self.assertEqual(start["fmt"], RUST_ID[mode])
+                self.assertEqual(got.shape, img.shape)
+                self.assertGreater(_psnr(got, img), 25.0)
 
-    def test_header_found_in_heavier_noise(self):
-        # sigma 0.2 is about 11 dB in 3 kHz: a picture worth keeping is
-        # still there, so the header must be found.
+    def test_modest_noise_still_recovers(self):
         for mode in ("robot36", "martinm1"):
             with self.subTest(mode=mode):
-                _, events, dec = self._run(mode, sigma=0.2, seed=8)
-                self.assertEqual([e["fmt"] for e in events if e["state"] == "start"], [mode])
-                self.assertIsNotNone(dec)
+                spec = sstv.MODES[mode]
+                img = _gradient_image(spec["height"], spec["width"])
+                events, _ = _decode_image(img, mode, noise_std=0.3, seed=3)
+                got, _start, _done = _picture(events)
+                self.assertGreater(_psnr(got, img), 18.0)
 
-    def test_line_timing_follows_a_slow_sound_card(self):
-        # The sending sound card's clock 300 ppm slow: over Martin M1's 114 s
-        # the picture would drift 34 ms -- 75 px -- by the bottom without
-        # following the sync pulses.
-        spec = sstv.MODES["martinm1"]
-        img = _bars(spec["height"], spec["width"])
-        tx = sstv.Encoder().render(image=img, mode="martinm1").astype(np.float64)
-        stretch = 1.0003
-        slow = np.interp(np.arange(int(len(tx) * stretch)) / stretch, np.arange(len(tx)), tx).astype(np.float32)
-        audio = np.concatenate([np.zeros(5000, np.float32), slow, np.zeros(int(FS), np.float32)])
-        audio += np.random.default_rng(2).normal(0, 0.05, len(audio)).astype(np.float32)
-        _, dec = _decode_audio(audio)
-        self.assertIsNotNone(dec)
-        h = img.shape[0]
-        truth, found = _edge_columns(dec, slice(5 * h // 6, h - h // 20))
-        for t, f in zip(truth, found):
-            self.assertLessEqual(abs(t - f), 2, f"edge at {t} found at {f}")
-
-
-def _shift(x, hz):
-    """`x` moved up `hz` in frequency: the dial that far off the station."""
-    X = np.fft.fft(x.astype(np.float64))
-    n = len(x)
-    X[n // 2 + 1:] = 0
-    X[1:n // 2] *= 2
-    return np.real(np.fft.ifft(X) * np.exp(2j * np.pi * hz * np.arange(n) / FS)).astype(np.float32)
-
-
-class JoinedPartWayTests(unittest.TestCase):
-    """Brian's controller, 10/10/2026: a Scottie picture on the waterfall
-    for half a minute, tuned in after its VIS header, and not one event -
-    only a header started a picture. Now line syncs alone start one
-    (marked partial), in the right mode, aligned, ending when the syncs
-    stop; and nothing that is not SSTV starts one."""
-
-    LIMITS = AlignmentAndNoiseTests.LIMITS
-
-    def _joined(self, mode, at=0.6, offset_hz=0.0, sigma=0.05, seed=5):
-        spec = sstv.MODES[mode]
-        img = _bars(spec["height"], spec["width"])
-        tx = sstv.Encoder().render(image=img, mode=mode)
-        cut = int(len(tx) * at)
-        audio = np.concatenate([np.zeros(3000, np.float32), tx[cut:], np.zeros(int(3 * FS), np.float32)])
-        if offset_hz:
-            audio = _shift(audio, offset_hz)
-        audio = audio + np.random.default_rng(seed).normal(0, sigma, len(audio)).astype(np.float32)
-        events, dec = _decode_audio(audio)
-        # Rows the cut left whole: the picture's lines that start after it.
-        lay = sstv._layout(spec)
-        first = (cut - sstv._ms_f(sstv.VIS_MS + lay["head"])) / sstv._ms_f(lay["line"])
-        per = 2 if spec["kind"] == "pd" else 1
-        left = (spec["height"] // per - int(np.ceil(first))) * per
-        return img, events, dec, left
-
-    def test_every_mode_starts_from_its_line_syncs(self):
-        for mode in sstv.MODES:
-            with self.subTest(mode=mode):
-                img, events, dec, left = self._joined(mode)
-                starts = [e for e in events if e["state"] == "start"]
-                self.assertEqual([(e["fmt"], e.get("partial")) for e in starts], [(mode, True)])
-                self.assertIsNotNone(dec)
-                # The lines after the join, less at most the few it takes to
-                # be sure of the train, and none of the noise after the end.
-                self.assertLessEqual(dec.shape[0], left + 2)
-                self.assertGreaterEqual(dec.shape[0], left - 2 * (2 if mode == "pd120" else 1))
-                bottom = img[-dec.shape[0]:]
-                self.assertLess(np.abs(dec.astype(int) - bottom.astype(int)).mean(), self.LIMITS[mode])
-                h = dec.shape[0]
-                truth, found = _edge_columns(dec, slice(h // 4, 3 * h // 4))
-                for t, f in zip(truth, found):
-                    self.assertLessEqual(abs(t - f), 2, f"{mode}: edge at {t} found at {f}")
-
-    def test_a_pd_picture_30_hz_off_the_dial_stays_one_picture(self):
-        # The matched 20 ms sync window loses PD's sync 30 Hz out; before
-        # the short presence window this broke into a picture every few lines.
-        _img, events, dec, left = self._joined("pd120", offset_hz=30.0)
-        self.assertEqual(len([e for e in events if e["state"] == "start"]), 1)
-        self.assertIsNotNone(dec)
-        self.assertGreaterEqual(dec.shape[0], left - 4)
-
-    def test_a_picture_with_its_header_is_not_partial(self):
+    def test_a_picture_joined_part_way_starts_from_its_line_syncs(self):
+        # Tuned in, or the radio started, 40 % into a picture: no header.
         spec = sstv.MODES["scottie_s1"]
-        tx = sstv.Encoder().render(image=_bars(spec["height"], spec["width"]), mode="scottie_s1")
-        events, _dec = _decode_audio(np.concatenate([np.zeros(3000, np.float32), tx]))
-        self.assertEqual([e.get("partial") for e in events if e["state"] == "start"], [None])
+        img = _gradient_image(spec["height"], spec["width"])
+        events, _ = _decode_image(img, "scottie_s1", cut=0.4)
+        got, start, _done = _picture(events)
+        self.assertTrue(start.get("partial"))
+        self.assertEqual(start["fmt"], "scottie1")
+        rows = got.shape[0]
+        self.assertGreater(rows, 100)
+        # The rows it has are the bottom of the picture, in place.
+        self.assertGreater(_psnr(got[-rows // 2:], img[-rows // 2:]), 20.0)
 
-    def test_neither_noise_nor_a_steady_1200_hz_tone_starts_a_picture(self):
-        rng = np.random.default_rng(9)
-        t = np.arange(int(20 * FS)) / FS
-        for name, audio in (("noise", rng.normal(0, 0.3, len(t))),
-                            ("1200 Hz carrier", 0.5 * np.sin(2 * np.pi * 1200 * t) + rng.normal(0, 0.05, len(t)))):
+    def test_a_slow_sound_card_is_followed(self):
+        # The sending card's 12 kHz is 11.994: 500 ppm slow over the picture.
+        spec = sstv.MODES["martinm1"]
+        img = _gradient_image(spec["height"], spec["width"])
+        tx = sstv.Encoder().render(image=img, mode="martinm1").astype(np.float64)
+        n = len(tx)
+        slid = np.interp(np.arange(int(n * 1.0005)) / 1.0005, np.arange(n), tx).astype(np.float32)
+        events, _ = _decode_audio(slid)
+        got, _start, _done = _picture(events)
+        self.assertGreater(_psnr(got, img), 22.0)
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class TheEvents(unittest.TestCase):
+    """The shapes the SSTV panel and Remote paint from (sdrmode.SstvDecoder)."""
+
+    def test_start_rows_as_they_come_then_done_with_the_file(self):
+        spec = sstv.MODES["robot36"]
+        img = _gradient_image(spec["height"], spec["width"])
+        events, folder = _decode_image(img, "robot36")
+        start = events[0]
+        self.assertEqual((start["mode"], start["state"], start["width"], start["height"]),
+                         ("sstv", "start", 320, 240))
+        lines = [e for e in events if e["state"] == "line"]
+        self.assertEqual(lines[0]["line"], 1)                       # counts from 1
+        self.assertTrue(all(e["of"] == 240 and e["name"] == start["name"] for e in lines))
+        self.assertEqual({e["line"] for e in lines}, set(range(1, 241)))
+        row = base64.b64decode(lines[0]["row"])
+        self.assertEqual(len(row), 320 * 3)
+        done = events[-1]
+        self.assertEqual((done["state"], done["name"]), ("done", start["name"]))
+        self.assertEqual(Path(done["path"]).parent, Path(folder))
+        self.assertEqual(Path(done["path"]).name, done["file"])
+        # The rows painted are the picture saved (the last copy of each), to
+        # within the few levels the decoder's final reading moves a row it
+        # does not send again (a row is re-sent only when it moved).
+        painted = np.zeros((240, 320, 3), np.uint8)
+        for e in lines:
+            painted[e["line"] - 1] = np.frombuffer(base64.b64decode(e["row"]), np.uint8).reshape(320, 3)
+        with open(done["path"], "rb") as f:
+            self.assertGreater(_psnr(painted, _png(f.read())), 45.0)
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class DecoderRobustnessTests(unittest.TestCase):
+    def test_silence_and_noise_start_no_picture(self):
+        rng = np.random.default_rng(2)
+        for name, audio in (("silence", np.zeros(int(5 * FS), np.float32)),
+                            ("noise", rng.normal(0, 0.3, int(30 * FS)).astype(np.float32)),
+                            ("a steady 1200 Hz tone", (0.5 * np.sin(2 * np.pi * 1200 * np.arange(int(10 * FS)) / FS))
+                             .astype(np.float32))):
             with self.subTest(name):
-                events, _ = _decode_audio(audio.astype(np.float32))
-                self.assertEqual([e for e in events if e["state"] == "start"], [])
+                events, folder = _decode_audio(audio)
+                self.assertFalse([e for e in events if e["state"] in ("start", "done")])
+                self.assertEqual(list(Path(folder).iterdir()), [])
+
+    def test_ragged_block_sizes(self):
+        spec = sstv.MODES["robot36"]
+        img = _gradient_image(spec["height"], spec["width"])
+        audio = sstv.Encoder().render(image=img, mode="robot36")
+        for block in (37, 1001):
+            with self.subTest(block=block):
+                events, _ = _decode_audio(audio, block=block)
+                got, _start, _done = _picture(events)
+                self.assertGreater(_psnr(got, img), 25.0)
+
+    def test_reset_forgets_a_picture_half_heard(self):
+        spec = sstv.MODES["robot36"]
+        audio = sstv.Encoder().render(image=_gradient_image(spec["height"], spec["width"]), mode="robot36")
+        events = []
+        dec = MODES["sstv"].make_decoder(events.append, out_dir=tempfile.mkdtemp(dir=os.environ.get("TMPDIR")))
+        try:
+            dec.feed(audio[:len(audio) // 3], t=0.0)
+            dec.drain()
+            self.assertEqual(events[0]["state"], "start")
+            dec.reset()
+            dec.drain()
+            self.assertFalse([e for e in events if e["state"] == "done"])
+        finally:
+            dec.close()
 
 
 class EncoderTimingTests(unittest.TestCase):
@@ -521,47 +308,6 @@ class VisBitConventionTests(unittest.TestCase):
         # ones among the 7 data bits is odd, so parity bit is 1.
         bits = sstv._vis_bits(8)
         self.assertEqual(bits, "0001000" + "1")
-
-
-class DecoderRobustnessTests(unittest.TestCase):
-    def test_silence_produces_no_image(self):
-        events = []
-        dec = sstv.Decoder(events.append, out_dir=tempfile.mkdtemp())
-        silence = np.zeros(int(3.0 * FS), dtype=np.float32)
-        for i in range(0, len(silence), 1200):
-            dec.feed(silence[i:i + 1200], t=i / FS)
-        self.assertEqual(events, [])
-
-    def test_noise_alone_does_not_crash_or_false_trigger(self):
-        rng = np.random.default_rng(3)
-        noise = rng.normal(0, 0.3, int(5.0 * FS)).astype(np.float32)
-        events = []
-        dec = sstv.Decoder(events.append, out_dir=tempfile.mkdtemp())
-        for i in range(0, len(noise), 1200):
-            dec.feed(noise[i:i + 1200], t=i / FS)
-        self.assertEqual([e for e in events if e["state"] == "start"], [])
-
-    def test_reset_returns_to_idle(self):
-        dec = sstv.Decoder(lambda e: None, out_dir=tempfile.mkdtemp())
-        img = np.full((240, 320, 3), 100, dtype=np.uint8)
-        audio = sstv.Encoder().render(image=img, mode="robot36")
-        dec.feed(audio[:12000], t=0.0)
-        dec.reset()
-        self.assertEqual(dec._state, "idle")
-
-    def test_ragged_block_sizes(self):
-        img = np.full((240, 320, 3), 150, dtype=np.uint8)
-        audio = sstv.Encoder().render(image=img, mode="robot36")
-        events = []
-        dec = sstv.Decoder(events.append, out_dir=tempfile.mkdtemp())
-        sizes = [37, 500, 1, 2000, 193]
-        i, s = 0, 0
-        while i < len(audio):
-            n = sizes[s % len(sizes)]
-            s += 1
-            dec.feed(audio[i:i + n], t=i / FS)
-            i += n
-        self.assertTrue(any(e["state"] == "done" for e in events))
 
 
 if __name__ == "__main__":

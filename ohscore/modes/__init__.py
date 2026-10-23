@@ -60,6 +60,21 @@ _rtty_entry = ModeInfo(
     hosted=True,
 )
 
+
+def _psk_entry(variant: str, label: str, passband: tuple[float, float]) -> ModeInfo:
+    """PSK31/63/125: shack_sdr's Rust `psk` decoder for receive (RADIO-SDR-PLAN
+    §8.5 M2), several stations at once (modes/sdrmode.py PskDecoder);
+    psk.py's encoder for Enable TX and send(), unchanged - it renders all
+    three speeds, so PSK125 transmits as the other two do."""
+    return ModeInfo(
+        id=variant, label=label, kind="text", available=sdr.available(), why=sdr.why(),
+        offset_hz=1000.0, passband_hz=passband,
+        make_decoder=partial(sdrmode.psk_decoder, variant=variant),
+        make_encoder=partial(psk.Encoder().render, variant=variant),
+        hosted=True,
+    )
+
+
 _ft8_entry = ModeInfo(
     id="ft8", label="FT8", kind="slot",
     available=ft8.CAN_ENCODE["ft8"], why="" if ft8.CAN_ENCODE["ft8"] else ft8.WHY_UNAVAILABLE,
@@ -115,11 +130,15 @@ for _name, _label in _FREEDV_LABELS.items():
         make_encoder=partial(freedv.FreeDVTx, mode=_name),  # .process(block), not .render() -- see freedv.py
     )
 
+# SSTV: shack_sdr's Rust `sstv` decoder for receive, in fourteen modes
+# (modes/sdrmode.py SstvDecoder); sstv.py's encoder for sending, unchanged,
+# in its four (sstv.MODES; pass mode= to pick one).
 _sstv_entry = ModeInfo(
-    id="sstv", label="SSTV", kind="image", available=True, why="",
+    id="sstv", label="SSTV", kind="image", available=sdr.available(), why=sdr.why(),
     offset_hz=1900.0, passband_hz=(1100.0, 2300.0),
-    make_decoder=sstv.Decoder,
-    make_encoder=sstv.Encoder().render,  # all four modes in sstv.MODES; pass mode= to pick one
+    make_decoder=sdrmode.sstv_decoder,
+    make_encoder=sstv.Encoder().render,
+    hosted=True,
 )
 
 # HSmodem station to station (DJ0ABR's modem, the multimedia beacon's): files,
@@ -147,9 +166,9 @@ _kgstv_entry = ModeInfo(
 MODES: dict[str, ModeInfo] = {
     "cw": _text_entry("cw", "CW", cw, offset=700.0, passband=(400.0, 1000.0)),
     "rtty": _rtty_entry,
-    "psk31": _text_entry("psk31", "PSK31", psk, offset=1000.0, passband=(970.0, 1030.0), variant="psk31"),
-    "psk63": _text_entry("psk63", "PSK63", psk, offset=1000.0, passband=(940.0, 1060.0), variant="psk63"),
-    "psk125": _text_entry("psk125", "PSK125", psk, offset=1000.0, passband=(875.0, 1125.0), variant="psk125"),
+    "psk31": _psk_entry("psk31", "PSK31", (970.0, 1030.0)),
+    "psk63": _psk_entry("psk63", "PSK63", (940.0, 1060.0)),
+    "psk125": _psk_entry("psk125", "PSK125", (875.0, 1125.0)),
     "ft8": _ft8_entry,
     "ft4": _ft4_entry,
     "q65": _q65_entry,

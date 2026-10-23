@@ -239,6 +239,9 @@ ADDED_SINCE = {"txRadio", "civPort", "civBaud", "civAddress", "rigctldHost", "ri
                # milestone 1): how many, their processor share, the saved
                # sessions, and their status.
                "decodersMax", "decodeCpuMax", "decoderSessions", "decoders",
+               # Milestone 2 (ohscore/decoders.py, modes/sdrmode.py): how many
+               # decoded pictures are kept, and PSK's extra stations.
+               "decoderFilesKeep", "pskChannels",
                # The receive passband in state (23/10/2026, Engine._rx_passband):
                # wide FM's 180 kHz, which no client could know, for Remote's overlay.
                "rxFilterLo", "rxFilterHi",

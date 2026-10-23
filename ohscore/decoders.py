@@ -78,6 +78,18 @@ quiet, and stopping it (which closes its host, leaving the stuck thread
 behind, said in the log) lets everything else, and the next DAB station
 on a fresh thread, carry on.
 
+**Files: the pictures decoders save** (SSTV's, RADIO-SDR-PLAN §4.4
+`api/decoders/files`). The host writes each finished picture whole into
+the data folder's `sstv` folder (Engine.sstv_dir, where sstv.py's pictures
+always went, so the SSTV panel's gallery shows old and new alike) and
+names it after its session; files() lists them and file() serves one by
+name, the host refusing any name that could leave the folder. The host
+keeps only a few in memory and never deletes from disk, so the cap is
+here: after each picture, and when the radio starts, the oldest the host
+made beyond decoderFilesKeep are deleted (prune_files). Pictures from
+before the host named them (sstv.py's sstv_<mode>_NNNN.png) are the
+operator's to delete: they are listed, never pruned.
+
 **A session that is fed but decodes nothing says so.** The supervisor
 compares each session's `fed` and `dropped` over STARVED_S: when the host
 dropped nearly all of it the session's `why` is `decoder_behind` (the
@@ -88,8 +100,10 @@ begins and once when it ends, and a stuck one is a toast.
 """
 from __future__ import annotations
 
+import base64
 import collections
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -126,6 +140,11 @@ STARVED_S = 3.0
 STARVED_SHARE = 0.9
 # ...and it is over once less than half of what is fed is dropped.
 RECOVERED_SHARE = 0.5
+# Finished files the host keeps in memory, beside the ones on disk.
+FILES_IN_MEMORY = 16
+# How the host names a file it made: the session's id first (shack_sdr
+# README "Files are the host's"). Only these are ever pruned.
+HOST_FILE_PREFIX = "ds_"
 
 
 def _why_text(code: str | None) -> str:
@@ -218,6 +237,9 @@ class _Fixed:
         # a channel; its block, the phase of any offset it is mixed by, and
         # its sound's channels and how long it has been silent.
         self.held = False
+        # What its decoder sends (the catalogue's `outputs`): a session whose
+        # decoder sends `meta` shows the latest in its view.
+        self.outputs: tuple = ()
         self.block = ""
         self.phase = 0.0
         self.channels = 1
@@ -263,7 +285,9 @@ class Decoders:
         n = int(s.get("decodersMax", 4))
         cpu = float(s.get("decodeCpuMax", 0.25))
         self._ring_s = 2.0 if realtime else 120.0
-        self.host = m.Host(threads=1, cpu_max=cpu, ring_s=self._ring_s, max_sessions=n + 1)
+        self.host = m.Host(threads=1, cpu_max=cpu, ring_s=self._ring_s, max_sessions=n + 1,
+                           **self._files_opts())
+        self.prune_files()
         self._publish_status()
 
     def close(self) -> bool:
@@ -411,6 +435,7 @@ class Decoders:
                 raise self._refusal(e) from None
             f = _Fixed(sid, decoder, freq, params, entry.get("panel", "text"))
             f.kind, f.pitch, f.half, f.host = kind, pitch, half, host
+            f.outputs = tuple(entry.get("outputs") or ())
             f.d, f.cutoff = d, cutoff
             self.fixed[sid] = f
             if pin is not None:
@@ -648,6 +673,99 @@ class Decoders:
         view["results"] = [r for r in kept if since is None or r["rev"] > since]
         return view
 
+    # ------------------------------------------------------------ files
+    def files_dir(self):
+        """Where decoders' files are kept (the data folder's sstv folder),
+        or None for an engine with no data folder (a test's stand-in)."""
+        fn = getattr(self.engine, "sstv_dir", None)
+        return fn() if fn is not None else None
+
+    def _files_opts(self) -> dict:
+        d = self.files_dir()
+        if d is None:
+            return {}
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            log.warning("no folder for decoded pictures (%s): they are kept in memory only", e)
+            return {"files_keep": FILES_IN_MEMORY}
+        return {"files_dir": str(d), "files_keep": FILES_IN_MEMORY}
+
+    def _files_host(self):
+        """(a host that can list and serve the files, whether to close it):
+        the running radio's, or one made for the question when the radio
+        is stopped - the pictures are still there to look at."""
+        if self.host is not None:
+            return self.host, False
+        m = sdr.load()
+        if m is None or self.files_dir() is None:
+            return None, False
+        return m.Host(threads=1, cpu_max=0.0, max_sessions=1, **self._files_opts()), True
+
+    def files(self) -> list[dict]:
+        """The finished files, newest first: {name, session, decoder, t,
+        size} (never the path: that is this computer's, not a client's)."""
+        return [{k: f.get(k) for k in ("name", "session", "decoder", "t", "size")}
+                for f in reversed(self._files_on_disk())]
+
+    def _files_on_disk(self) -> list[dict]:
+        """The host's list, oldest first, without what is no longer on disk:
+        the host remembers the last few it made after prune_files (or the
+        operator) deleted them."""
+        host, own = self._files_host()
+        if host is None:
+            return []
+        try:
+            out = []
+            for f in host.files():
+                path = f.get("path")
+                if path and not os.path.isfile(path):
+                    continue
+                out.append(dict(f))
+            return out
+        except Exception:  # noqa: BLE001 - a host closing under us: nothing to list
+            return []
+        finally:
+            if own:
+                host.close()
+
+    def file(self, name: str) -> bytes | None:
+        """One file's bytes by its name, or None (no such file, or a name
+        that is not one of the listed files)."""
+        if not isinstance(name, str) or name not in {f["name"] for f in self._files_on_disk()}:
+            return None
+        host, own = self._files_host()
+        if host is None:
+            return None
+        try:
+            return host.file(name)
+        except Exception:  # noqa: BLE001 - refused or gone: no file
+            return None
+        finally:
+            if own:
+                host.close()
+
+    def prune_files(self) -> int:
+        """Delete the oldest files the host made beyond decoderFilesKeep;
+        how many went. Never one the host did not name (module docstring)."""
+        try:
+            keep = int(self.engine.st.get("decoderFilesKeep", 100))
+        except (AttributeError, TypeError, ValueError):
+            keep = 100
+        made = [f for f in self._files_on_disk() if str(f.get("name", "")).startswith(HOST_FILE_PREFIX)
+                and f.get("path")]
+        made.sort(key=lambda f: float(f.get("t") or 0.0))
+        gone = 0
+        for f in made[:max(0, len(made) - keep)]:
+            try:
+                os.remove(f["path"])
+                gone += 1
+            except OSError as e:
+                log.warning("could not delete the old picture %s: %s", f["name"], e)
+        if gone:
+            log.info("deleted the %d oldest decoded pictures, keeping %d", gone, keep)
+        return gone
+
     def codecs(self, rescan: bool = False) -> list[dict]:
         """Each codec's status (shack_sdr codecs), with `whyText`. The first
         call scans (a probe child per new file); later ones are cached
@@ -831,15 +949,23 @@ class Decoders:
                 continue
         if not items:
             return
+        saved = False
         for it in items:
             sid = it.get("session")
+            raw = it
             if it.get("type") == "state" and it.get("why"):
                 it = dict(it, whyText=_why_text(it["why"]))
             elif it.get("type") == "meta" and isinstance(it.get("fields"), dict):
                 it = dict(it, fields=_worded_meta(it["fields"]))
+            elif it.get("type") == "image":
+                # A picture's rows are bytes, which no feed client can read:
+                # base64, as the SSTV events' rows always were; and a saved
+                # file by its name only (api/decoders/files), never its path.
+                it = _image_for_clients(it)
+                saved = saved or it.get("event") == "done"
             if vfo is not None and sid == vfo[0]:
                 try:
-                    vfo[1].deliver(it)
+                    vfo[1].deliver(raw)
                 except Exception:  # noqa: BLE001 - a broken event costs that event
                     log.warning("mode decoder result not delivered", exc_info=True)
                 out = dict(it, session=VFO)
@@ -854,6 +980,8 @@ class Decoders:
         for f in fixed.values():
             while f.results and f.results[0].get("t", cutoff) < cutoff:
                 f.results.popleft()
+        if saved:
+            self.prune_files()
 
     def _watch(self, now: float, vfo, fixed: dict) -> None:
         """The starvation watch (module docstring), once a second from tick:
@@ -949,8 +1077,9 @@ class Decoders:
                 "stats": _stats(stats), "panel": f.panel}
         if f.held:
             view.update(holdsReceiver=True, block=f.block)
-        if f.held or f.panel == "meta":
-            # The decoder's last feed (DAB's ensemble, wide FM's RDS).
+        if f.held or f.panel == "meta" or "meta" in f.outputs:
+            # The decoder's last feed (DAB's ensemble, wide FM's RDS, PSK's
+            # channels, the SSTV picture being received).
             view["meta"] = _worded_meta(st["meta"]) if isinstance(st.get("meta"), dict) else None
         return view
 
@@ -959,10 +1088,21 @@ class Decoders:
         st = self._status_of(sid)
         s = self.engine.st
         state, why = _starved_view(st.get("state", "stopped"), st.get("why"), self._vfo_starved)
-        return {"id": VFO, "decoder": getattr(dec, "decoder", ""), "freqHz": s.get("rxDial"),
+        decoder = getattr(dec, "decoder", "")
+        entry = _catalogue_entry(decoder) or {}
+        view = {"id": VFO, "decoder": decoder, "freqHz": s.get("rxDial"),
                 "params": dict(getattr(dec, "params", {})), "state": state,
                 "why": why, "whyText": _why_text(why), "since": _iso(st.get("since")),
-                "rev": st.get("rev", 0), "stats": _stats(st.get("stats") or {}), "panel": "text", "mode": True}
+                "rev": st.get("rev", 0), "stats": _stats(st.get("stats") or {}),
+                "panel": entry.get("panel", "text"), "mode": True}
+        if "meta" in (entry.get("outputs") or ()):
+            view["meta"] = _worded_meta(st["meta"]) if isinstance(st.get("meta"), dict) else None
+        # The mode decoder's IQ is the dial's audio, centred where the host's
+        # adapter put it: PSK's channel offsets are from there (sdrmode.py).
+        centre = getattr(dec, "host_center", None)
+        if centre is not None and decoder == "psk":
+            view["audioCentreHz"] = float(centre)
+        return view
 
     def _save(self) -> None:
         with self.lock:
@@ -1008,6 +1148,13 @@ def sessions_text(sessions: list[dict]) -> str:
     """Several sessions' labels in one phrase ("RTTY on 14.0933 MHz, APRS
     on 144.8000 MHz")."""
     return ", ".join(s["label"] for s in sessions)
+
+
+def _catalogue_entry(decoder: str) -> dict | None:
+    m = sdr.load()
+    if m is None or not decoder:
+        return None
+    return next((e for e in m.catalogue() if e["id"] == decoder), None)
 
 
 def _takes_receiver(entry: dict) -> bool:
@@ -1086,6 +1233,16 @@ def _close_own_host(f: "_Fixed") -> bool:
     return joined
 
 
+def _image_for_clients(it: dict) -> dict:
+    """An `image` result as the feed and api/decoders carry it: `rgb` as
+    base64 text, and a saved file named but not placed (no `path`)."""
+    out = {k: v for k, v in it.items() if k != "path"}
+    rgb = out.get("rgb")
+    if isinstance(rgb, (bytes, bytearray)):
+        out["rgb"] = base64.b64encode(bytes(rgb)).decode("ascii")
+    return out
+
+
 def _usb(iq: np.ndarray) -> np.ndarray:
     """Channel IQ to USB audio (the real part: the channel is centred on the
     carrier, so the signal sits at its offset above it)."""
@@ -1096,7 +1253,8 @@ def _stats(st: dict) -> dict:
     out = {"snrDb": st.get("snrDb"), "offsetHz": st.get("offsetHz"), "cpu": st.get("cpu"),
            "fed": st.get("fed", 0), "dropped": st.get("dropped", 0)}
     for k in ("baud", "sync", "chars", "wpm", "frames", "fibsOk", "fibsBad", "audioFrames", "audioErrors",
-              "superframes", "aus", "auErrors"):
+              "superframes", "aus", "auErrors", "channels", "acquisitions", "images", "partials", "lines",
+              "visHeard", "visBad"):
         if k in st:
             out[k] = st[k]
     return out

@@ -1474,6 +1474,11 @@ class Engine:
         if want != self.decoder_mode:
             self._swap_decoder(s["mode"])
             self.decoder_mode = want
+        # PSK's extra stations, live: the session keeps every channel that
+        # stays in the list (modes/sdrmode.py PskDecoder.set_channels).
+        follow = getattr(self.decoder, "set_channels", None)
+        if follow is not None:
+            follow(s.get("pskChannels") or [])
 
     def _dc_block_wanted(self) -> bool:
         """Whether the receive IQ goes through the DC blocker (the app's
@@ -1502,6 +1507,8 @@ class Engine:
                 opts["speed"] = int(self.st.get("hsSpeed") or 4410)
             if mode in ("ft8", "ft4", "q65", "js8"):
                 opts["calls"] = self._slot_calls
+            if mode in ("psk31", "psk63", "psk125"):
+                opts["channels"] = list(self.st.get("pskChannels") or [])
             if modes_glue.hosted(mode):
                 # A shack_sdr session in the engine's own host, listed as
                 # the decoder session "vfo" (ohscore/decoders.py).
