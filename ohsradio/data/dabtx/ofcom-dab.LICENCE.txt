@@ -1,0 +1,6 @@
+Contains public sector information licensed under the Open Government Licence v3.0:
+https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/
+Source: Ofcom, Technical parameters for broadcast radio transmitters, DAB
+(https://www.ofcom.org.uk/tv-radio-and-on-demand/coverage-and-transmitters/radio-tech-parameters).
+Converted by tools/dabtx-build.py: TII codes from hex to numbers, ERP to kW,
+rows with no TII or position left out.
