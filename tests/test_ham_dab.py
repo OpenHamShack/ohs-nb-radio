@@ -25,6 +25,7 @@ import json
 import os
 import tempfile
 import time
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -234,15 +235,14 @@ class OnTheSimulator(unittest.TestCase):
         self.assertIn("and the sdrplay cannot (it runs at 1.2 MS/s)", str(cm.exception))
 
     def test_not_while_transmitting(self):
-        # Keyed into the simulator (it transmits nowhere), on 2 m SSB.
+        # An over in progress is a transmit thread still running (keyed
+        # drops first, the key-down follows). Stood in for rather than keyed,
+        # even into the simulator: a real over ends by itself on dead air or
+        # the watchdog when a loaded host is slow, and the test with it.
         r, _audio = self.radio(receive_only=False, mode="usb", vfo=144_300_000.0)
-        r.ptt(True)
-        try:
-            self.assertTrue(r.state()["keyed"], r.state()["txBlocked"])
+        with mock.patch.object(r, "tx_thread", types.SimpleNamespace(is_alive=lambda: True)):
             with self.assertRaises(Refused) as cm:
                 r.decoders.start("dab", CENTRE, {})
-        finally:
-            r.ptt(False)
         self.assertEqual((cm.exception.code, str(cm.exception)),
                          ("on_air", "Not while transmitting: DAB takes the receiver to Band III"))
         self.assertEqual((r.state()["rxOwner"], r.state()["vfo"]), ({}, 144_300_000.0))
