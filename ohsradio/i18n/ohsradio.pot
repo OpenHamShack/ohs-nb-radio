@@ -22,11 +22,15 @@ msgstr ""
 msgid "A recording is playing"
 msgstr ""
 
+#: ohsradio/localfreq.py:504
+msgid "A refresh is already running"
+msgstr ""
+
 #: ohsradio/bandscan.py:336
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1043
+#: ohsradio/radio.py:1067
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -38,7 +42,7 @@ msgstr ""
 msgid "Band III (DAB)"
 msgstr ""
 
-#: ohsradio/ui/settings.py:438
+#: ohsradio/ui/settings.py:579
 #, python-brace-format
 msgid "Bands & power, {band}: not a number"
 msgstr ""
@@ -67,7 +71,7 @@ msgstr ""
 msgid "Done: the Pluto now runs as {chip}, which tunes {range}."
 msgstr ""
 
-#: ohsradio/state.py:282
+#: ohsradio/state.py:295
 #, python-brace-format
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
@@ -117,6 +121,24 @@ msgstr ""
 msgid "Model"
 msgstr ""
 
+#: ohsradio/localfreq.py:326
+#, python-brace-format
+msgid "My frequencies holds at most {n} entries"
+msgstr ""
+
+#: ohsradio/localfreq.py:529
+msgid "No openAIP API key is set"
+msgstr ""
+
+#: ohsradio/localfreq.py:518
+msgid "No station locator: nothing to fetch around"
+msgstr ""
+
+#: ohsradio/localfreq.py:264
+#, python-brace-format
+msgid "Not a field of my frequencies: {fields}"
+msgstr ""
+
 #: ohsradio/bandscan.py:262
 msgid "Not scanned yet"
 msgstr ""
@@ -148,8 +170,16 @@ msgstr ""
 msgid "Scanning now"
 msgstr ""
 
+#: ohsradio/localfreq.py:261
+msgid "Send a JSON object"
+msgstr ""
+
 #: ohsradio/plutofix.py:579
 msgid "Serial"
+msgstr ""
+
+#: ohsradio/localfreq.py:481
+msgid "Set the station's locator to list what is near it; only the channel tables and your own frequencies are listed without it."
 msgstr ""
 
 #: ohsradio/bandscan.py:331
@@ -262,7 +292,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1001
+#: ohsradio/radio.py:1025
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -338,12 +368,33 @@ msgstr ""
 msgid "bandPower: no band called {band}"
 msgstr ""
 
+#: ohsradio/localfreq.py:279
+msgid "category may hold letters, digits, spaces, '-' and '_'"
+msgstr ""
+
+#: ohsradio/localfreq.py:269
+msgid "freqHz must be a whole number of hertz"
+msgstr ""
+
+#: ohsradio/localfreq.py:271
+msgid "freqHz must be between 10 kHz and 10 GHz"
+msgstr ""
+
 #: ohsradio/plutofix.py:611
 msgid "in range"
 msgstr ""
 
 #: ohsradio/plutofix.py:602
 msgid "known once the radio is open"
+msgstr ""
+
+#: ohsradio/localfreq.py:284
+msgid "locator must be a Maidenhead locator of 4, 6 or 8 characters"
+msgstr ""
+
+#: ohsradio/localfreq.py:275
+#, python-brace-format
+msgid "mode must be one of {modes}"
 msgstr ""
 
 #: ohsradio/plutofix.py:607
@@ -362,6 +413,11 @@ msgstr ""
 
 #: ohsradio/plutofix.py:591
 msgid "not reported by this firmware"
+msgstr ""
+
+#: ohsradio/localfreq.py:446
+#, python-brace-format
+msgid "now {call}, {location}"
 msgstr ""
 
 #: ohsradio/plutofix.py:540
@@ -407,9 +463,34 @@ msgstr ""
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""
 
+#: ohsradio/localfreq.py:248
+#, python-brace-format
+msgid "{field} is needed"
+msgstr ""
+
+#: ohsradio/localfreq.py:250
+#, python-brace-format
+msgid "{field} may be at most {n} characters"
+msgstr ""
+
+#: ohsradio/localfreq.py:252
+#, python-brace-format
+msgid "{field} may not hold line breaks or control characters"
+msgstr ""
+
+#: ohsradio/localfreq.py:245
+#, python-brace-format
+msgid "{field} must be text"
+msgstr ""
+
 #: ohsradio/ui/face.py:67
 #, python-brace-format
 msgid "{mhz:.4f} MHz is outside what OpenHamShack Radio tunes (0.1 MHz - 6 GHz)"
+msgstr ""
+
+#: ohsradio/localfreq.py:173
+#, python-brace-format
+msgid "{name}: not a local-frequencies file"
 msgstr ""
 
 #: ohsradio/plutofix.py:600

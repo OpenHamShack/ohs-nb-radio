@@ -214,11 +214,24 @@ with REG.after("pskReporter"):
             "decodes instead of three. Radio already carries a list of calls the Reverse Beacon Network heard "
             "recently. Off: a copy you put in the data folder is still used.")
 
+# --- local frequencies (ohsradio/localfreq.py, docs/SERVER-API.md) -------------
+# The radius is a control-level setting (a Remote may change it); the
+# openAIP key is a credential, so the store form refuses it over api/set
+# and takes the module setting OPENAIP_API_KEY instead (ohscore/server/
+# app.py PLATFORM_KEYS): api/state would otherwise show it to every viewer.
+with REG.after("cwSkimScp"):
+    _k("localRadiusKm", "int", 100, "setting", lo=1, hi=2000, unit="km",
+       help="Local frequencies lists what is within this distance of the station's locator: airfields, area "
+            "control, coast stations and marinas, nearest first.")
+    _k("openAipKey", "str", "", "setting",
+       help="Your openAIP API key (openaip.net, your profile's API clients), used only when you refresh the "
+            "local frequencies, to fetch area control around the station. Empty: the copy Radio came with.")
+
 # --- the band scan (ohsradio/bandscan.py) ----------------------------------------
 # The weekly FM and DAB station lists, made at night while the radio is idle
 # (Brian, 23/10/2026). Control level: none of them transmits or touches more
 # than the receiver, which the scan always gives back.
-with REG.after("cwSkimScp"):
+with REG.after("openAipKey"):
     _k("scanAuto", "bool", True, "setting",
        help="Make the FM and DAB station lists by itself: once a week, at night, while nobody is using the radio. "
             "It gives the radio back the moment anyone does, with everything as it was.")

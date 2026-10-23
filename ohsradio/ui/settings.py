@@ -26,7 +26,8 @@ class SettingsDialog(core.SettingsDialog):
              ("antenna", "Converters", "page_converters"),
              ("lock", "Transmit & safety", "page_transmit"), ("antenna", "PTT sequencer", "page_sequencer"),
              ("mic", "Audio", "page_audio"), ("waves", "Display", "page_display"),
-             ("screen", "Second display", "page_second"), ("link", "Controller", "page_controller"), ("keyboard", "Control pad", "page_pad"),
+             ("screen", "Second display", "page_second"), ("star", "Local frequencies", "page_local"),
+             ("link", "Controller", "page_controller"), ("keyboard", "Control pad", "page_pad"),
              ("gear", "Simulator", "page_simulator")]
     LABELS = {**core.LABELS,
               "sdrSerial": "Receiver serial", "sdrplayLna": "RSP LNA state",
@@ -39,7 +40,7 @@ class SettingsDialog(core.SettingsDialog):
               "seqPort": "Serial port", "seqLine": "Line", "seqDelayMs": "Sequence delay",
               "simHourUtc": "Time of day (UTC)", "simAntSwr": "Simulated antenna SWR",
               "cwSkim": "CW skimmer", "cwSkimSquelch": "CW skimmer squelch", "cwSkimMax": "CW skimmer channels",
-              "cwSkimScp": "Download MASTER.SCP",
+              "cwSkimScp": "Download MASTER.SCP", "localRadiusKm": "Radius", "openAipKey": "openAIP API key",
               "scanAuto": "Weekly station scan", "scanHour": "Scan at (hour)", "scanEveryDays": "Scan every",
               "scanIdleMinutes": "Only after idle for"}
     CHOICE_LABELS = {**core.CHOICE_LABELS,
@@ -54,7 +55,7 @@ class SettingsDialog(core.SettingsDialog):
                      "seqLine": {"rts": "RTS", "dtr": "DTR", "both": "Both"}}
     STEPS = {**core.STEPS, "hl2Lna": 1, "ppm": 0.05, "tuneDrive": 0.05, "swrLimit": 0.1, "paTempLimit": 1,
              "toneburstMs": 50, "ctcssLevel": 0.01, "seqDelayMs": 5, "simHourUtc": 0.5, "simAntSwr": 0.1,
-             "cwSkimSquelch": 0.5, "cwSkimMax": 8, "decodeCpuMax": 0.05}
+             "cwSkimSquelch": 0.5, "cwSkimMax": 8, "decodeCpuMax": 0.05, "localRadiusKm": 10}
     SIM_KEYS = ("simSignals", "simHourUtc", "simAntSwr")
     SIM_TEXT = ("The simulated bands used when Radio is 'Simulator': 160 m to 6 cm with stations that come and go "
                 "with the time of day, FM repeaters that open to the right tone, and a simulated antenna for the "
@@ -402,6 +403,146 @@ class SettingsDialog(core.SettingsDialog):
     def _converter_in_use(self, title: str) -> str:
         used = [b for b, cb in getattr(self, "band_conv", {}).items() if (cb.currentData() or "") == title]
         return f"{', '.join(used)} {'is' if len(used) == 1 else 'are'} worked through it" if used else ""
+
+    def page_local(self) -> QWidget:
+        """Local frequencies (ohsradio/localfreq.py): the radius, the
+        operator's own list (data, saved as it is edited, not on Save), and
+        the data's sources with Refresh. On a desktop the operator is the
+        administrator, so Refresh is here; on a controller it is the
+        administrator's API call."""
+        from .localview import MineDialog, mhz_text
+        sc, lay = self._scroll(self.tr("Local frequencies"),
+                               self.tr("What there is to listen to near your locator (Station page): airfields, "
+                                       "area control, coast stations, marinas and the channel tables. The Local "
+                                       "view lists it; a click tunes there."))
+        self._add(lay, "localRadiusKm")
+        self._section(lay, self.tr("My frequencies"))
+        n = QLabel(self.tr("Your own list: repeaters, nets, anything you listen to. Saved as you change it, "
+                           "and shared with OpenHamShack Remote when this Radio runs on a controller."))
+        n.setWordWrap(True)
+        n.setObjectName("Faint")
+        lay.addWidget(n)
+        from PyQt6.QtWidgets import QAbstractItemView, QHeaderView, QTableWidget, QTableWidgetItem
+        lfq = self.bridge.radio.localfreq
+        modes = self.bridge.radio.STATE.modes
+        t = self.mine_table = QTableWidget(0, 4)
+        t.setHorizontalHeaderLabels([self.tr("Name"), self.tr("MHz"), self.tr("Mode"), self.tr("Category")])
+        t.verticalHeader().setVisible(False)
+        t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        t.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        t.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        t.setMinimumHeight(160)
+
+        def fill():
+            rows = self.mine_rows = lfq.mine.entries()
+            t.setRowCount(len(rows))
+            for r, e in enumerate(rows):
+                for c, v in enumerate((e["name"], mhz_text(e["freqHz"]), e["mode"].upper(), e.get("category", ""))):
+                    t.setItem(r, c, QTableWidgetItem(v))
+        self.fill_mine = fill
+        fill()
+        lay.addWidget(t)
+        row = QHBoxLayout()
+
+        def chosen():
+            r = t.currentRow()
+            return self.mine_rows[r] if 0 <= r < len(self.mine_rows) else None
+
+        def add():
+            d = MineDialog(modes, None, self)
+            if d.exec():
+                lfq.mine.add(d.body, modes)
+                fill()
+
+        def edit():
+            e = chosen()
+            if e is None:
+                return
+            d = MineDialog(modes, e, self)
+            if d.exec():
+                lfq.mine.update(e["id"], d.body, modes)
+                fill()
+
+        def delete():
+            e = chosen()
+            if e is not None:
+                lfq.mine.delete(e["id"])
+                fill()
+        self.mine_buttons = {}
+        for name, label, fn in (("add", self.tr("Add…"), add), ("edit", self.tr("Edit…"), edit),
+                                ("delete", self.tr("Delete"), delete)):
+            b = self.mine_buttons[name] = Button(label, small=True)
+            b.clicked.connect(fn)
+            row.addWidget(b)
+        row.addStretch(1)
+        lay.addLayout(row)
+        self._section(lay, self.tr("Data"))
+        self.sources_label = QLabel("")
+        self.sources_label.setWordWrap(True)
+        self.sources_label.setObjectName("Faint")
+        self.sources_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self.sources_label)
+        self._show_sources(lfq.sources_view())
+        key = self._add(lay, "openAipKey")
+        key.w.setEchoMode(QLineEdit.EchoMode.Password)
+        r2 = QHBoxLayout()
+        self.refresh_btn = Button(self.tr("Refresh now"), small=True)
+        self.refresh_btn.setToolTip(self.tr("Download newer airfield and marine data, and area control with an "
+                                            "openAIP key. Needs the internet; Radio works with the copy it came "
+                                            "with."))
+        self.refresh_btn.clicked.connect(lambda: self.refresh_local(key.w.text().strip()))
+        r2.addWidget(self.refresh_btn)
+        self.refresh_note = QLabel("")
+        self.refresh_note.setObjectName("Muted")
+        self.refresh_note.setWordWrap(True)
+        r2.addWidget(self.refresh_note, 1)
+        lay.addLayout(r2)
+        lay.addStretch(1)
+        return sc
+
+    def _show_sources(self, sources: list[dict]) -> None:
+        lines = []
+        for s in sources:
+            a = s.get("attribution") or {}
+            lines.append(self.tr("{source}: {n} frequencies, {coverage}, {date}. {licence}").format(
+                source=a.get("source") or s["source"], n=s["entries"], coverage=s.get("coverage") or "",
+                date=s.get("fetched") or "", licence=a.get("text") or a.get("licence") or ""))
+        self.sources_label.setText("\n".join(lines))
+
+    def refresh_local(self, key: str) -> None:
+        """Refresh on a worker thread (it downloads 14 MB), its answer
+        brought back to the dialog's thread by a queued signal."""
+        import threading
+
+        from PyQt6.QtCore import QObject, pyqtSignal
+
+        class Done(QObject):
+            done = pyqtSignal(object)
+        self._refresh_done = Done(self)
+        self._refresh_done.done.connect(self._refreshed)
+        self.refresh_btn.setEnabled(False)
+        self.refresh_note.setText(self.tr("Downloading…"))
+        radio = self.bridge.radio
+
+        def work():
+            try:
+                ans = radio.local_refresh(radio.localfreq.http_fetch, key)
+            except Exception as e:  # noqa: BLE001  shown, never raised into Qt
+                ans = {"error": str(e)}
+            self._refresh_done.done.emit(ans)
+        threading.Thread(target=work, name="localfreq-refresh", daemon=True).start()
+
+    def _refreshed(self, ans: dict) -> None:
+        self.refresh_btn.setEnabled(True)
+        if "error" in ans:
+            self.refresh_note.setText(ans["error"])
+            return
+        parts = [(self.tr("{source}: {n}").format(source=r["source"], n=r["entries"]) if r["ok"]
+                  else self.tr("{source}: not refreshed ({why})").format(source=r["source"], why=r["why"]))
+                 for r in ans["results"]]
+        self.refresh_note.setText("; ".join(parts))
+        self._show_sources(ans["sources"])
 
     def page_sequencer(self) -> QWidget:
         sc, lay = self._scroll(self.tr("PTT sequencer"), self.tr("The line that keys a PA, a preamp's bypass relay "

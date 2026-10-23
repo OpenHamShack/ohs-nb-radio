@@ -81,7 +81,12 @@ PROFILE_KEYS = frozenset({"callsign", "locator", "stationCountry", "licence", "l
 # Settings the store form cannot use or the controller does instead: the
 # device's address comes from the broker's claim, there is no sound card.
 PLATFORM_KEYS = frozenset({"audioBackend", "audioIn", "audioOut", "audioOut2", "plutoUri", "hl2Address",
-                           "soapyArgs", "sdrSerial"})
+                           "soapyArgs", "sdrSerial", "openAipKey"})
+# Radio's openAIP key for a local-frequencies refresh: a module setting,
+# which only the controller's administrator sees and sets, rather than an
+# engine setting api/state would show every viewer (openAipKey is refused
+# above for that reason).
+OPENAIP_KEY_ENV = "OPENAIP_API_KEY"
 
 
 def _json_default(o):
@@ -156,6 +161,9 @@ class Server:
         # Without shack_rec (a desktop build run with --server) it is
         # NoRecordings, which refuses rather than stopping the server.
         self.recordings = server_recordings(radio, audio, info, **(recordings or {}))
+        # The network for a local-frequencies refresh (Radio): None is the
+        # real one; a test gives a reader of fixture files.
+        self.localfreq_fetch = None
         # Radio's band scan (ohsradio/bandscan.py) runs only while nobody is
         # using the radio: it hears of the listeners here, and of what only
         # the server knows makes the radio busy. A listener arriving is
@@ -644,6 +652,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         self._route("DELETE")
+
+    def do_PUT(self):
+        self._route("PUT")
 
     def _route(self, method: str) -> None:
         u = urlsplit(self.path)
@@ -1182,6 +1193,106 @@ class _Handler(BaseHTTPRequestHandler):
     # ---------------------------------------------------------- recordings
     # shack_rec's API (its README; docs/SERVER-API.md "Recordings"):
     # View lists and downloads, Control starts, stops and deletes.
+    # ---------------------------------------------------------- local frequencies
+    # Radio's (ohsradio/localfreq.py, docs/SERVER-API.md "Local frequencies"):
+    # reading at View, the operator's own list at Control, a refresh for an
+    # administrator. Nothing here touches the radio.
+    def _localfreq(self):
+        if not hasattr(type(self.srv.radio), "localfreq"):
+            self._error(404, _("This app has no local frequencies."), "not_found")
+            return None
+        return self.srv.radio.localfreq
+
+    def get_local_frequencies(self, who, q):
+        lf = self._localfreq()
+        if lf is None:
+            return
+        radius = None
+        if q.get("radiusKm"):
+            try:
+                radius = float(q["radiusKm"][0])
+            except ValueError:
+                radius = -1
+            if not lf.RADIUS_MIN_KM <= radius <= lf.RADIUS_MAX_KM:
+                self._error(400, _("radiusKm must be a number from {lo} to {hi}").format(lo=lf.RADIUS_MIN_KM,
+                                                                                         hi=lf.RADIUS_MAX_KM),
+                            "bad_radius")
+                return
+        category = (q.get("category") or [""])[0] or None
+        if category is not None and category not in lf.CATEGORIES:
+            self._error(400, _("category must be one of {names}").format(names=", ".join(lf.CATEGORIES)),
+                        "bad_category")
+            return
+        self._send(200, self.srv.radio.local_frequencies(radius, category))
+
+    def _mine_answer(self, lf, fn) -> bool:
+        try:
+            status, ans = fn()
+        except lf.Invalid as e:
+            self._error(400, str(e), "bad_field", field=e.field)
+            return False
+        self._send(status, ans)
+        return status < 300
+
+    def post_local_mine(self, who, q):
+        lf = self._localfreq()
+        if lf is None:
+            return
+        body = self._body()
+        modes = self.srv.radio.STATE.modes
+        if self._mine_answer(lf, lambda: (201, lf.mine.add(body, modes))):
+            log.info("my frequencies: %s added one", who["user"])
+
+    def _mine_id(self) -> str:
+        return urllib.parse.unquote(urlsplit(self.path).path.rstrip("/").rsplit("/", 1)[-1])
+
+    def put_local_mine(self, who, q):
+        lf = self._localfreq()
+        if lf is None:
+            return
+        eid, body = self._mine_id(), self._body()
+        modes = self.srv.radio.STATE.modes
+
+        def edit():
+            e = lf.mine.update(eid, body, modes)
+            return (200, e) if e is not None else (404, {"error": _("There is no entry {id} in my frequencies").format(
+                id=eid), "code": "unknown_entry"})
+        self._mine_answer(lf, edit)
+
+    def delete_local_mine(self, who, q):
+        lf = self._localfreq()
+        if lf is None:
+            return
+        eid = self._mine_id()
+        if not lf.mine.delete(eid):
+            self._error(404, _("There is no entry {id} in my frequencies").format(id=eid), "unknown_entry")
+            return
+        self._send(200, {"deleted": eid})
+
+    def post_local_refresh(self, who, q):
+        """An administrator's download of newer data. Radio's levels stop
+        at Transmit, so "admin" is the controller's administrator flag
+        (X-OpenHamShack-Admin, CONTROLLER-CONTRACT 5.3) at Control level:
+        a refresh asks third parties for data on the station's behalf and
+        replaces what everyone sees."""
+        lf = self._localfreq()
+        if lf is None:
+            return
+        if not who.get("admin"):
+            self._error(403, _("Only the controller's administrator may refresh the local frequencies."),
+                        "not_admin")
+            return
+        fetch = self.srv.localfreq_fetch or lf.http_fetch
+        key = os.environ.get(OPENAIP_KEY_ENV, "").strip()
+        try:
+            summary = self.srv.radio.local_refresh(fetch, key)
+        except RuntimeError as e:
+            self._error(409, str(e), "refresh_running")
+            return
+        log.info("local frequencies refreshed by %s: %s", who["user"],
+                 ", ".join(f"{r['source']} {'ok' if r['ok'] else 'no'}" for r in summary["results"]))
+        self._send(200, summary)
+
     def _refused(self, e) -> None:
         self._error(e.status, e.text, e.code)
 
@@ -1423,6 +1534,10 @@ ROUTES = {
     ("POST", "/api/recordings/start"): ("control", _Handler.post_recordings_start),
     ("POST", "/api/recordings/stop"): ("control", _Handler.post_recordings_stop),
     ("POST", "/api/recordings/delete"): ("control", _Handler.post_recordings_delete),
+    ("GET", "/api/local-frequencies"): ("view", _Handler.get_local_frequencies),
+    ("POST", "/api/local-frequencies/mine"): ("control", _Handler.post_local_mine),
+    # Control here; the handler also wants the administrator flag.
+    ("POST", "/api/local-frequencies/refresh"): ("control", _Handler.post_local_refresh),
 }
 # Routes with a path parameter: (method, prefix) -> (level, handler); the
 # rest of the path after the prefix is the parameter. Exact routes first.
@@ -1430,4 +1545,6 @@ PREFIX_ROUTES = {
     ("GET", "/api/decoders/sessions/"): ("view", _Handler.get_decoder_session),
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
     ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),
+    ("PUT", "/api/local-frequencies/mine/"): ("control", _Handler.put_local_mine),
+    ("DELETE", "/api/local-frequencies/mine/"): ("control", _Handler.delete_local_mine),
 }
