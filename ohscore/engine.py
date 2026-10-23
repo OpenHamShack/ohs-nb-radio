@@ -105,6 +105,7 @@ from .config import DEVICE_WHY, RECEIVE_ONLY, RECEIVE_ONLY_REFUSAL
 from .devices import DeviceError
 from .i18n.text import _
 from .modegroups import JS8_DEFAULT_SPEED, JS8_SPEEDS
+from .modegroups import label as mode_label
 
 from .dsp import autoaudio, autotune, morse
 from .dsp.bank import Analysis, Channel, Geometry, Source, Synthesis
@@ -796,8 +797,15 @@ class Engine:
             txd = self._tx_dial(s)
             extra = self._derived(rx, txd)
             extra.setdefault("station", self._station_status())
-        self._status(rxDial=rx, txDial=txd, **extra,
+            f_lo, f_hi = self._rx_passband(s)
+        self._status(rxDial=rx, txDial=txd, rxFilterLo=f_lo, rxFilterHi=f_hi, **extra,
                      txBlocked=self._tx_blocked(None) if not self.st["keyed"] else self.st["txBlocked"])
+
+    def _rx_passband(self, s: dict) -> tuple[float, float]:
+        """The receive passband in Hz from the dial, as the demodulator in
+        the current mode uses it (rxFilterLo/rxFilterHi): the one function
+        the scopes and the demodulator already share."""
+        return passband(s["mode"], s["filterLo"], s["filterHi"], s["cwPitch"], s["cwWidth"], s["amWidth"])
 
     def _rx_dial(self, s: dict) -> float:
         """The frequency the receiver demodulates: vfo + RIT."""
@@ -2105,9 +2113,18 @@ class Engine:
         s = self.st
         if not self.running:
             return "The radio is not running"
+        mode = self._judged_mode(req)
+        if mode in modes_glue.RX_ONLY_MODES:
+            # Before the device and the licence: true on every radio and at
+            # every dial, so it is the sentence an operator needs.
+            return self._rx_only_why(mode)
         if self.dev is None or not self.dev.can_tx:
             return getattr(self.dev, "tx_refusal", "") or "This device is receive-only"
-        return self._tx_guard(self._judged_mode(req), self._tx_dial(s), occupied, req)
+        return self._tx_guard(mode, self._tx_dial(s), occupied, req)
+
+    @staticmethod
+    def _rx_only_why(mode: str) -> str:
+        return _("{mode} is for listening only: nothing is ever transmitted in it").format(mode=mode_label(mode))
 
     def _judged_mode(self, req: dict | None) -> str:
         """The mode an over is judged in: its own for one of OVER_MODES,
@@ -2302,6 +2319,8 @@ class Engine:
         if mode != self.st["mode"] and not over:
             raise ValueError(_("Switch to {mode} before sending (the radio is in {current})").format(
                 mode=mode, current=self.st["mode"]))
+        if mode in modes_glue.RX_ONLY_MODES:
+            raise TxRefused(self._rx_only_why(mode))
         if mode == "hsmodem" and not str(self.st.get("callsign") or "").strip():
             # HSmodem identifies the sender in every transmission (its station
             # frame); without a call there is nothing lawful to put there.

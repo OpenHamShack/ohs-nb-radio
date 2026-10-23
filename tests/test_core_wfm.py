@@ -58,7 +58,8 @@ class Demodulates(unittest.TestCase):
         # broadcaster does, with noise at a 30 dB carrier-to-noise ratio in
         # the 240 kHz channel.
         x = broadcast(50 / 75 * np.sin(2 * np.pi * 1000 * self.t), tau_us=50.0)
-        noise = (self.rng.standard_normal(len(x)) + 1j * self.rng.standard_normal(len(x))) * 10 ** (-30 / 20) / math.sqrt(2)
+        noise = ((self.rng.standard_normal(len(x)) + 1j * self.rng.standard_normal(len(x)))
+                 * 10 ** (-30 / 20) / math.sqrt(2))
         d = wfm.WfmDemod(RATE, 50.0)
         a = run(d, (x + noise).astype(np.complex64))[6000:]          # past the filters' start-up
         peak, snr = tone_snr(a, 1000.0)
@@ -92,7 +93,8 @@ class Demodulates(unittest.TestCase):
         # composite() is the hook for stereo and RDS: the pilot is there,
         # at the channel rate, at its level.
         d = wfm.WfmDemod(RATE, 50.0)
-        mpx = np.concatenate([d.composite(c) for c in np.array_split(broadcast(0.1 * np.sin(2 * np.pi * 19_000 * self.t)), 7)])
+        x = broadcast(0.1 * np.sin(2 * np.pi * 19_000 * self.t))
+        mpx = np.concatenate([d.composite(c) for c in np.array_split(x, 7)])
         t = np.arange(len(mpx)) / RATE
         self.assertAlmostEqual(2 * abs(np.mean(mpx * np.exp(-2j * np.pi * 19_000 * t))), 0.1, delta=0.005)
 

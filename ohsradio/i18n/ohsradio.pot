@@ -10,7 +10,7 @@ msgstr ""
 msgid "'{command}' failed on the radio (exit {status}: {output}). The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:800
+#: ohsradio/radio.py:858
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -38,12 +38,12 @@ msgstr ""
 msgid "Done: the Pluto now runs as {chip}, which tunes {range}."
 msgstr ""
 
-#: ohsradio/state.py:235
+#: ohsradio/state.py:252
 #, python-brace-format
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
 
-#: ohsradio/radio.py:539
+#: ohsradio/radio.py:548
 #, python-brace-format
 msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
 msgstr ""
@@ -113,7 +113,7 @@ msgstr ""
 msgid "The CW skimmer stopped."
 msgstr ""
 
-#: ohsradio/radio.py:585
+#: ohsradio/radio.py:608
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
@@ -150,12 +150,12 @@ msgstr ""
 msgid "The settings were written, but the radio did not restart within {secs:.0f} s and still runs as {chip}. Unplug it and plug it back in, wait half a minute, then use Help › Check radio…."
 msgstr ""
 
-#: ohsradio/radio.py:500
+#: ohsradio/radio.py:509
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz ({radio} MHz through {converter}) is outside it"
 msgstr ""
 
-#: ohsradio/radio.py:503
+#: ohsradio/radio.py:512
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
@@ -164,7 +164,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:758
+#: ohsradio/radio.py:816
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -190,6 +190,11 @@ msgstr ""
 
 #: ohsradio/plutofix.py:515
 msgid "Waiting for the radio to restart…"
+msgstr ""
+
+#: ohsradio/radio.py:657
+#, python-brace-format
+msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""
 
 #: ohsradio/xvtr.py:60
@@ -287,7 +292,7 @@ msgstr ""
 msgid "{error}. The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:583
+#: ohsradio/radio.py:606
 #, python-brace-format
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""

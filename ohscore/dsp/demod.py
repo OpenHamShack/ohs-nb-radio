@@ -14,6 +14,7 @@ import numpy as np
 
 from .agc import Agc
 from .fir import OlsFilter, bandpass_complex, kaiser_taps, lowpass
+from .wfm import HALF_WIDTH as WFM_HALF_WIDTH
 
 RATE = 12_000.0
 DIGITAL_FILTER = (100.0, 3200.0)
@@ -33,6 +34,9 @@ def passband(mode: str, lo: float, hi: float, cw_pitch: float, cw_width: float, 
         # A 12.5 kHz channel (OpenHamShack Radio's FM is demodulated by ohscore/dsp/fm.py,
         # not here; this is what the scopes draw).
         return -6250.0, 6250.0
+    if mode == "wfm":
+        # The channel filter's own edges (ohscore/dsp/wfm.py): 180 kHz.
+        return -WFM_HALF_WIDTH, WFM_HALF_WIDTH
     if mode in ("usb",):
         return lo, hi
     return DIGITAL_FILTER
@@ -54,6 +58,10 @@ class Demod:
         self.gain = None
 
     def configure(self, mode: str, lo: float, hi: float, agc: str = "medium", rf_gain_db: float = 0.0):
+        # A mode demodulated elsewhere (Radio's FM and wide FM) still
+        # configures this one; wide FM's 180 kHz would design a lowpass far
+        # past the 12 kHz channel's Nyquist, so it is held inside it.
+        lo, hi = max(lo, -self.rate / 2), min(hi, self.rate / 2)
         if (mode, lo, hi) != (self.mode, *(self.edges or (None, None))):
             width = hi - lo
             # Transition ~1/8 of the width, between 40 and 200 Hz: a 100 Hz CW

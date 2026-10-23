@@ -47,8 +47,10 @@ PLAN_WARNINGS = frozenset({"plan_mode", "plan_bandwidth", "plan_output", "plan_a
 # know has no class, and a signal with no class is judged by where it
 # reaches alone - any segment's mode rule passes it - so an app's new mode
 # must be named here until ohs-libs adds it. KG-STV is a picture mode, as
-# SSTV is ("image").
-MODE_ALIASES = {"kgstv": "image"}
+# SSTV is ("image"). Wide FM is never transmitted (Engine._tx_blocked
+# refuses it first), but the licence chip still judges the dial in it, as
+# FM.
+MODE_ALIASES = {"kgstv": "image", "wfm": "fm"}
 # Settings a station profile condition may still live under, from before
 # stationConditions (the UK's nearLondon).
 LEGACY_CONDITIONS = ("nearLondon",)

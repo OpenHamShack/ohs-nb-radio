@@ -23,9 +23,15 @@ from typing import Callable
 log = logging.getLogger("ohsnb.modes_glue")
 
 OFFSET_NAMES = ("freq", "offset", "center")
-# Demodulated (and, but for AM, modulated) by the engine itself. FM is in
-# the list for OpenHamShack Radio; NB does not offer it, so never asks.
-NATIVE = {"usb", "lsb", "am", "fm"}
+# Demodulated (and, but for AM and the receive-only modes, modulated) by
+# the engine itself. FM and wide FM are in the list for OpenHamShack Radio;
+# NB does not offer them, so never asks.
+NATIVE = {"usb", "lsb", "am", "fm", "wfm"}
+# Modes that are only ever listened to. Wide FM is broadcast: no licence
+# class anywhere grants a 180 kHz FM signal on the amateur bands, so the
+# engine refuses it for transmit before any licence or band-plan check
+# (Engine._tx_blocked), whatever the dial (Brian, 23/10/2026).
+RX_ONLY_MODES = frozenset({"wfm"})
 
 
 def _registry() -> dict:
@@ -67,7 +73,7 @@ def available(names, freedv_mode: str = "700d") -> dict:
     out = {}
     for n in names:
         if n in NATIVE:
-            out[n] = {"decode": True, "encode": n != "am", "missing": ""}
+            out[n] = {"decode": True, "encode": n != "am" and n not in RX_ONLY_MODES, "missing": ""}
             continue
         info, missing = _entry(n, freedv_mode)
         out[n] = {"decode": info is not None and not missing,
