@@ -129,6 +129,41 @@ class VisCodeTests(unittest.TestCase):
             self.assertEqual(sstv.VIS_TO_MODE[spec["vis"]], name)
 
 
+BARS = np.array([[255, 255, 0], [0, 255, 255], [0, 255, 0], [255, 0, 255],
+                 [255, 0, 0], [0, 0, 255], [0, 0, 0], [128, 128, 128]], dtype=np.uint8)
+
+
+def _bars(h, w):
+    """Eight colour bars (each channel on in a different pattern, so a
+    swapped or misplaced channel shows as the wrong colour) inside a white
+    border (so a picture shifted sideways shows at its edges). No bar is
+    white, so every border edge is an edge."""
+    img = np.zeros((h, w, 3), dtype=np.uint8)
+    for k in range(8):
+        img[:, k * w // 8:(k + 1) * w // 8] = BARS[k]
+    b = w // 40
+    img[:b], img[-b:], img[:, :b], img[:, -b:] = 255, 255, 255, 255
+    return img
+
+
+def _edge_columns(img, rows):
+    """Where, along a row, the picture changes most sharply near each true
+    bar boundary and border edge -- the decoded picture's own edges, found
+    rather than assumed."""
+    prof = img[rows].astype(float).mean(axis=0)               # w x 3
+    grad = np.abs(np.diff(prof, axis=0)).sum(axis=1)          # change between x and x+1
+    w = img.shape[1]
+    b = w // 40
+    truth = [b] + [k * w // 8 for k in range(1, 8)] + [w - b]
+    found = []
+    for x in truth:
+        # (Not the first or last pixel pair: every scan's first and last
+        # pixel carry the demodulator's transient from the tone before it.)
+        lo, hi = max(1, x - w // 20), min(len(grad) - 1, x + w // 20)
+        found.append(lo + int(np.argmax(grad[lo:hi])) + 1)
+    return truth, found
+
+
 # The Rust decoder's ids for sstv.py's four (shack_sdr sstv.modes()).
 RUST_ID = {"robot36": "robot36", "martinm1": "martin1", "scottie_s1": "scottie1", "pd120": "pd120"}
 
@@ -152,6 +187,18 @@ class OurPicturesComeBack(unittest.TestCase):
                 self.assertEqual(start["fmt"], RUST_ID[mode])
                 self.assertEqual(got.shape, img.shape)
                 self.assertGreater(_psnr(got, img), 25.0)
+
+    def test_every_bar_edge_is_where_it_was_sent(self):
+        # The fault the Python decoder's alignment tests pinned: pictures
+        # shifted sideways. Colour bars in a white border, every edge found
+        # within two pixels of where it was sent, in each mode we send.
+        for mode, spec in sstv.MODES.items():
+            with self.subTest(mode=mode):
+                img = _bars(spec["height"], spec["width"])
+                got, _start, _done = _picture(_decode_image(img, mode, noise_std=0.1)[0])
+                truth, found = _edge_columns(got, slice(spec["height"] // 6, spec["height"] * 5 // 6))
+                for t, f in zip(truth, found):
+                    self.assertLessEqual(abs(t - f), 2, f"edge at {t} found at {f}")
 
     def test_modest_noise_still_recovers(self):
         for mode in ("robot36", "martinm1"):

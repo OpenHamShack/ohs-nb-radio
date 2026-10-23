@@ -502,7 +502,9 @@ class MemoriesAndLog(RadioCase):
         run_sim(r, 0.5)
         if r.decoder is None:
             self.skipTest("no SSTV decoder here")
-        self.assertEqual(Path(r.decoder.out_dir), Path(self.tmp) / "sstv")
+        # Written by the engine's decoder host (shack_sdr), into its files
+        # folder: the data folder's sstv folder.
+        self.assertEqual(Path(r.decoders.files_dir()), Path(self.tmp) / "sstv")
 
 
 class Persistence(unittest.TestCase):
@@ -714,7 +716,7 @@ class Decoding(RadioCase):
         # the level and with the noise the simulated transponder gives it,
         # through the whole receive chain. Robot36 is the shortest mode
         # (36 s), and the simulator runs several times faster than real time.
-        from test_modes_sstv import BARS, _bars, _edge_columns, _read_png
+        from test_modes_sstv import BARS, _bars, _edge_columns, _png
         r = self.radio(start=False, mode="sstv", vfo=10_489_600_000.0, simUlErrorHz=6.0)
         ev = r.subscribe("events", 2000)
         r.start()
@@ -729,7 +731,8 @@ class Decoding(RadioCase):
         got += ev.drain()
         done = [e for e in got if e.get("mode") == "sstv" and e.get("state") == "done"]
         self.assertEqual(len(done), 1, [e.get("state") for e in got if e.get("state") != "line"])
-        dec = _read_png(done[0]["path"])
+        with open(done[0]["path"], "rb") as f:
+            dec = _png(f.read())
         # The echo is not clean: the transponder's noise leaves a pixel-to-
         # pixel scatter of about 25 levels in 255 (mean error ~23 measured),
         # but each bar is its own colour and every edge is where it was sent.
