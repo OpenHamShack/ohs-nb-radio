@@ -10,7 +10,7 @@ msgstr ""
 msgid "'{command}' failed on the radio (exit {status}: {output}). The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:868
+#: ohsradio/radio.py:903
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -43,7 +43,7 @@ msgstr ""
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
 
-#: ohsradio/radio.py:551
+#: ohsradio/radio.py:559
 #, python-brace-format
 msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
 msgstr ""
@@ -113,7 +113,7 @@ msgstr ""
 msgid "The CW skimmer stopped."
 msgstr ""
 
-#: ohsradio/radio.py:611
+#: ohsradio/radio.py:631
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
@@ -150,12 +150,12 @@ msgstr ""
 msgid "The settings were written, but the radio did not restart within {secs:.0f} s and still runs as {chip}. Unplug it and plug it back in, wait half a minute, then use Help › Check radio…."
 msgstr ""
 
-#: ohsradio/radio.py:512
+#: ohsradio/radio.py:520
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz ({radio} MHz through {converter}) is outside it"
 msgstr ""
 
-#: ohsradio/radio.py:515
+#: ohsradio/radio.py:523
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
@@ -164,7 +164,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:826
+#: ohsradio/radio.py:861
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -192,7 +192,7 @@ msgstr ""
 msgid "Waiting for the radio to restart…"
 msgstr ""
 
-#: ohsradio/radio.py:660
+#: ohsradio/radio.py:693
 #, python-brace-format
 msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""
@@ -292,7 +292,7 @@ msgstr ""
 msgid "{error}. The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:609
+#: ohsradio/radio.py:629
 #, python-brace-format
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""

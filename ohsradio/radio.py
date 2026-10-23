@@ -166,6 +166,14 @@ class Radio(Engine):
     # room for stereo; the decoders and transmit stay at 12 kHz.
     OUT_RATE = 48_000
     REC_STATES = ("band",)
+    # A DAB session takes the receiver (Engine.hold_receiver): Radio's
+    # hardware follows its dial anyway, so it can be centred on a block.
+    # The repeater offset goes back with the dial, because arriving back on
+    # a band from Band III would otherwise reset it to the band's usual one
+    # (_adjust_set).
+    HOLDS_RECEIVER = True
+    HELD_KEYS = Engine.HELD_KEYS + ("rptReverse", "rptShift")
+    HOLD_PRIOR = Engine.HOLD_PRIOR + ("rptOffsetHz",)
 
     def _diag_extra(self, s: dict) -> str:
         info = s.get("licenceInfo") or {}
@@ -562,6 +570,18 @@ class Radio(Engine):
             self.seq.delay = s["seqDelayMs"] / 1000.0
 
     def _maybe_recentre(self):
+        held = self.held
+        if held is not None:
+            # A session holds the receiver: its centre exactly, DC on the
+            # block's unused middle carrier, whatever the dial says.
+            want = held["centre"]
+            conv = self._conv_at(want, rx=True)
+            pending = self.pending_centre is not None
+            if (self.pending_centre if pending else self.centre) != want or \
+                    conv != (self.pending_conv if pending else self.rx_conv):
+                self.pending_conv = conv
+                self.pending_centre = want
+            return
         rx = self._rx_dial(self.st)
         fs = self._fs()
         half = USABLE * fs / 2
@@ -631,6 +651,19 @@ class Radio(Engine):
         fn = getattr(self.dev, "set_rx_converter", None)
         if fn is not None:
             fn(conv)
+
+    def _held_retune(self) -> None:
+        if self.running:
+            self._maybe_recentre()
+
+    def _faster_rate(self, least: float) -> float | None:
+        # The HL2 has its own rates, all far below a DAB block; the rest
+        # that run at `sampleRate` (Pluto, LibreSDR, the simulator, SoapySDR
+        # and the RTL-SDR) offer 2.4 MS/s, and the RSP runs at it already.
+        if self._kind() == "hl2":
+            return None
+        rates = [float(r) for r in self.STATE.spec["sampleRate"]["choices"] if float(r) >= least]
+        return min(rates) if rates else None
 
     def _start_status(self) -> dict:
         lo, hi = self.wide_span()
@@ -768,6 +801,8 @@ class Radio(Engine):
         return self.wfmdemod.for_decoders(heard), level
 
     def audio_channels(self) -> int:
+        if self.held is not None:
+            return super().audio_channels()
         d = self.wfmdemod
         return d.channels if self.st["mode"] == "wfm" and d is not None else 1
 

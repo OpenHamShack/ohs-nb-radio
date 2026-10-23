@@ -94,9 +94,10 @@ import numpy as np
 from . import audio as audio_mod
 from . import diag
 from . import host
+from . import hostlibs
 from . import sigmf
 from . import modes_glue, sdr
-from .decoders import Decoders
+from .decoders import Decoders, Refused
 from . import countries
 from . import dxcc
 from . import pskreporter
@@ -161,6 +162,14 @@ class Feed:
 
 class TxRefused(ValueError):
     """Keying refused; the message is the operator-readable reason."""
+
+
+class ReceiverHeld(ValueError):
+    """set() refused a change that would tune the receiver while a decoder
+    session holds it (Engine.hold_receiver); the message is the sentence.
+    The store's api/set answers it 409 `receiver_busy`."""
+
+    code = "receiver_busy"
 
 
 SLOT_SEC = {"ft8": 15.0, "ft4": 7.5, "q65": 60.0, "js8": 15.0}
@@ -318,6 +327,17 @@ class Engine:
     # transponder's audio has and what its clients already take.
     OUT_RATE = AUDIO_RATE
 
+    # Whether a decoder session may take the whole receiver (DAB; see
+    # hold_receiver): an app that retunes its hardware to its dial (Radio)
+    # can lend it; QO-100 NB, tuned to one transponder, never does.
+    HOLDS_RECEIVER = False
+    # Settings a held receiver refuses: each moves what it is tuned to or
+    # how it is heard, and the session that holds it decides both.
+    HELD_KEYS: tuple = ("vfo", "mode", "rit", "ritOn")
+    # What the operator had before a session took the receiver, put back
+    # when it lets go (an app adds what tuning away would change with it).
+    HOLD_PRIOR: tuple = ("vfo", "mode")
+
     # Supplied by the app's subclass.
     STATE = None                 # ohscore.state.Registry
     CONFIG = None                # ohscore.config.Config
@@ -428,6 +448,11 @@ class Engine:
             if k in self.cfg:
                 self.st[k] = self.cfg[k]
         self.st["keyed"] = False
+        # On a controller, whether it can lend this app host libraries at
+        # all (ohscore/hostlibs.py), and which are installed: looked at again
+        # with the codecs (Decoders.codecs), since an administrator may
+        # install one into the mounted folder while the app runs.
+        self.st["hostLibs"] = hostlibs.status()
         self.keyer = Keyer(self, host.keyer_dir(self.data_dir))
         self.mem = Memories(self.PRESETS, self.cfg.get("memories", []), self.STATE.coerce, freq_key=self.FREQ_KEY)
         # The station's shared logbook and profile (ohscore/station.py): one
@@ -572,6 +597,10 @@ class Engine:
         # own values of PLAY_KEYS from before it began.
         self.play = None
         self.play_saved: dict | None = None
+        # The decoder session holding the receiver (hold_receiver), or None
+        # while the operator has it: {session, by, block, centre, prior}.
+        self.held: dict | None = None
+        self._hold_tls = threading.local()
         self.play_said_end = False
         # An auto-tune or best-audio request listening to the receive
         # channel (auto_tune, best_audio): set on the caller's thread,
@@ -704,6 +733,11 @@ class Engine:
             if spec["auth"] and not authorise:
                 raise ValueError(_("{key} can only be changed from Settings").format(key=k))
             clean[k] = self.STATE.coerce(k, v)
+        held = self.held
+        if held is not None and not getattr(self._hold_tls, "on", False):
+            moved = [k for k in self.HELD_KEYS if k in clean and clean[k] != self.st.get(k)]
+            if moved:
+                raise ReceiverHeld(self._held_why(held, "tune"))
         with self.lock:
             self._adjust_set(clean)
             merged = dict(self.st)
@@ -1372,8 +1406,11 @@ class Engine:
 
     def audio_channels(self) -> int:
         """How many channels the receive audio has now: 2 while the mode is
-        making stereo (an app's `heard_hi`), else 1. What a recording
-        starting now records (ohscore/server/recording.py)."""
+        making stereo (an app's `heard_hi`) or a held session's sound is
+        stereo (DAB's), else 1. What a recording starting now records
+        (ohscore/server/recording.py)."""
+        if self.held is not None:
+            return self.decoders.held_channels()
         return 1
 
     @staticmethod
@@ -1547,6 +1584,10 @@ class Engine:
         t_stream = self.rx_samples / self.geo.fs
         if self.rx_invert:
             x = np.conj(x)
+        # What a session holding the receiver (DAB) is fed: the device's own
+        # samples, before the noise blanker, which would cut an OFDM block's
+        # peaks as if they were impulses.
+        raw = x
         if self.listening is not None:
             self._listen_wide(x)
         if s["nb"]:
@@ -1575,23 +1616,35 @@ class Engine:
         # demodulator's gain; cleared first, so it cannot carry a stale one.
         self.demod.gain = None
         self.heard_hi = None
-        audio, level = self._demodulate(X, starts, rx_dial)
+        held = self.held
+        if held is not None:
+            # The receiver is the session's (hold_receiver): nothing at the
+            # dial is demodulated, and what is heard is the session's sound.
+            audio, level = self._held_block(X, raw)
+        else:
+            audio, level = self._demodulate(X, starts, rx_dial)
         self.rx_level = level
-        # Noise reduction is for the ear only: the speaker gets `heard`, the
-        # decoders below get `audio` as demodulated - they do better on the
-        # raw passband than on audio a gain mask has worked on.
-        heard = self._rx_heard(self.nr(audio, self.demod.gain))
         # Full duplex by default: receive audio carries on while transmitting -
         # hearing your own downlink is how QO-100 is operated.
         vol = 0.0 if s["mute"] else s["volume"] * self._rx_audio_gain(s)
-        if not (s["mode"] == "freedv" and self.decoder is not None):
-            # At OUT_RATE: the demodulator's own (wide FM's 48 kHz, never
-            # through 12 kHz and back) or this block brought up to it.
-            hi = self.heard_hi if self.heard_hi is not None else self._to_out(heard, self.out_up)
-            with self.play_lock:
-                self.audio.play(hi * np.float32(vol))
+        if held is not None:
+            sound = self.decoders.held_audio(len(audio) / AUDIO_RATE, self.OUT_RATE)
+            if sound is not None:
+                with self.play_lock:
+                    self.audio.play(sound * np.float32(vol))
+        else:
+            # Noise reduction is for the ear only: the speaker gets `heard`,
+            # the decoders below get `audio` as demodulated - they do better
+            # on the raw passband than on audio a gain mask has worked on.
+            heard = self._rx_heard(self.nr(audio, self.demod.gain))
+            if not (s["mode"] == "freedv" and self.decoder is not None):
+                # At OUT_RATE: the demodulator's own (wide FM's 48 kHz, never
+                # through 12 kHz and back) or this block brought up to it.
+                hi = self.heard_hi if self.heard_hi is not None else self._to_out(heard, self.out_up)
+                with self.play_lock:
+                    self.audio.play(hi * np.float32(vol))
         utc = self._audio_utc(now, len(audio))
-        if self.decoder is not None:
+        if self.decoder is not None and held is None:
             try:
                 self.decode_q.put_nowait((audio, utc))
             except queue.Full:
@@ -1607,8 +1660,12 @@ class Engine:
 
         # The app's consumers that follow the channels.
         self._rx_monitor(X, starts, t_stream)
-        # The fixed decoder sessions' channels (ohscore/decoders.py).
+        # The fixed decoder sessions' channels (ohscore/decoders.py), and the
+        # device's own samples for a session holding the receiver, once the
+        # retune that gave it the receiver has reached them.
         self.decoders.rx(X, starts, utc)
+        if held is not None:
+            self.decoders.rx_held(raw, utc, self._rx_settled())
 
         if now >= self.meter_due:
             self.meter_due = now + 0.1
@@ -1635,6 +1692,152 @@ class Engine:
         if self.listening is not None:
             self._listen_feed(iq, rx_dial)
         return self.demod(iq)
+
+    # ------------------------------------------------------ receiver ownership
+    # A decoder session that needs the whole receiver - DAB, a 1.536 MHz
+    # block wanting at least 2.048 MS/s centred on it - takes it from the
+    # operator while it runs, and says so (`rxOwner` in the state): the dial
+    # goes to the block's centre, the receiver's centre (DC) onto it,
+    # nothing at the dial is demodulated, and what is heard is the
+    # session's sound. Ownership is explicit because the two cannot share:
+    # while it holds the receiver every set() that would tune (HELD_KEYS)
+    # is refused with a sentence, as is every key-up, rather than the
+    # session being quietly starved or the operator quietly ignored. When it
+    # stops - by the operator, or with the radio - the dial and mode from
+    # before (HOLD_PRIOR) are put back.
+    #
+    # Tapping the stream instead, when the span already held the block, was
+    # considered and left out: the block would vanish the moment anyone
+    # tuned, and DAB's centre carrier is the one place in the block that
+    # carries nothing, so a receiver centred on it loses nothing to its own
+    # DC spur, where a block off to one side would.
+    def hold_receiver(self, sid: str, by: str, centre: float, label: str, min_rate: float) -> None:
+        """Give the receiver to session `sid` (a `by` decoder on `label`,
+        centred on `centre` Hz, needing `min_rate` S/s). Raises
+        decoders.Refused with the code and sentence when it cannot."""
+        with self.lock:
+            why = self._hold_refusal(centre, min_rate)
+            if why is not None:
+                raise Refused(*why)
+            prior = {k: self.st[k] for k in self.HOLD_PRIOR}
+            self.held = {"session": sid, "by": by, "block": label, "centre": float(centre), "prior": prior}
+        try:
+            self._set_holding(vfo=float(centre))
+        except ValueError as e:
+            with self.lock:
+                self.held = None
+            raise Refused("out_of_range", str(e)) from None
+        self.log.info("receiver held by %s session %s on %s (%.0f Hz); before: %s", by, sid, label, centre, prior)
+        self._status(rxOwner=self._owner_view())
+        self._derive()
+        self._held_retune()
+
+    def release_receiver(self, sid: str) -> None:
+        """Session `sid` lets the receiver go: the operator's dial and mode
+        from before it, and the receiver back to following the dial."""
+        with self.lock:
+            h = self.held
+            if h is None or h["session"] != sid:
+                return
+            self.held = None
+        try:
+            self.set(**h["prior"])
+        except ValueError as e:
+            # A dial the radio can no longer reach (another device since):
+            # the receiver is the operator's again wherever it is.
+            self.log.warning("could not put the dial back after %s: %s", sid, e)
+            self.toast(_("The dial could not be put back: {error}").format(error=e), "warn")
+        self.log.info("receiver released by %s session %s", h["by"], sid)
+        self._status(rxOwner={})
+        self._derive()
+        self._held_retune()
+
+    def rename_hold(self, old: str, sid: str) -> None:
+        """The holder's id once it has one: the decoders hold the receiver
+        under a placeholder while the session is made, so a refusal comes
+        before any session exists."""
+        with self.lock:
+            if self.held is not None and self.held["session"] == old:
+                self.held["session"] = sid
+        self._status(rxOwner=self._owner_view())
+
+    def _set_holding(self, **changes) -> dict:
+        """set() on behalf of the session holding the receiver, which alone
+        may tune it. A flag of this thread's, so an operator's set() arriving
+        on another thread meanwhile is still refused."""
+        self._hold_tls.on = True
+        try:
+            return self.set(**changes)
+        finally:
+            self._hold_tls.on = False
+
+    def _owner_view(self) -> dict:
+        h = self.held
+        if h is None:
+            return {}
+        return {"by": h["by"], "session": h["session"], "block": h["block"], "freqHz": h["centre"],
+                "prior": dict(h["prior"]), "text": self._held_why(h, "tune")}
+
+    def _held_why(self, h: dict, doing: str) -> str:
+        """The sentence for what a held receiver refuses: `doing` "tune" (a
+        set() that would move it) or "transmit" (a key-up)."""
+        if doing == "transmit":
+            return _("The receiver is playing DAB from block {block}: stop the DAB station to transmit").format(
+                block=h["block"])
+        return _("The receiver is playing DAB from block {block}: stop the DAB station to tune or change "
+                 "mode").format(block=h["block"])
+
+    def _hold_refusal(self, centre: float, min_rate: float) -> tuple[str, str] | None:
+        """(code, sentence) when the receiver cannot be held now, else None
+        (called under the lock)."""
+        if not self.HOLDS_RECEIVER:
+            return "decoder_unavailable", _("This app's receiver stays on its own frequencies and cannot play DAB")
+        if not self.running or self.dev is None:
+            return "not_running", _("Start the radio before adding a decoder")
+        if self.st["keyed"] or (self.tx_thread is not None and self.tx_thread.is_alive()):
+            return "on_air", _("Not while transmitting: DAB takes the receiver to Band III")
+        if self.held is not None:
+            return "receiver_busy", _("A DAB station on block {block} already has the receiver: stop it "
+                                      "first").format(block=self.held["block"])
+        if self.play is not None:
+            return "receiver_busy", _("Not while a recording is playing: stop it first")
+        fs = float(self.geo.fs)
+        if fs < min_rate:
+            return "rate_too_low", self._rate_sentence(min_rate, fs)
+        return None
+
+    def _rate_sentence(self, least: float, fs: float) -> str:
+        """Why the receiver is too slow for a held session, and what to do
+        about it when this radio has a faster rate. Changing the rate
+        reopens the radio (a restart), which on a controller gives the
+        broker's claim back and takes it again, so it is the operator's
+        choice and never done behind their back."""
+        faster = self._faster_rate(least)
+        if faster:
+            return _("DAB needs the receiver to run at {least:g} MS/s or more, and the {device} runs at {rate:g} "
+                     "MS/s: choose {faster:g} MS/s in Settings › Radio (the radio restarts)").format(
+                least=least / 1e6, device=self._kind(), rate=fs / 1e6, faster=faster / 1e6)
+        return _("DAB needs the receiver to run at {least:g} MS/s or more, and the {device} cannot (it runs at "
+                 "{rate:g} MS/s)").format(least=least / 1e6, device=self._kind(), rate=fs / 1e6)
+
+    def _faster_rate(self, least: float) -> float | None:
+        """A rate of at least `least` this radio could be set to, or None."""
+        return None
+
+    def _kind(self) -> str:
+        return str(getattr(self.dev, "kind", "") or self.cfg.get("device", ""))
+
+    def _held_retune(self) -> None:
+        """Move the receiver's centre now the hold has begun or ended (an
+        app that retunes its hardware to its dial)."""
+
+    def _held_block(self, X, raw: np.ndarray) -> tuple[np.ndarray, float]:
+        """A held block's 12 kHz audio (silence: the mode decoder and the
+        timing still count blocks) and its level, the whole block's power
+        in dBFS, for the meter."""
+        n = X.shape[0] * (self.geo.L // self.geo.decimation_for(AUDIO_RATE))
+        p = float(np.mean(np.abs(raw) ** 2)) if len(raw) else 0.0
+        return np.zeros(n, np.float32), 10 * math.log10(p + 1e-20)
 
     # ------------------------------------------------ auto-tune and best audio
     # Both listen to the receive channel (the VFO channel's IQ, before the
@@ -2164,6 +2367,11 @@ class Engine:
         s = self.st
         if not self.running:
             return "The radio is not running"
+        held = self.held
+        if held is not None:
+            # Before everything else: the receiver is tuned to a broadcast
+            # block, wherever the dial was, and keying there means nothing.
+            return self._held_why(held, "transmit")
         mode = self._judged_mode(req)
         if mode in modes_glue.RX_ONLY_MODES:
             # Before the device and the licence: true on every radio and at

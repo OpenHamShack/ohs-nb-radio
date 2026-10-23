@@ -33,6 +33,27 @@ kept for a client that missed some (api/decoders/sessions/{id}?since=).
 **Codes, not sentences, from shack_sdr.** Its `why`s and refusals are
 codes; this module words them (WHY, Refused) from the catalog, and keeps
 the code beside the sentence so a client can prefer its own translation.
+
+**Held sessions: a decoder that takes the whole receiver.** DAB decodes a
+1.536 MHz block from IQ at 2.048 MS/s or more - no channel of the bank is
+that wide - so a DAB session is not cut from the bank: it takes the
+receiver (Engine.hold_receiver), which goes to the block's centre and is
+fed whole, at the device's own rate (shack_sdr resamples anything above
+2.048 MS/s). Its sound replaces the demodulator's on the ordinary receive
+audio at the app's rate (held_audio), so every listener and every
+recording hears the station with no new path. Only one session may hold
+the receiver; it is never saved in decoderSessions or started again with
+the radio, because a start that silently retuned the radio to Band III
+would be a surprise and would lose the operator's dial. Stopping it, or
+the radio, gives the receiver back with the dial and mode from before.
+
+The block comes from `freqHz` (the block's centre, the dial a client
+shows) or `params.block` ("11D"), either one; both must agree. What plays
+is `params.service` (a service id in hex, "" to list the ensemble without
+playing), changed live (configure). The session's `meta` is the
+ensemble's feed (shack_sdr README "DAB"): each `why` in it is worded here
+as `whyText`, the feed's and each service's, and `dls` is the playing
+service's programme text.
 """
 from __future__ import annotations
 
@@ -44,7 +65,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from . import sdr
+from . import host, hostlibs, sdr
 from .dsp.bank import Channel
 from .i18n.text import _
 
@@ -52,6 +73,14 @@ log = logging.getLogger("ohscore.decoders")
 
 AUDIO_RATE = 12_000.0
 VFO = "vfo"
+# A decoder needing this many samples a second or more cannot be cut from
+# the bank (its widest channel is wide FM's 240 kS/s): it holds the receiver.
+RECEIVER_RATE = 1_000_000.0
+# How long a held session may give no sound before silence is played in its
+# place: DAB's sound comes a 24 ms frame or a 120 ms super frame at a time,
+# so most blocks bring none, but a session with no sync (or a DAB+ station
+# without faad2) must not leave listeners with no stream at all.
+DRY_S = 0.5
 RESULTS_KEPT = 500
 RESULTS_S = 30 * 60.0
 # How much of each edge of the bank's span a session's channel may not
@@ -72,8 +101,30 @@ def _why_text(code: str | None) -> str:
         "not_installed": _("The library that decodes this is not installed."),
         "mode_only": _("This decoder runs only as the radio's mode, not on a frequency of its own."),
         "radio_stopped": _("The radio is not running."),
+        # DAB (shack_sdr README "DAB": the feed's and a service's codes,
+        # worded as the README suggests).
+        "no_signal": _("No DAB signal on this block."),
+        "no_sync": _("A signal, but not DAB, or too weak to lock to."),
+        "fic_errors": _("DAB heard, but too weak to read the station list."),
+        "service_not_found": _("This station is not on this block."),
+        "needs_codec:faad2": faad2_sentence(),
+        "codec_config": _("faad2 could not play this station's sound."),
+        "codec_open": _("faad2 could not play this station's sound."),
+        "unsupported_protection": _("This station uses a coding Radio cannot read."),
     }
     return words.get(code, _("Stopped ({code}).").format(code=code))
+
+
+def faad2_sentence() -> str:
+    """Why a DAB+ station is silent without faad2, for where this runs: a
+    desktop installs it, a controller's administrator does, and a
+    controller too old for host libraries has to be updated first."""
+    if hostlibs.controller_too_old():
+        return hostlibs.update_sentence()
+    if host.STORE:
+        return _("Needs faad2: ask your controller's administrator to install it (Controller › Optional "
+                 "libraries) to hear DAB+ stations.")
+    return _("Needs faad2: install it to hear DAB+ stations. Radio never includes it: see Help › Codecs.")
 
 
 class Refused(ValueError):
@@ -113,6 +164,14 @@ class _Fixed:
         self.index = 0
         self.outside = False
         self.results: collections.deque = collections.deque(maxlen=RESULTS_KEPT)
+        # A held session (module docstring): fed the device's samples, not
+        # a channel; its block, the phase of any offset it is mixed by, and
+        # its sound's channels and how long it has been silent.
+        self.held = False
+        self.block = ""
+        self.phase = 0.0
+        self.channels = 1
+        self.dry = 0.0
 
 
 class Decoders:
@@ -156,6 +215,11 @@ class Decoders:
         scan = self._codec_scan
         if scan is not None and scan.is_alive():
             scan.join(1.0)
+        # The dial and mode a held session took, back before the engine
+        # saves its settings (Engine.stop saves after this).
+        for f in fixed:
+            if f.held:
+                self.engine.release_receiver(f.id)
         if host is None:
             return True
         joined = host.close()
@@ -187,8 +251,22 @@ class Decoders:
         for e in m.catalogue():
             e = dict(e)
             e["whyText"] = _why_text(e.get("why")) if e.get("why") else ""
+            # Partly available (DAB without faad2: old DAB plays, DAB+ does
+            # not): the sentence for what is missing, beside the codes.
+            missing = e.get("missing") or []
+            e["missingText"] = (faad2_sentence() if "faad2" in missing else
+                                _("Needs {codec} for part of what it decodes.").format(codec=missing[0])) \
+                if missing else ""
             out.append(e)
         return out
+
+    def holds_receiver(self, decoder: str) -> bool:
+        """Whether a session of `decoder` takes the whole receiver (DAB)."""
+        m = sdr.load()
+        if m is None:
+            return False
+        entry = next((e for e in m.catalogue() if e["id"] == decoder), None)
+        return entry is not None and float(entry.get("minRateHz") or entry.get("rateHz") or 0.0) >= RECEIVER_RATE
 
     def limits(self) -> dict:
         s = self.engine.st
@@ -208,6 +286,8 @@ class Decoders:
             raise Refused("decoder_unavailable", _why_text(entry.get("why")), needs=(entry.get("needs") or [None])[0])
         if not entry.get("fixed"):
             raise Refused("decoder_unavailable", _why_text("mode_only"))
+        if self.holds_receiver(decoder):
+            return self._start_held(m, entry, freq_hz, params)
         try:
             freq = float(freq_hz)
         except (TypeError, ValueError):
@@ -242,6 +322,112 @@ class Decoders:
         self._publish_status()
         return self._view(f)
 
+    def _start_held(self, m, entry: dict, freq_hz, params: dict) -> dict:
+        """A session that takes the receiver (module docstring, "Held
+        sessions"). Raises Refused."""
+        decoder = entry["id"]
+        centre, block = self._tuning(m, decoder, freq_hz, params)
+        if block:
+            params["block"] = block
+        with self.lock:
+            host = self.host
+            if host is None or not self.engine.running:
+                raise Refused("not_running", _("Start the radio before adding a decoder"))
+            if any(f.held for f in self.fixed.values()):
+                h = next(f for f in self.fixed.values() if f.held)
+                raise Refused("receiver_busy", _("A DAB station on block {block} already has the receiver: stop "
+                                                 "it first").format(block=h.block))
+            if len(self.fixed) >= self.limits()["sessions"]:
+                raise Refused("too_many_sessions",
+                              _("There are already {n} decoders running, the most Settings › Decoders allows")
+                              .format(n=len(self.fixed)))
+        least = float(entry.get("minRateHz") or entry.get("rateHz"))
+        # The receiver first: it refuses with the reason an operator can act
+        # on (transmitting, too slow, out of range) before a session exists.
+        # A placeholder id holds it until the host has made the session.
+        token = f"pending-{id(params):x}"
+        self.engine.hold_receiver(token, decoder, centre, block, least)
+        try:
+            # Pinned, as the mode's decoder is: it is what the operator is
+            # listening to, so the CPU budget never pauses it.
+            sid = host.start(decoder, params, input="iq", rate=float(self.engine.geo.fs), pinned=True)
+        except m.DecoderError as e:
+            self.engine.release_receiver(token)
+            raise self._refusal(e) from None
+        except Exception:
+            self.engine.release_receiver(token)
+            raise
+        self.engine.rename_hold(token, sid)
+        f = _Fixed(sid, decoder, centre, params, entry.get("panel", "meta"))
+        f.kind, f.pitch, f.held, f.block = "iq", 0.0, True, block
+        with self.lock:
+            self.fixed[sid] = f
+        log.info("decoder session %s: %s on %s (%.0f Hz) %s, holding the receiver", sid, decoder, block, centre,
+                 params)
+        self._publish_status()
+        return self._view(f)
+
+    @staticmethod
+    def _tuning(m, decoder: str, freq_hz, params: dict) -> tuple[float, str]:
+        """(centre Hz, block name) a held session tunes to, from `freq_hz`
+        and/or params.block; Refused bad_params when neither names one, or
+        they disagree."""
+        freq = None
+        if freq_hz is not None:
+            try:
+                freq = float(freq_hz)
+            except (TypeError, ValueError):
+                raise Refused("bad_params", _("The frequency must be a number of hertz")) from None
+        if decoder != "dab":
+            if freq is None:
+                raise Refused("bad_params", _("The frequency must be a number of hertz"))
+            return freq, ""
+        dab = m.dab
+        named = str(params.get("block") or "").strip().upper()
+        if named:
+            c = dab.block_centre(named)
+            if c is None:
+                raise Refused("bad_params", _("There is no DAB block called {block}").format(block=named))
+            if freq is not None and dab.block_at(freq) != named:
+                raise Refused("bad_params", _("Block {block} is centred on {centre}, not {freq}").format(
+                    block=named, centre=_mhz(c), freq=_mhz(freq)))
+            return float(c), named
+        if freq is None:
+            raise Refused("bad_params", _("Give the block's centre frequency (freqHz) or its name (params.block)"))
+        named = dab.block_at(freq)
+        if named is None:
+            raise Refused("bad_params", _("{freq} is not the centre of a DAB block (5A-13F)").format(freq=_mhz(freq)))
+        return float(dab.block_centre(named)), named
+
+    def configure(self, sid: str, params: dict) -> dict:
+        """Change a running session's parameters live (DAB's `service`).
+        Raises Refused; None-free: answers the session."""
+        with self.lock:
+            f = self.fixed.get(sid)
+            host = self.host
+        if f is None or host is None:
+            raise Refused("unknown_session", _("There is no decoder session called {id}").format(id=sid))
+        params = dict(params)
+        if f.held and "block" in params:
+            # Another block is another tuning: a new session, never a
+            # retune behind the receiver's owner's back.
+            if str(params["block"] or "").strip().upper() != f.block:
+                raise Refused("bad_params", _("A session stays on its block: stop it and start one on {block}")
+                              .format(block=str(params["block"]).strip().upper()))
+            params.pop("block")
+        if not params:
+            return self._view(f)
+        m = sdr.load()
+        try:
+            host.configure(sid, params)
+        except m.DecoderError as e:
+            raise self._refusal(e) from None
+        f.params.update(params)
+        log.info("decoder session %s now %s", sid, f.params)
+        if not f.held:
+            self._save()
+        return self._view(f)
+
     def stop(self, sid: str) -> bool:
         with self.lock:
             f = self.fixed.pop(sid, None)
@@ -253,6 +439,8 @@ class Decoders:
                 host.stop(sid)
             except Exception:  # noqa: BLE001 - a session already gone is stopped
                 pass
+        if f.held:
+            self.engine.release_receiver(sid)
         log.info("decoder session %s stopped", sid)
         self._save()
         self._publish_status()
@@ -301,6 +489,10 @@ class Decoders:
         with self.lock:
             self._codecs = out
         self._publish_status()
+        try:
+            self.engine._status(hostLibs=hostlibs.status())
+        except Exception:  # noqa: BLE001 - an engine without the key (a test's stand-in)
+            pass
         return out
 
     def scan_codecs_later(self) -> None:
@@ -339,6 +531,8 @@ class Decoders:
         with self.lock:
             fixed = list(self.fixed.values())
         for f in fixed:
+            if f.held:
+                continue
             off = self.engine._off(f.freq - f.pitch)
             inside = abs(off) + 1500.0 <= SPAN_USABLE * geo.fs / 2
             if inside == f.outside:
@@ -362,6 +556,83 @@ class Decoders:
                 return
             f.index += len(iq)
 
+    def rx_held(self, raw: np.ndarray, utc: float, settled: bool) -> None:
+        """The receive thread, once per block, while a session holds the
+        receiver: the device's samples, mixed to the block's centre if the
+        receiver is not exactly on it (it is, once settled: Radio puts DC
+        there). Nothing is fed until the retune has reached the samples,
+        and the index still counts them, so the session's times stay true."""
+        host = self.host
+        f = self._held()
+        if host is None or f is None:
+            return
+        n = len(raw)
+        if not settled:
+            f.index += n
+            return
+        geo = self.engine.geo
+        off = self.engine._off(f.freq)
+        x = raw
+        if off:
+            ph = f.phase + 2 * np.pi * (-off / geo.fs) * np.arange(n)
+            x = (raw * np.exp(1j * ph)).astype(np.complex64)
+            f.phase = float((f.phase - 2 * np.pi * off / geo.fs * n) % (2 * np.pi))
+        m = sdr.load()
+        outside = m is not None and m.dab.span_check(f.freq, self.engine._dial_at(0.0), geo.fs) is not None
+        if outside != f.outside:
+            f.outside = outside
+            try:
+                host.set_outside(f.id, outside)
+            except Exception:  # noqa: BLE001 - a session the host dropped is reported by poll
+                pass
+        if f.outside:
+            f.index += n
+            return
+        try:
+            host.feed(f.id, x, utc, f.index)
+        except Exception:  # noqa: BLE001 - the host closing under us: the radio is stopping
+            return
+        f.index += n
+
+    def held_audio(self, block_s: float, rate: int) -> np.ndarray | None:
+        """The receive thread: the held session's sound since the last block,
+        at `rate`, mono (n,) or stereo (n, 2) as it was made; silence for the
+        block once it has given none for DRY_S; None for a block to pass
+        over without playing (its sound is in the next one)."""
+        host = self.host
+        f = self._held()
+        if host is None or f is None:
+            return None
+        try:
+            runs = host.audio(f.id, max_s=1.0, rate=int(rate))
+        except Exception:  # noqa: BLE001 - closed between the read above and now
+            runs = []
+        parts = []
+        for r in runs:
+            ch = int(r.get("channels") or 1)
+            pcm = np.asarray(r["pcm"], np.float32)
+            parts.append(pcm.reshape(-1, 2) if ch == 2 else pcm)
+            f.channels = ch
+        if parts:
+            f.dry = 0.0
+            if any(p.ndim == 2 for p in parts):
+                parts = [p if p.ndim == 2 else np.repeat(p[:, None], 2, axis=1) for p in parts]
+            return np.concatenate(parts)
+        f.dry += block_s
+        if f.dry < DRY_S:
+            return None
+        n = int(round(block_s * rate))
+        return np.zeros((n, 2) if f.channels == 2 else n, np.float32)
+
+    def held_channels(self) -> int:
+        """The held session's sound's channels (1 until it has made any)."""
+        f = self._held()
+        return f.channels if f is not None else 1
+
+    def _held(self) -> _Fixed | None:
+        with self.lock:
+            return next((f for f in self.fixed.values() if f.held), None)
+
     def tick(self) -> None:
         """The supervisor, ten times a second: every result out of the host,
         to the mode decoder, the `decoders` feed and the kept lists."""
@@ -381,6 +652,8 @@ class Decoders:
             sid = it.get("session")
             if it.get("type") == "state" and it.get("why"):
                 it = dict(it, whyText=_why_text(it["why"]))
+            elif it.get("type") == "meta" and isinstance(it.get("fields"), dict):
+                it = dict(it, fields=_worded_meta(it["fields"]))
             if vfo is not None and sid == vfo[0]:
                 try:
                     vfo[1].deliver(it)
@@ -421,6 +694,11 @@ class Decoders:
             return Refused("decoder_unavailable", _why_text(detail))
         if code == "closed":
             return Refused("not_running", _("Start the radio before adding a decoder"))
+        if code == "bad_input":
+            return Refused("bad_params", _("The receiver's samples do not suit this decoder ({detail})")
+                           .format(detail=detail or code))
+        if code == "unknown_session":
+            return Refused("unknown_session", _("There is no decoder session called {id}").format(id=detail or ""))
         return Refused(code, _("The decoder would not start ({code})").format(code=code))
 
     def _status_of(self, sid: str) -> dict:
@@ -437,9 +715,13 @@ class Decoders:
         stats = st.get("stats") or {}
         state = "outside" if f.outside else st.get("state", "stopped")
         why = "outside_span" if f.outside else st.get("why")
-        return {"id": f.id, "decoder": f.decoder, "freqHz": f.freq, "params": dict(f.params), "state": state,
+        view = {"id": f.id, "decoder": f.decoder, "freqHz": f.freq, "params": dict(f.params), "state": state,
                 "why": why, "whyText": _why_text(why), "since": _iso(st.get("since")), "rev": st.get("rev", 0),
                 "stats": _stats(stats), "panel": f.panel}
+        if f.held:
+            view.update(holdsReceiver=True, block=f.block,
+                        meta=_worded_meta(st["meta"]) if isinstance(st.get("meta"), dict) else None)
+        return view
 
     def _vfo_view(self, vfo) -> dict:
         sid, dec = vfo
@@ -452,7 +734,8 @@ class Decoders:
 
     def _save(self) -> None:
         with self.lock:
-            saved = [{"decoder": f.decoder, "freqHz": f.freq, "params": dict(f.params)} for f in self.fixed.values()]
+            saved = [{"decoder": f.decoder, "freqHz": f.freq, "params": dict(f.params)} for f in self.fixed.values()
+                     if not f.held]
         self.engine._keep_setting("decoderSessions", saved)
 
     def _publish_status(self) -> None:
@@ -473,6 +756,8 @@ def codec_sentence(st: dict) -> str:
                    "noexec": _("its folder does not allow programs to run")}
         return _("The {codec} in {path} was refused: {reason}.").format(
             codec=cid, path=st.get("path") or "", reason=reasons.get(why, why or ""))
+    if not st.get("shippable") and hostlibs.controller_too_old():
+        return hostlibs.update_sentence()
     if st.get("host"):
         return _("Ask your controller's administrator to install {codec} (Controller › Optional libraries).") \
             .format(codec=cid)
@@ -480,6 +765,18 @@ def codec_sentence(st: dict) -> str:
         return _("Not found: {codec} is normally included; reinstalling the program puts it back.").format(codec=cid)
     return _("Not installed. This program never includes {codec}: install it yourself, or put it in the codecs folder.") \
         .format(codec=cid)
+
+
+def _worded_meta(fields: dict) -> dict:
+    """A DAB feed (a session's `meta`) with each `why` worded beside its
+    code: the feed's own `whyText`, and each service's."""
+    out = dict(fields)
+    out["whyText"] = _why_text(out.get("why")) if out.get("why") else ""
+    services = out.get("services")
+    if isinstance(services, list):
+        out["services"] = [dict(sv, whyText=_why_text(sv.get("why")) if sv.get("why") else "")
+                           if isinstance(sv, dict) else sv for sv in services]
+    return out
 
 
 def _usb(iq: np.ndarray) -> np.ndarray:
@@ -491,7 +788,8 @@ def _usb(iq: np.ndarray) -> np.ndarray:
 def _stats(st: dict) -> dict:
     out = {"snrDb": st.get("snrDb"), "offsetHz": st.get("offsetHz"), "cpu": st.get("cpu"),
            "dropped": st.get("dropped", 0)}
-    for k in ("baud", "sync", "chars", "wpm"):
+    for k in ("baud", "sync", "chars", "wpm", "frames", "fibsOk", "fibsBad", "audioFrames", "audioErrors",
+              "superframes", "aus", "auErrors"):
         if k in st:
             out[k] = st[k]
     return out
