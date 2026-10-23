@@ -31,7 +31,7 @@
 # --no-install stops after step 3 and prints the box-store-update.sh
 # command. --skip-suite is for a commit whose tree a green run has already
 # covered (say so in the handover). --check validates arguments and config
-# only: no git, no ssh. JOBS (default 10) is the suite's -j; PYTHON
+# only: no git, no ssh. JOBS (default 8) is the suite's -j; PYTHON
 # (default ~/build/venvs/ohs-qt/bin/python) its interpreter.
 #
 # Hosts come from ~/.config/openhamshack/box-update.conf (BOX_HOST,
@@ -68,7 +68,9 @@ CONF=${BOX_UPDATE_CONF:-$HOME/.config/openhamshack/box-update.conf}
 # shellcheck disable=SC1090
 source "$CONF"
 [ -n "${BOX_HOST:-}" ] && [ -n "${SIGN_HOST:-}" ] || { echo "store-release: $CONF must set BOX_HOST and SIGN_HOST" >&2; exit 2; }
-JOBS=${JOBS:-10}
+# 8, not 16: a test process takes more than one core (the decoders run
+# threads), and above about 8 the simulator-paced tests fail on timing.
+JOBS=${JOBS:-8}
 [[ $JOBS =~ ^[1-9][0-9]?$ ]] || { echo "store-release: JOBS must be 1-99" >&2; exit 2; }
 
 if [ $CHECK = 1 ]; then
@@ -131,6 +133,9 @@ if [ $SUITE = 1 ]; then
     W=$OUT/tree
     git -C "$REPO" worktree remove --force "$W" 2>/dev/null
     git -C "$REPO" worktree add -q --detach "$W" "$FULL" || fail "worktree for the suite"
+    # ohsdigi is built, never committed, so a fresh tree has none and
+    # test_radio errors on it (beta.6's first run did exactly that).
+    (cd "$W" && tools/build-ohsdigi.sh --host --install > "$OUT/ohsdigi.log" 2>&1) || fail "ohsdigi build - see $OUT/ohsdigi.log"
     echo "suite: -j $JOBS in $W"
     (cd "$W" && PYTHON=${PYTHON:-$HOME/build/venvs/ohs-qt/bin/python} LOG_DIR=$OUT/suite RERUN_RED=2 \
         tools/run-suite-split.sh -j "$JOBS" > "$OUT/suite.log" 2>&1)

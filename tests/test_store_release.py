@@ -35,7 +35,7 @@ class ArgChecks(unittest.TestCase):
     def test_good_arguments_pass(self):
         r = run("--check", "radio", "54dcb2c", conf=self.conf)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("app=radio commit=54dcb2c box=box.example sign=signer.example jobs=10", r.stdout)
+        self.assertIn("app=radio commit=54dcb2c box=box.example sign=signer.example jobs=8", r.stdout)
         self.assertIn("suite=1 install=1", r.stdout)
 
     def test_flags_are_reported(self):
