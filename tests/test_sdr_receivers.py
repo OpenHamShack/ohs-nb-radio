@@ -610,6 +610,19 @@ class SoapySdrplayGainThroughTheApi(unittest.TestCase):
                 st = dev.status()
                 self.assertEqual((st["gain"], st["gRdB"], st["lnaState"]), (back, grdb, lna))
 
+    def test_soapysdr_with_soapysdrplay3_reports_the_same_gain_sense(self):
+        from ohscore.devices.soapy import SoapyDevice
+        dev = SoapyDevice("driver=sdrplay")
+        dev.RX = 0
+        dev.sdr = mock.MagicMock()
+        dev.sdr.getDriverKey.return_value = "SDRplay"
+        dev.sdr.getGainRange.return_value.minimum.return_value = 0.0
+        dev.sdr.getGainRange.return_value.maximum.return_value = 9.0
+        self.assertEqual(dev.gain_sense(), {"gainIsReduction": True, "gainModel": "soapysdrplay3",
+                                            "rfgrRange": [0, 9]})
+        dev.sdr.getDriverKey.return_value = "RTLSDR"
+        self.assertEqual(dev.gain_sense(), {"gainIsReduction": False, "gainModel": "db"})
+
     def test_another_model_tops_the_lna_state_at_its_own_range(self):
         self.ctl.stub_set_hwver(255)                 # RSP1A: RFGR 0..9
         dev = self.open(rxGainMode="manual", rxGain=50.0)
@@ -654,6 +667,10 @@ class SoapySdrplayGainThroughTheApi(unittest.TestCase):
             pump(r, 5, until=lambda: r.state()["deviceStatus"].get("gRdB") is not None)
             ds = r.state()["deviceStatus"]
             self.assertEqual((ds["via"], ds["gain"], ds["gRdB"], ds["lnaState"]), ("sdrplay-api", 40.0, 59, 1))
+            # And it says, for the S-meter, that its rxGain is a reduction
+            # split SoapySDRPlay3's way over an RSPdx's LNA range.
+            self.assertEqual((ds["gainIsReduction"], ds["gainModel"], ds["rfgrRange"]),
+                             (True, "soapysdrplay3", [0, 27]))
         finally:
             close(r)
 

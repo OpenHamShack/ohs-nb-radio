@@ -117,6 +117,82 @@ class WorkedExample(unittest.TestCase):
         self.assertIn(sc.cal_key({**self.st, "band": "70cm"}), after)
 
 
+def soapy_rspdx(**over) -> dict:
+    """ohs-box as it is set up: the RSPdx as `device soapy` (driver=sdrplay,
+    rfgain_sel=4), whose rxGain keeps SoapySDRPlay3's sense - the device
+    says so in its status (ohscore/devices/sdrsource.py
+    SoapySdrplayDevice.gain_sense)."""
+    st = {"device": "soapy", "soapyArgs": "driver=sdrplay,serial=240309F070,rfgain_sel=4",
+          "soapyAntenna": "Antenna A", "band": "2m", "vfo": 145_650_000.0, "rxGainMode": "manual",
+          "rxGain": 40.0, "deviceStatus": {"gainIsReduction": True, "gainModel": "soapysdrplay3",
+                                           "rfgrRange": [0, 27]}}
+    st.update(over)
+    return st
+
+
+class SoapySdrplay3IsAReduction(unittest.TestCase):
+    """Under SoapySDRPlay3 rxGain is a reduction: IFGR (gRdB) takes the
+    first 39 dB, then each further dB is one LNA state (ohscore/devices/
+    sdrsource.py soapy_gain_split). Same ident as WorkedExample: -42.6 dBFS
+    calibrated to -93 dBm, offset -50.4 dB."""
+
+    def table(self, at):
+        st = soapy_rspdx(rxGain=at)
+        t = sc.calibrate({}, st, -42.6, -93.0)
+        self.assertAlmostEqual(t[sc.cal_key(st)]["offset"], -50.4, places=6)
+        return t
+
+    def test_inside_ifgr_the_offset_moves_the_right_way(self):
+        # Calibrated at 30 (gRdB 50, LNA 0). At 20 the reduction is 10 dB
+        # less, the same signal reads 10 dB higher in dBFS, so the offset
+        # must fall by 10; at 35 it is 5 dB more and the offset rises by 5.
+        # The old dB-for-dB correction moved it 10 the other way.
+        t = self.table(30.0)
+        at_20 = sc.effective(t, soapy_rspdx(rxGain=20.0))
+        at_35 = sc.effective(t, soapy_rspdx(rxGain=35.0))
+        self.assertTrue(at_20.ok and at_35.ok, (at_20.why, at_35.why))
+        self.assertAlmostEqual(at_20.offset, -60.4, places=6)
+        self.assertAlmostEqual(at_35.offset, -45.4, places=6)
+
+    def test_the_worked_example_at_40_holds_only_where_the_lna_state_does_not_move(self):
+        # 40 is gRdB 59 at LNA state 1; 30 is LNA 0 and 50 is LNA 11, so
+        # neither can be corrected: an LNA step's size is not known.
+        t = self.table(40.0)
+        for g in (30.0, 50.0, 41.0, 39.0):
+            with self.subTest(rxGain=g):
+                cal = sc.effective(t, soapy_rspdx(rxGain=g))
+                self.assertFalse(cal.ok)
+                self.assertEqual(cal.why_code, "extra_changed")
+                self.assertIn("the RSP's LNA state", cal.why)
+        # 40.5 is still gRdB 59 at LNA 1 (SoapySDRPlay3 truncates): nothing
+        # moved, so nothing is corrected.
+        same = sc.effective(t, soapy_rspdx(rxGain=40.5))
+        self.assertTrue(same.ok, same.why)
+        self.assertAlmostEqual(same.offset, -50.4, places=6)
+
+    def test_a_calibration_from_before_holds_unchanged_at_its_own_gain(self):
+        # Made before devices reported a gain model (no extra stage in the
+        # record): it still holds at the gain it was made at.
+        st = soapy_rspdx()
+        old = {sc.cal_key(st): {"offset": -50.4, "gain": 40.0, "when": "2026-10-20"}}
+        cal = sc.effective(old, st)
+        self.assertTrue(cal.ok, cal.why)
+        self.assertAlmostEqual(cal.offset, -50.4, places=6)
+
+
+class DirectSdrplayClampsItsReduction(unittest.TestCase):
+    """`device sdrplay`: reduction 79 - rxGain, held to 20-59 dB, so rxGain
+    below 20 or above 59 moves nothing (ohscore/devices/sdrsource.py)."""
+
+    def test_a_change_past_the_clamp_is_not_corrected_for(self):
+        st = rspdx(deviceStatus={"gainIsReduction": False, "gainModel": "sdrplay"})
+        t = sc.calibrate({}, st, -42.6, -93.0)
+        at_20 = sc.effective(t, {**st, "rxGain": 20.0})
+        at_10 = sc.effective(t, {**st, "rxGain": 10.0})
+        self.assertAlmostEqual(at_20.offset, -30.4, places=6)     # 39 -> 59 dB reduction
+        self.assertAlmostEqual(at_10.offset, -30.4, places=6)     # still 59: clamped
+
+
 class Refusals(unittest.TestCase):
     def test_agc_refuses_with_a_sentence(self):
         with self.assertRaises(ValueError):

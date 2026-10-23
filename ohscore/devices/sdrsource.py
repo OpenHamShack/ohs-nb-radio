@@ -274,6 +274,11 @@ class SdrplayDevice(SourceDevice):
             return None
         return min(max(79.0 - float(db), self.GR_RANGE[0]), self.GR_RANGE[1])
 
+    def gain_sense(self) -> dict:
+        # rxGain is a gain here (reduction 79 - rxGain), but only inside
+        # SDRplay's 20-59 dB: the S-meter takes the clamp into account.
+        return {"gainIsReduction": False, "gainModel": "sdrplay"}
+
     def _make(self):
         from shack_sdr.sources import SdrplaySource
         serial = str(self.cfg.get("sdrSerial") or "").strip() or None
@@ -390,6 +395,11 @@ class SoapySdrplayDevice(SdrplayDevice):
         src.agc_setpoint = self.agc_setpoint
         return src
 
+    def gain_sense(self) -> dict:
+        dev = getattr(self.src, "device", None) if self.src is not None else None
+        hw = int(dev.hwVer) if dev is not None else 4
+        return {"gainIsReduction": True, "gainModel": "soapysdrplay3", "rfgrRange": list(soapy_rfgr_range(hw))}
+
     def rx_gain_now(self) -> float | None:
         src = self.src
         if src is None or not hasattr(src, "soapy_gain"):
@@ -428,9 +438,20 @@ def soapy_gain_split(gain: float, hw_ver: int) -> tuple[int, int]:
     less its min. SoapySDRPlay3's per-element setGain stores `(int)value`
     (truncated toward zero, as Python's int() does), so a fraction carries
     on to RFGR and is truncated there too."""
-    rf = (0, SOAPY_RFGR_TOP[hw_ver]) if hw_ver in SOAPY_RFGR_TOP else SOAPY_IFGR
+    return soapy_gain_split_rf(gain, soapy_rfgr_range(hw_ver))
+
+
+def soapy_rfgr_range(hw_ver: int) -> tuple[int, int]:
+    """SoapySDRPlay3's getGainRange("RFGR") for hardware id `hw_ver`."""
+    return (0, SOAPY_RFGR_TOP[hw_ver]) if hw_ver in SOAPY_RFGR_TOP else SOAPY_IFGR
+
+
+def soapy_gain_split_rf(gain: float, rf: tuple[int, int]) -> tuple[int, int]:
+    """soapy_gain_split with RFGR's range given rather than the model's:
+    what the S-meter uses (ohscore/smeter_cal.py), from the range a device
+    reports in its status (`rfgrRange`)."""
     left, got = float(gain), []
-    for lo, hi in (SOAPY_IFGR, rf):
+    for lo, hi in (SOAPY_IFGR, (int(rf[0]), int(rf[1]))):
         g = min(left, hi - lo)
         v = int(g + lo)
         got.append(v)

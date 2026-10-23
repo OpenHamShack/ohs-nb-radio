@@ -3270,7 +3270,7 @@ class Engine:
                 elif now - activity > s["watchdogSec"]:
                     self._unkey("Unkeyed: the user interface stopped responding (watchdog)", "error", "watchdog")
             self._status(cpu=round(getattr(self, "cpu", 0.0), 3), cpuWait=round(getattr(self, "cpu_wait", 0.0), 3),
-                         deviceStatus=self.dev.status() if self.dev else {},
+                         deviceStatus=self._device_status(),
                          audio=self.audio.status() if self.audio else {}, overruns=self.overruns,
                          rxLate=self.rx_late, rxLostS=round(self.rx_lost / self.geo.fs, 3),
                          rxBehindS=round(self.prefetch.behind_s, 3) if self.prefetch is not None else 0.0,
@@ -3291,6 +3291,15 @@ class Engine:
                         self.pending = {}
                 self._publish("state", {"t": time.time(), "changes": changes})
             self._save()
+
+    def _device_status(self) -> dict:
+        """The device's status with its gain sense (Device.gain_sense) in
+        it, which the S-meter's calibration reads from here. A stand-in
+        device that is not a Device subclass simply has none."""
+        if not self.dev:
+            return {}
+        sense = getattr(self.dev, "gain_sense", None)
+        return {**(sense() if sense is not None else {}), **self.dev.status()}
 
     # rxStreamPct's window: long enough that one lost block is not a
     # headline (75 ms of 10 s is under 1 %), short enough that a link that

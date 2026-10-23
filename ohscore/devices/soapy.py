@@ -112,6 +112,19 @@ class SoapyDevice(Device):
         except RuntimeError as e:
             raise DeviceError(f"The SDR refused the gain setting ({e})") from e
 
+    def gain_sense(self) -> dict:
+        """SoapySDRPlay3 makes SoapySDR's overall gain a sum of two
+        reductions (sdrsource.SoapySdrplayDevice says how); every other
+        driver here is a plain gain."""
+        try:
+            if self.sdr is not None and str(self.sdr.getDriverKey()).lower() == "sdrplay":
+                r = self.sdr.getGainRange(self.RX, 0, "RFGR")
+                return {"gainIsReduction": True, "gainModel": "soapysdrplay3",
+                        "rfgrRange": [int(r.minimum()), int(r.maximum())]}
+        except (RuntimeError, AttributeError):
+            pass
+        return super().gain_sense()
+
     def rx_gain_now(self) -> float | None:
         # Most drivers report the gain they are at, AGC or not; untried on
         # hardware here, so anything odd is "cannot say".

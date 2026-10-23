@@ -16,7 +16,8 @@ and the store API.
 
 A calibration is per device, band and (new here) antenna input: the
 front-end gain it was made at, corrected dB-for-dB for a later manual
-gain change, and reported as not holding while the receiver's own AGC
+gain change in the sense the device reports (`gain_split`), and
+reported as not holding while the receiver's own AGC
 chooses the gain (then nobody knows it to correct for). See `device_key`
 for the antenna decision.
 
@@ -153,7 +154,41 @@ def extra_stage(st: dict) -> tuple[str, float] | None:
     return None
 
 
-_STAGE_LABELS = {"sdrplayLna": lambda: _("the RSP's LNA state")}
+_STAGE_LABELS = {"sdrplayLna": lambda: _("the RSP's LNA state"), "lnaState": lambda: _("the RSP's LNA state")}
+
+
+def gain_split(st: dict, g: float) -> tuple[float, tuple[str, float] | None]:
+    """What a manual rxGain of `g` does on this radio, as (a level in dB
+    that rises with the real gain and is corrected dB for dB, a stage it
+    also moves whose steps are not linear, or None).
+
+    Taken from the device's own word (its `gainModel`, ohscore/devices/
+    base.py Device.gain_sense, carried in `deviceStatus`), never guessed
+    from its kind: the same RSP is a plain gain as `device sdrplay` and a
+    sum of two reductions under SoapySDRPlay3 (`device soapy`, ohs-box).
+    Until 23/10/2026 every radio was corrected as "db", so on the
+    SoapySDRPlay3 path a higher rxGain - less real gain - moved the offset
+    the wrong way, by twice the change.
+
+    - "db" (and a device that says nothing): `g` itself, no stage.
+    - "sdrplay": the gain reduction is 79 - g held to SDRplay's 20-59 dB,
+      so a change past either end moves nothing (sdrsource.SdrplayDevice);
+      its LNA state is a setting of its own (`extra_stage`).
+    - "soapysdrplay3": g splits into gRdB, then the LNA state, as
+      SoapySDRPlay3 split it (sdrsource.soapy_gain_split_rf). The level is
+      minus gRdB; the LNA state is the stage. Below 39 dB only gRdB moves;
+      above it every whole dB is an LNA step, whose size depends on band
+      and model, so a calibration either side of that holds only at the
+      same LNA state."""
+    model = (st.get("deviceStatus") or {}).get("gainModel") or "db"
+    if model == "sdrplay":
+        return -min(max(79.0 - g, 20.0), 59.0), None
+    if model == "soapysdrplay3":
+        from .devices.sdrsource import soapy_gain_split_rf
+        rf = (st.get("deviceStatus") or {}).get("rfgrRange") or (0, 27)
+        grdb, lna = soapy_gain_split_rf(g, rf)
+        return -float(grdb), ("lnaState", float(lna))
+    return g, None
 
 
 def known_gain(st: dict) -> float | None:
@@ -279,7 +314,15 @@ def effective(store, st: dict) -> CalState:
                 "Uncalibrated now: {stage} has changed since this radio was calibrated, and that cannot be "
                 "corrected for the way a manual gain change is. Calibrate again.").format(stage=label),
                 "extra_changed", rec)
-    off = rec["offset"] - (g - rec["gain"])
+    level_now, stage_now = gain_split(st, g)
+    level_then, stage_then = gain_split(st, rec["gain"])
+    if stage_now != stage_then:
+        label = _STAGE_LABELS.get(stage_now[0], lambda: stage_now[0])()
+        return CalState(rec["offset"], False, _(
+            "Uncalibrated now: {stage} has changed since this radio was calibrated, and that cannot be "
+            "corrected for the way a manual gain change is. Calibrate again.").format(stage=label),
+            "extra_changed", rec)
+    off = rec["offset"] - (level_now - level_then)
     corrected = abs(g - rec["gain"]) > 1e-9
     if rec["when"] and corrected:
         why = _("Calibrated {when} at {gain} dB receiver gain, corrected for {now} dB now.")

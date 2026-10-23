@@ -202,6 +202,18 @@ the gain, nobody here knows what it is, or (an SDRplay RSP) its LNA state
 steps are not a fixed number of dB, so it cannot be corrected for the way
 a later manual `rxGain` change is (dB for dB).
 
+A later `rxGain` change is corrected in the sense the device reports in
+`deviceStatus` (since 23/10/2026): `gainIsReduction` (raising `rxGain`
+lowers the signal) and `gainModel` - `"db"`, a plain gain; `"sdrplay"`,
+`device` sdrplay's reduction of 79 - `rxGain` held to 20-59 dB, so a
+change past either end moves nothing; `"soapysdrplay3"`, an RSP under
+SoapySDRPlay3's sense (`device` soapy, `driver=sdrplay`, either path),
+where the first 39 dB of `rxGain` are IF gain reduction and every dB
+above is an LNA state (up to `rfgrRange`'s top): there a change inside
+the first 39 dB is corrected the right way round, and one that moves the
+LNA state makes the calibration not hold (`extra_changed`). A device that
+reports nothing is `"db"`.
+
 The `meter` feed item (ENGINE-API.md) gains four fields on Radio,
 alongside its unchanged raw `rx` (dBFS): `dbm` and `s` (e.g. `"S9+12"`,
 IARU Region 1: S9 is -73 dBm below 30 MHz, -93 dBm at and above, 6 dB per
@@ -861,7 +873,10 @@ operator's own entries.
   own binding to that API instead, with nothing in the station's settings
   changed: `serial=` picks the RSP, `rfgain_sel=` is the LNA state, and
   the antenna names are SoapySDRPlay3's. `deviceStatus` then has `"via":
-  "sdrplay-api"`. Where SoapySDR does have an SDRplay module (a desktop
+  "sdrplay-api"`. `rxGain` keeps SoapySDRPlay3's meaning on this path
+  (since 0.1.22-beta.3's fix): the same gRdB and LNA state for the same
+  settings, and `deviceStatus` `gain` is SoapySDR's overall figure, with
+  `gRdB` and `lnaState` beside it. Where SoapySDR does have an SDRplay module (a desktop
   with SoapySDRPlay3, an image built with `SHACK_STORE_DROP_SDRPLAY=0`),
   SoapySDR opens it as before.
 - Radio's other receive-only receivers go through shack_sdr's own

@@ -55,6 +55,17 @@ class Device:
         change in signal that peaking a dish is looking for."""
         return None
 
+    def gain_sense(self) -> dict:
+        """How Radio's rxGain acts on this device, merged into its status
+        for the S-meter's calibration (ohscore/smeter_cal.py `gain_split`):
+        `gainIsReduction` - raising rxGain lowers the signal - and
+        `gainModel`, which names how a change is corrected: "db" (here) is
+        a plain gain, dB for dB. A device whose sense differs says so
+        itself rather than the meter guessing from its kind: an SDRplay
+        RSP's rxGain means one thing as `device sdrplay` and the opposite
+        under SoapySDRPlay3 (ohscore/devices/sdrsource.py)."""
+        return {"gainIsReduction": False, "gainModel": "db"}
+
     def set_antenna(self, name: str) -> None:
         """Switch the antenna input on the open device, applied the same
         way as set_rx_gain: the engine calls this when `soapyAntenna`
