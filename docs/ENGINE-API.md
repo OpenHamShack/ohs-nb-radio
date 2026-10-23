@@ -241,11 +241,6 @@ reads lower as bins narrow, as on any analyser.
  "rigKeyed": False}                    # the external radio (IC-9700) is transmitting
 ```
 
-Radio also adds `dbm`, `s`, `why` and `whyText` (docs/SERVER-API.md "S-meter
-calibration"): `rx`'s dBFS, read against a calibration held server-side so
-every reader agrees, when one holds for the dial's current radio, band and
-antenna - else `dbm`/`s` are `None` and `why`/`whyText` say why not.
-
 ### `lock`
 
 Receive (`kind: "rx"`), tracking:

@@ -52,28 +52,16 @@ are on the air (Face.on_air), when what fills the passband is our own
 downlink and above the beacon is where it must not be. Before, a strong
 signal heard on an idle receiver read "S9+53" in red.
 
-Calibration is per radio (the device, its address and, where the driver
-reports more than one, the antenna input), and in OpenHamShack Radio per band,
-because a Pluto's gain at 2 m and at 23 cm differ by more than an S-unit.
-It records the front-end gain it was made at (and, where a device has a
-second gain stage whose steps are not linear in dB, such as an SDRplay
-RSP's LNA state, that stage's own setting); a later manual gain change
-is accounted for dB for dB (dBFS moves one-for-one with the gain of a
-linear front end), so turning the gain does not need a recalibration,
-but a change to that second stage, or a receiver whose own AGC is on,
-means a gain nobody here can correct for, so there the calibration is
-reported as not holding rather than silently wrong. The math is
-ohscore/smeter_cal.py, with no PyQt import, so the same code runs in
-`--server` (headless). In OpenHamShack Radio the table is held server-side, in
-the engine's own `sMeterCal` setting (ohsradio/state.py), not a window
-preference - the point of moving it there (Brian, 23/10/2026) being that
-OpenHamShack Remote and the store web page, reading the radio over the API,
-then see the same calibrated S-units the desktop window does. QO-100 NB
-has no bands and is outside that change: its calibration still lives in
-this window's own ui.json preference, also named `sMeterCal`.
-`SMeter._cal_source`/`_write_cal` below are where the two paths meet: Radio's
-engine state carries a `sMeterCal` key and NB's does not, which is the one
-thing the widget tells them apart by.
+Calibration is per radio (the device and its address) and, in OpenHamShack Radio,
+per band, because a Pluto's gain at 2 m and at 23 cm differ by more than an
+S-unit. It records the front-end gain it was made at; a later manual gain
+change is accounted for dB for dB (dBFS moves one-for-one with the gain of
+a linear front end), so turning the gain does not need a recalibration. A
+receiver whose own AGC is on has a gain nobody here knows, so there the
+calibration is reported as not holding rather than silently wrong. It is a
+window preference (ui.json, `sMeterCal`), not an engine setting: the engine
+never needs dBm, and keeping it out of the state registry keeps it out of
+the transmit path entirely.
 
 Ballistics follow the same recommendation: quasi-peak, 10 ms attack and a
 decay time constant of at least 500 ms. The engine's meter feed is 10 Hz,
@@ -102,17 +90,16 @@ from . import theme
 from .controls import mix
 from .meters import Ballistic, BarMeter
 
-# The standard (IARU Region 1 Technical Recommendation "S-meter readings",
-# Brighton 1981, Torremolinos 1990), the calibration math and the stored
-# table's format are ohscore/smeter_cal.py - no PyQt import, so the same
-# code runs in `--server` (headless): device_key, cal_key, known_gain,
-# extra_stage, clean_cal, parse_cal, format_cal, CalState, effective,
-# calibrate, forget, where_text, s9_dbm, s_text, average_dbfs. Imported
-# here under their same names, so this module's own history (and anyone
-# importing them from it, as the tests do) sees no difference.
-from ..smeter_cal import (  # noqa: E402  (after the standard Qt imports above)
-    DB_PER_S, HF_TOP_HZ, S9_HF_DBM, S9_VHF_DBM, CalState, _calibrate_hint, average_dbfs, cal_key, calibrate,
-    clean_cal, device_key, effective, format_cal, forget, known_gain, s9_dbm, s_text, where_text)
+# ------------------------------------------------------------- the standard
+# IARU Region 1 Technical Recommendation "S-meter readings", Brighton 1981,
+# Torremolinos 1990, as printed in the IARU-R1 VHF Handbook v10.03 (Feb 2026)
+# p. 104. "Below 30 MHz" is HF; everything from 30 MHz up takes the VHF level
+# (the box says "above 30 MHz"; the prose beside it notes 30-144 MHz was once
+# left open - the box is the text that was adopted).
+HF_TOP_HZ = 30e6
+S9_HF_DBM = -73.0
+S9_VHF_DBM = -93.0
+DB_PER_S = 6.0
 
 STYLES = ("bar", "analog", "digital")
 STYLE_NAMES = {"bar": "Bar", "analog": "Analogue", "digital": "Digital"}
@@ -126,6 +113,26 @@ DEFAULTS = {"sMeterStyle": "bar", "sMeterUnit": "", "sMeterPeak": True, "sMeterC
 
 # The analogue scale's sweep, degrees either side of upright.
 HALF_SWEEP = 55.0
+
+
+def s9_dbm(freq_hz: float) -> float:
+    """S9 in dBm for a dial frequency. QO-100 NB's dial is the 10 GHz
+    downlink, so it always takes the VHF level; HAM's follows the band."""
+    return S9_HF_DBM if 0 < float(freq_hz or 0) < HF_TOP_HZ else S9_VHF_DBM
+
+
+def s_units(dbm: float, s9: float) -> float:
+    return 9.0 + (dbm - s9) / DB_PER_S
+
+
+def s_text(dbm: float, s9: float) -> str:
+    """'S7', 'S9', 'S9+12'. Below S9 the nearest S-unit (a receiver's needle
+    between S6 and S7 is read as the nearer); above it, whole dB over S9,
+    the universal practice."""
+    over = dbm - s9
+    if over >= 0.5:
+        return f"S9+{int(math.floor(over + 0.5))}"
+    return f"S{max(0, min(9, int(math.floor(9 + over / DB_PER_S + 0.5))))}"
 
 
 def dbm_from_microvolts(uv: float) -> float:
@@ -176,6 +183,152 @@ def passband_noise_dbfs(median_bin_db: float, bin_hz: float, bw_hz: float, avg: 
     median_over_mean = (1.0 - 2.0 / (9.0 * k)) ** 3
     return (median_bin_db - 10 * math.log10(median_over_mean) - 10 * math.log10(1.5 * bin_hz)
             + 10 * math.log10(max(1.0, bw_hz)))
+
+
+# ------------------------------------------------------------ calibration
+def device_key(st: dict) -> str:
+    """Which radio a calibration belongs to: the device, and the address
+    that tells two of a kind apart. A Pluto on USB is always
+    ip:192.168.2.1, so two of those share one calibration - which is the
+    best the program can tell."""
+    dev = str(st.get("device") or "sim")
+    addr = {"pluto": st.get("plutoUri"), "libresdr": st.get("plutoUri"), "soapy": st.get("soapyArgs"),
+            "hl2": st.get("hl2Address"), "rtlsdr": st.get("sdrSerial"), "sdrplay": st.get("sdrSerial")}.get(dev) or ""
+    return f"{dev}:{addr}" if addr else dev
+
+
+def cal_key(st: dict) -> str | None:
+    """device_key, and in OpenHamShack Radio the band (its status `band`; NB has
+    none). None between bands: there is no band to have calibrated."""
+    band = st.get("band")
+    if band is None:
+        return device_key(st)
+    return f"{device_key(st)}|{band}" if band else None
+
+
+def known_gain(st: dict) -> float | None:
+    """The receiver's front-end gain in dB, if the program knows it. The
+    Hermes-Lite 2 has only its LNA setting; a Pluto or SoapySDR radio knows
+    its gain only when it is manual; the simulator's AGC choices are its
+    40 dB reference gain (ohscore/devices/simcore.py), so it always knows."""
+    dev = st.get("device") or "sim"
+    if dev == "hl2":
+        return float(st.get("hl2Lna", 20.0))
+    if st.get("rxGainMode") == "manual":
+        return float(st.get("rxGain", 40.0))
+    if dev == "sim":
+        from ..devices.simcore import SimCore
+        return float(SimCore.RX_GAIN_REF_DB)
+    return None
+
+
+def clean_cal(d) -> dict:
+    """The stored calibrations, keeping only well-formed entries: a
+    hand-edited ui.json costs one calibration, never the meter."""
+    out = {}
+    if not isinstance(d, dict):
+        return out
+    for k, rec in d.items():
+        try:
+            off, gain = float(rec["offset"]), float(rec["gain"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if isinstance(k, str) and math.isfinite(off) and math.isfinite(gain) and -250 <= off <= 250:
+            out[k] = {"offset": off, "gain": gain, "when": str(rec.get("when", ""))}
+    return out
+
+
+class CalState:
+    """The offset to add to dBFS for dBm now, whether it may be called
+    calibrated, and a sentence saying why (for the tooltip and Settings)."""
+
+    def __init__(self, offset: float, ok: bool, why: str, stored: dict | None = None):
+        self.offset, self.ok, self.why, self.stored = offset, ok, why, stored
+
+
+def where_text(st: dict) -> str:
+    # Built when called, not at import, so the names are looked up after
+    # the window's catalog is installed.
+    names = {"sim": QCoreApplication.translate("SMeter", "the simulator"),
+             "pluto": QCoreApplication.translate("SMeter", "the Pluto"),
+             "soapy": QCoreApplication.translate("SMeter", "the SoapySDR radio"),
+             "libresdr": QCoreApplication.translate("SMeter", "the LibreSDR"),
+             "rtlsdr": QCoreApplication.translate("SMeter", "the RTL-SDR"),
+             "sdrplay": QCoreApplication.translate("SMeter", "the SDRplay RSP"),
+             "hl2": QCoreApplication.translate("SMeter", "the Hermes-Lite 2")}
+    s = names.get(st.get("device") or "sim", str(st.get("device")))
+    if st.get("band"):
+        s = QCoreApplication.translate("SMeter", "{radio} on {band}").format(radio=s, band=st["band"])
+    return s
+
+
+def _calibrate_hint() -> str:
+    """The pointer to Calibrate… that ends the not-calibrated sentence, and
+    which Settings takes back out (it has its own button): one lookup for
+    both, so the two agree in any language."""
+    return QCoreApplication.translate("SMeter", "Right-click the meter › Calibrate…")
+
+
+def effective(store: dict, st: dict) -> CalState:
+    key = cal_key(st)
+    if key is None:
+        return CalState(0.0, False, QCoreApplication.translate(
+            "SMeter", "Uncalibrated: calibration is per band, and the dial is between bands."))
+    rec = clean_cal(store).get(key)
+    if rec is None:
+        return CalState(0.0, False, QCoreApplication.translate(
+            "SMeter", "Uncalibrated: no calibration for {radio} yet.").format(radio=where_text(st))
+            + " " + _calibrate_hint())
+    g = known_gain(st)
+    if g is None:
+        return CalState(rec["offset"], False, QCoreApplication.translate(
+            "SMeter", "Uncalibrated now: the receiver's own AGC is on, so its gain is unknown and no calibration "
+            "holds. Set Receiver gain control to Manual (Settings › Radio)."), rec)
+    off = rec["offset"] - (g - rec["gain"])
+    # Four whole sentences rather than one grown clause by clause, so each
+    # can be translated with its own word order.
+    corrected = abs(g - rec["gain"]) > 1e-9
+    if rec["when"] and corrected:
+        why = QCoreApplication.translate("SMeter", "Calibrated {when} at {gain} dB receiver gain, corrected for "
+                                                   "{now} dB now.")
+    elif rec["when"]:
+        why = QCoreApplication.translate("SMeter", "Calibrated {when} at {gain} dB receiver gain.")
+    elif corrected:
+        why = QCoreApplication.translate("SMeter", "Calibrated at {gain} dB receiver gain, corrected for {now} dB "
+                                                   "now.")
+    else:
+        why = QCoreApplication.translate("SMeter", "Calibrated at {gain} dB receiver gain.")
+    return CalState(off, True, why.format(when=rec["when"], gain=f"{rec['gain']:g}", now=f"{g:g}"), rec)
+
+
+def calibrate(store: dict, st: dict, measured_dbfs: float, known_dbm: float, when: str = "") -> dict:
+    """Store the offset that makes `measured_dbfs` read `known_dbm` for this
+    radio (and band), at its current gain. Returns the new store; raises
+    ValueError with the reason it cannot."""
+    key = cal_key(st)
+    if key is None:
+        raise ValueError(QCoreApplication.translate(
+            "SMeter", "The dial is between bands; tune into a band to calibrate it."))
+    g = known_gain(st)
+    if g is None:
+        raise ValueError(QCoreApplication.translate(
+            "SMeter", "The receiver's own AGC is on, so its gain moves with the signal and no offset would hold. "
+            "Set Receiver gain control to Manual (Settings › Radio) and calibrate again."))
+    if measured_dbfs is None or measured_dbfs <= -199:
+        raise ValueError(QCoreApplication.translate("SMeter", "There is no reading to calibrate against."))
+    if measured_dbfs > -3.0:
+        raise ValueError(QCoreApplication.translate(
+            "SMeter", "The receiver is within 3 dB of full scale and may be clipping; lower its gain or the "
+            "signal."))
+    out = clean_cal(store)
+    out[key] = {"offset": round(known_dbm - measured_dbfs, 2), "gain": g, "when": when or time.strftime("%Y-%m-%d")}
+    return out
+
+
+def forget(store: dict, st: dict) -> dict:
+    out = clean_cal(store)
+    out.pop(cal_key(st) or "", None)
+    return out
 
 
 # ------------------------------------------------------------------ scales
@@ -337,24 +490,6 @@ class SMeter(BarMeter):
     def _st(self) -> dict:
         return self.bridge.st if self.bridge is not None else {}
 
-    def _cal_source(self) -> dict:
-        """Where this app's calibrations live: Radio's engine state
-        (server-side, so the store page and Remote see the same table) if
-        it carries the `sMeterCal` key, else this window's own preferences
-        (NB, which has no bands and is outside the move to the server -
-        module docstring)."""
-        st = self._st()
-        if "sMeterCal" in st:
-            return clean_cal(st.get("sMeterCal"))
-        return clean_cal(self.prefs.get("sMeterCal") or {})
-
-    def _write_cal(self, cal: dict) -> None:
-        if "sMeterCal" in self._st():
-            self.bridge.set(sMeterCal=format_cal(cal))
-            self.apply_prefs()         # bridge.set() updates st synchronously; refresh follows it
-        else:
-            self.set_pref("sMeterCal", cal)
-
     def beacon_ok(self) -> bool:
         face = getattr(self.bridge, "face", None)
         return bool(getattr(face, "smeter_beacon", False))
@@ -440,12 +575,15 @@ class SMeter(BarMeter):
 
     def average_dbfs(self) -> tuple[float, float] | None:
         """(power mean of the last 3 s in dBFS, half its spread in dB)."""
-        return average_dbfs(self.hist)
+        if not self.hist:
+            return None
+        lin = [10 ** (v / 10) for v in self.hist]
+        return 10 * math.log10(sum(lin) / len(lin)), (max(self.hist) - min(self.hist)) / 2
 
     def _refresh(self):
         st = self._st()
         s9 = s9_dbm(st.get("vfo", 0.0))
-        self.cal = effective(self._cal_source(), st)
+        self.cal = effective(self.prefs.get("sMeterCal") or {}, st)
         unit = self.shown
         on_air = self.own_on_air()
         if (s9 != self._s9 or self.scale is None or getattr(self, "_scale_unit", None) != unit
@@ -522,7 +660,7 @@ class SMeter(BarMeter):
         m.addAction(self.tr("Calibrate…")).triggered.connect(self.open_calibrate)
         if self.cal.stored is not None:
             m.addAction(self.tr("Forget this calibration")).triggered.connect(
-                lambda: self._write_cal(forget(self._cal_source(), self._st())))
+                lambda: self.set_pref("sMeterCal", forget(self.prefs.get("sMeterCal") or {}, self._st())))
         return m
 
     def open_calibrate(self):
@@ -914,7 +1052,7 @@ class CalibrateDialog(QDialog):
         if not self.level.text().strip():
             raise ValueError("")
         known = parse_level(self.level.text(), s9_dbm(st.get("vfo", 0.0)))
-        store = calibrate(self.meter._cal_source(), st, avg[0] if avg else None, known)
+        store = calibrate(self.meter.prefs.get("sMeterCal") or {}, st, avg[0] if avg else None, known)
         off = store[cal_key(st)]["offset"]
         return store, self.tr("Offset {offset} dB: this signal will read {reading} ({dbm} dBm).").format(
             offset=f"{off:+.1f}", reading=s_text(known, s9_dbm(st.get('vfo', 0))), dbm=f"{known:.1f}")
@@ -954,11 +1092,11 @@ class CalibrateDialog(QDialog):
         except ValueError as e:
             self.msg.setText(str(e))
             return
-        self.meter._write_cal(store)
+        self.meter.set_pref("sMeterCal", store)
         self.accept()
 
     def forget(self):
-        self.meter._write_cal(forget(self.meter._cal_source(), self.meter._st()))
+        self.meter.set_pref("sMeterCal", forget(self.meter.prefs.get("sMeterCal") or {}, self.meter._st()))
         self.accept()
 
     def done(self, r):
@@ -994,20 +1132,12 @@ def settings_section(dlg, lay):
                   bool(prefs.get("sMeterPeak", True)))
     lay.addWidget(peak)
     st = dlg.st
-    server_side = "sMeterCal" in st       # Radio: engine state, shared with Remote and the store page (module docstring)
-    store = clean_cal(st.get("sMeterCal")) if server_side else clean_cal(prefs.get("sMeterCal") or {})
-    cal = effective(store, st)
+    cal = effective(prefs.get("sMeterCal") or {}, st)
     cap = QLabel(QCoreApplication.translate("SMeter", "Calibration offset for {radio}").format(radio=where_text(st)))
     cap.setObjectName("Muted")
     lay.addWidget(cap)
     off = QLineEdit("" if cal.stored is None else f"{cal.offset:.2f}")
     off.setPlaceholderText(QCoreApplication.translate("SMeter", "not calibrated"))
-    if server_side:
-        # Written only by Calibrate to… below (a measured level, through the
-        # engine), never typed: a server-side table two apps read has to
-        # agree with what actually calibrated it, which a hand-typed number
-        # here cannot promise the way CalibrateDialog's measured level does.
-        off.setReadOnly(True)
     lay.addWidget(off)
     note = QLabel(cal.why.replace(_calibrate_hint(), "").strip() + " " + QCoreApplication.translate(
                   "SMeter", "The offset is what is added to the dBFS reading to give dBm, at the receiver gain set "
@@ -1017,48 +1147,21 @@ def settings_section(dlg, lay):
     note.setObjectName("Faint")
     note.setFont(theme.font(12))
     lay.addWidget(note)
-    table = None
-    if server_side:
-        # The brief: show the table, not just this radio's one row - the
-        # same table api/smeter/calibrate GET answers.
-        cap2 = QLabel(QCoreApplication.translate("SMeter", "Stored calibrations"))
-        cap2.setObjectName("Muted")
-        lay.addWidget(cap2)
-        table = QLabel("")
-        table.setWordWrap(True)
-        table.setFont(theme.font(12, mono=True))
-        table.setObjectName("Faint")
-        lay.addWidget(table)
     row = QHBoxLayout()
-    btn = Button(QCoreApplication.translate("SMeter", "Calibrate to…") if server_side
-                 else QCoreApplication.translate("SMeter", "Calibrate…"), small=True)
+    btn = Button(QCoreApplication.translate("SMeter", "Calibrate…"), small=True)
     meter = getattr(getattr(dlg.parent(), "rxcard", None), "s", None)
     btn.setEnabled(isinstance(meter, SMeter))
 
-    def refresh_table():
-        if table is None:
-            return
-        cur = clean_cal(st.get("sMeterCal")) if isinstance(meter, SMeter) else store
-        if not cur:
-            table.setText(QCoreApplication.translate("SMeter", "No calibrations stored yet."))
-            return
-        table.setText("\n".join(
-            QCoreApplication.translate("SMeter", "{key}: {offset:+.1f} dB at {gain:g} dB gain ({when})").format(
-                key=k, offset=rec["offset"], gain=rec["gain"], when=rec.get("when", "")) for k, rec in sorted(cur.items())))
-
     def run():
         CalibrateDialog(meter, dlg).exec()
-        c = effective(meter._cal_source(), st)
+        c = effective(meter.prefs.get("sMeterCal") or {}, st)
         off.setText("" if c.stored is None else f"{c.offset:.2f}")
         dlg._smeter["before"] = off.text()
-        refresh_table()
     btn.clicked.connect(run)
     row.addWidget(btn)
     row.addStretch(1)
     lay.addLayout(row)
-    refresh_table()
-    dlg._smeter = {"style": style, "unit": unit, "peak": peak, "offset": off, "before": off.text(),
-                   "server": server_side}
+    dlg._smeter = {"style": style, "unit": unit, "peak": peak, "offset": off, "before": off.text()}
 
 
 def read_settings(dlg) -> dict | None:
@@ -1069,9 +1172,7 @@ def read_settings(dlg) -> dict | None:
         return None
     out = {"sMeterStyle": w["style"].value, "sMeterUnit": w["unit"].value, "sMeterPeak": w["peak"].on}
     text = w["offset"].text().strip().replace(",", ".").replace("−", "-")
-    # Radio's offset is read-only here (written only by Calibrate to…,
-    # straight to the engine); this branch is NB's own hand-typed offset.
-    if not w.get("server") and text != w["before"]:
+    if text != w["before"]:
         store = dlg.prefs.get("sMeterCal") or {}
         if not text:
             out["sMeterCal"] = forget(store, dlg.st)

@@ -462,78 +462,78 @@
 </context><context>
     <name>CalibrateDialog</name>
     <message>
-        <location filename="../ui/smeter.py" line="857" />
-        <location filename="../ui/smeter.py" line="851" />
+        <location filename="../ui/smeter.py" line="995" />
+        <location filename="../ui/smeter.py" line="989" />
         <source>Calibrate the S-meter</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="863" />
+        <location filename="../ui/smeter.py" line="1001" />
         <source>Put a signal of known level in the receive passband - best, a signal generator through a known attenuator into the antenna socket - and type its level. The meter is set to read it, for this radio on this band at this receiver gain; a later manual gain change is allowed for.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="868" />
+        <location filename="../ui/smeter.py" line="1006" />
         <source>Put a signal of known level in the receive passband - best, a signal generator through a known attenuator into the antenna socket - and type its level. The meter is set to read it, for this radio at this receiver gain; a later manual gain change is allowed for.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="881" />
+        <location filename="../ui/smeter.py" line="1019" />
         <source>Known level</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="885" />
+        <location filename="../ui/smeter.py" line="1023" />
         <source>-73 dBm, S9, S9+20 or 50 uV</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="893" />
+        <location filename="../ui/smeter.py" line="1031" />
         <source>Forget this calibration</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="897" />
+        <location filename="../ui/smeter.py" line="1035" />
         <source>Cancel</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="899" />
+        <location filename="../ui/smeter.py" line="1037" />
         <source>Calibrate</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="919" />
+        <location filename="../ui/smeter.py" line="1057" />
         <source>Offset {offset} dB: this signal will read {reading} ({dbm} dBm).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="929" />
+        <location filename="../ui/smeter.py" line="1067" />
         <source>Radio: {radio} · {band} · receiver gain {gain} dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="931" />
+        <location filename="../ui/smeter.py" line="1069" />
         <source>Radio: {radio} · {band} · receiver gain: AGC (unknown)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="933" />
+        <location filename="../ui/smeter.py" line="1071" />
         <source>Radio: {radio} · receiver gain {gain} dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="935" />
+        <location filename="../ui/smeter.py" line="1073" />
         <source>Radio: {radio} · receiver gain: AGC (unknown)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="938" />
+        <location filename="../ui/smeter.py" line="1076" />
         <source>Measured now: {level} dBFS (3 s average, ±{spread} dB)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="940" />
+        <location filename="../ui/smeter.py" line="1078" />
         <source>Measured now: no reading</source>
         <translation type="unfinished" />
     </message>
@@ -2968,169 +2968,249 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>SMeter</name>
     <message>
-        <location filename="../ui/smeter.py" line="146" />
+        <location filename="../ui/smeter.py" line="153" />
         <source>Only S9 takes '+dB' (S9+20).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="152" />
+        <location filename="../ui/smeter.py" line="159" />
         <source>A level in microvolts must be above zero.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="158" />
+        <location filename="../ui/smeter.py" line="165" />
         <source>That level is outside -200..+30 dBm.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="160" />
+        <location filename="../ui/smeter.py" line="167" />
         <source>Type a level as dBm (-73), an S reading (S9, S9+20) or microvolts (50 uV).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="286" />
+        <location filename="../ui/smeter.py" line="252" />
+        <source>the simulator</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="253" />
+        <source>the Pluto</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="254" />
+        <source>the SoapySDR radio</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="255" />
+        <source>the LibreSDR</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="256" />
+        <source>the RTL-SDR</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="257" />
+        <source>the SDRplay RSP</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="258" />
+        <source>the Hermes-Lite 2</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="261" />
+        <source>{radio} on {band}</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="269" />
+        <source>Right-click the meter › Calibrate…</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="275" />
+        <source>Uncalibrated: calibration is per band, and the dial is between bands.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="279" />
+        <source>Uncalibrated: no calibration for {radio} yet.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
         <location filename="../ui/smeter.py" line="284" />
-        <source>dB over noise</source>
+        <source>Uncalibrated now: the receiver's own AGC is on, so its gain is unknown and no calibration holds. Set Receiver gain control to Manual (Settings › Radio).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="288" />
-        <source>dB vs beacon</source>
+        <location filename="../ui/smeter.py" line="292" />
+        <source>Calibrated {when} at {gain} dB receiver gain, corrected for {now} dB now.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="290" />
-        <source>no beacon level</source>
+        <location filename="../ui/smeter.py" line="295" />
+        <source>Calibrated {when} at {gain} dB receiver gain.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="294" />
-        <source>{db} dB vs beacon</source>
+        <location filename="../ui/smeter.py" line="297" />
+        <source>Calibrated at {gain} dB receiver gain, corrected for {now} dB now.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="300" />
+        <source>Calibrated at {gain} dB receiver gain.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="310" />
+        <source>The dial is between bands; tune into a band to calibrate it.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="314" />
+        <source>The receiver's own AGC is on, so its gain moves with the signal and no offset would hold. Set Receiver gain control to Manual (Settings › Radio) and calibrate again.</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/smeter.py" line="318" />
+        <source>There is no reading to calibrate against.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="320" />
+        <source>The receiver is within 3 dB of full scale and may be clipping; lower its gain or the signal.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="439" />
+        <location filename="../ui/smeter.py" line="437" />
+        <source>dB over noise</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="441" />
+        <source>dB vs beacon</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="443" />
+        <source>no beacon level</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="447" />
+        <source>{db} dB vs beacon</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="471" />
         <source>Signal</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="975" />
+        <location filename="../ui/smeter.py" line="1113" />
         <source>S-meter</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="977" />
+        <location filename="../ui/smeter.py" line="1115" />
         <source>Style</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="982" />
+        <location filename="../ui/smeter.py" line="1120" />
         <source>Units</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="987" />
+        <location filename="../ui/smeter.py" line="1125" />
         <source>Over noise</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="988" />
+        <location filename="../ui/smeter.py" line="1126" />
         <source>vs beacon</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="989" />
+        <location filename="../ui/smeter.py" line="1127" />
         <source>S (beacon)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="993" />
+        <location filename="../ui/smeter.py" line="1131" />
         <source>Peak-hold needle (analogue)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1000" />
+        <location filename="../ui/smeter.py" line="1136" />
         <source>Calibration offset for {radio}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1004" />
+        <location filename="../ui/smeter.py" line="1140" />
         <source>not calibrated</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1012" />
+        <location filename="../ui/smeter.py" line="1142" />
         <source>The offset is what is added to the dBFS reading to give dBm, at the receiver gain set now; empty is uncalibrated. Calibrate… measures it from a signal of known level. Until a calibration holds, S-units and dBm show UNCAL and a relative reading instead of an absolute one.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1024" />
-        <source>Stored calibrations</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="1033" />
-        <source>Calibrate to…</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="522" />
-        <location filename="../ui/smeter.py" line="1034" />
+        <location filename="../ui/smeter.py" line="660" />
+        <location filename="../ui/smeter.py" line="1151" />
         <source>Calibrate…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1043" />
-        <source>No calibrations stored yet.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="1046" />
-        <source>{key}: {offset:+.1f} dB at {gain:g} dB gain ({when})</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="1082" />
+        <location filename="../ui/smeter.py" line="1183" />
         <source>S-meter calibration offset: not a number</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1085" />
+        <location filename="../ui/smeter.py" line="1186" />
         <source>S-meter calibration offset: outside -250..+250 dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1089" />
+        <location filename="../ui/smeter.py" line="1190" />
         <source>S-meter calibration offset: {reason}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="462" />
+        <location filename="../ui/smeter.py" line="600" />
         <source>Click: next style · click the reading: next unit · right-click: menu.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="466" />
+        <location filename="../ui/smeter.py" line="604" />
         <source>UNCAL: with no calibration no absolute level is shown, so this reads relative to the noise (or dBFS). To calibrate: set Receiver gain control to Manual, feed a signal of known level, then right-click the meter › Calibrate…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="518" />
+        <location filename="../ui/smeter.py" line="656" />
         <source>Peak-hold needle</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="524" />
+        <location filename="../ui/smeter.py" line="662" />
         <source>Forget this calibration</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="552" />
+        <location filename="../ui/smeter.py" line="690" />
         <source>UNCAL</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="689" />
+        <location filename="../ui/smeter.py" line="827" />
         <source>S9 = beacon</source>
         <translation type="unfinished" />
     </message>

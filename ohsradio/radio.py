@@ -53,12 +53,11 @@ from __future__ import annotations
 
 import math
 import time
-from collections import deque
 
 import numpy as np
 
 from ohscore import converters as cv
-from ohscore import licences, smeter_cal, txguard
+from ohscore import licences, txguard
 from ohscore.dsp import wfm
 from ohscore.dsp.bank import Channel, Geometry, Source
 from ohscore.dsp.fm import FM_RATE, FmDemod, FmMod
@@ -199,9 +198,6 @@ class Radio(Engine):
         self.tx_conv: cv.Converter | None = None
         self._presets_for = None
         self._refresh_presets()
-        # 3 s of 10 Hz meter readings, the "current reading" behind
-        # Calibrate… and the API's {"dbm": ...} form (smeter_cal.average_dbfs).
-        self._smeter_hist: deque = deque(maxlen=30)
 
     # ------------------------------------------------------------------ licence and plan
     def _plan(self):
@@ -799,55 +795,8 @@ class Radio(Engine):
         return self.pending_centre is None and self.rx_samples >= self.settle_at
 
     def _meter_extra(self, s: dict) -> dict:
-        out = {"fwd": s["fwdW"], "swr": s["swr"], "paTemp": s["paTemp"], "seq": s["seqState"],
-               "sql": s["sqlOpen"], "estPep": s["estPep"]}
-        out.update(self._smeter_fields(s))
-        return out
-
-    def _smeter_fields(self, s: dict) -> dict:
-        """The calibrated S-meter fields on every meter item (docs/SERVER-API.md
-        `meter`): `dbm` and `s` (e.g. "S9+12") while a calibration holds,
-        else neither and `why`/`whyText` say why not. The raw `rx` dBFS field
-        is unchanged - this only adds to it, so a client that ignores these
-        four keys sees exactly what it always has."""
-        if self.rx_level > -199:
-            self._smeter_hist.append(self.rx_level)
-        cal = smeter_cal.effective(s.get("sMeterCal") or "", s)
-        if not cal.ok:
-            return {"dbm": None, "s": None, "why": cal.why_code, "whyText": cal.why}
-        dbm = self.rx_level + cal.offset
-        return {"dbm": round(dbm, 1), "s": smeter_cal.s_text(dbm, smeter_cal.s9_dbm(s.get("vfo", 0.0))),
-                "why": None, "whyText": ""}
-
-    # ------------------------------------------------------------ S-meter calibration
-    def smeter_table(self) -> dict:
-        """Every stored calibration, keyed as `smeter_cal.cal_key` makes the
-        key (device[@antenna][|band]): `GET api/smeter/calibrate`."""
-        return smeter_cal.clean_cal(self.st.get("sMeterCal") or "")
-
-    def smeter_average_dbfs(self):
-        """(dBFS, spread) over the last 3 s, or None with no signal yet -
-        the "current reading" behind the API's {"dbm": ...} form."""
-        return smeter_cal.average_dbfs(list(self._smeter_hist))
-
-    def smeter_calibrate(self, known_dbm: float, measured_dbfs: float | None = None) -> dict:
-        """Calibrate this radio (band, antenna) so `measured_dbfs` - the
-        3 s average now, unless the caller measured one of its own (the
-        API's {"dbfs", "dbm"} form) - reads `known_dbm`. Returns the entry
-        stored; raises ValueError with the reason it could not (AGC on,
-        between bands, no reading, near clipping)."""
-        if measured_dbfs is None:
-            avg = self.smeter_average_dbfs()
-            measured_dbfs = avg[0] if avg else None
-        table = smeter_cal.calibrate(self.st.get("sMeterCal") or "", self.st, measured_dbfs, known_dbm,
-                                     time.strftime("%Y-%m-%d"))
-        self.set(sMeterCal=smeter_cal.format_cal(table))
-        return table[smeter_cal.cal_key(self.st)]
-
-    def smeter_forget(self) -> None:
-        """Clear this radio's (band's, antenna's) calibration."""
-        table = smeter_cal.forget(self.st.get("sMeterCal") or "", self.st)
-        self.set(sMeterCal=smeter_cal.format_cal(table))
+        return {"fwd": s["fwdW"], "swr": s["swr"], "paTemp": s["paTemp"], "seq": s["seqState"],
+                "sql": s["sqlOpen"], "estPep": s["estPep"]}
 
     # -------------------------------------------------------------- operating
     def start_on(self, band: str | None = None, rf: float | None = None, mode: str | None = None) -> None:

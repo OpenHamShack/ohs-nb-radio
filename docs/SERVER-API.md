@@ -55,7 +55,6 @@ the desktop apps.
 | `GET api/decoders` and the routes under it | view, control | decoder sessions, below ("Decoders") |
 | `GET api/events?kinds=…,decoder` | view | the decoder sessions' results, below |
 | `GET api/overpower` | view | QO-100 NB only (404 `not_found` elsewhere): `{"state", "beacon", "marginDb", "capture", "lastCapture", "events": [...]}` - signals over the middle beacon and LEILA sirens of the last 30 minutes, open ones first, each as ENGINE-API `overpower` describes. The same list comes as `overpower` items on `api/events?kinds=…,overpower` (not in the default set) on every change and once a second while anything is active. A `leila` entry is the siren pattern measured on six real sirens; why LEILA marks a station is unknown, so show it as "LEILA?". Tapping an entry only tunes: `POST api/set {"vfo": …}` at Control level, never TX. |
-| `GET`/`POST`/`DELETE api/smeter/calibrate` | view / control / control | Radio only (404 `not_found` elsewhere, like `api/overpower` above): the S-meter calibration table, below. |
 | `POST api/overpower/capture` | control | save the last 20 s of receive IQ now (the LEILA evidence ring; `leilaCapture` must be on): `202 {"ok": true}`, the file then appears in Recordings as `…-LEILA`; `409 nothing_to_save` with the sentence why not. Receive only. |
 | `GET api/audio/rx[?channels=1\|2]` | view | receive audio, raw PCM over a long-lived response, its format in the headers before any audio: `Content-Type: audio/L16; rate=<rate>; channels=<n>` and `X-Audio-Format: {"encoding": "s16le", "rate": <rate>, "channels": <n>}`. The rate is the app's: **48000 for Radio** (since 23/10/2026), 12000 for QO-100 NB. **Mono unless `?channels=2`** (below, "Receive audio format"); `400 bad_channels` for anything but 1 or 2 |
 | `GET api/audio/tx` | transmit | WebSocket: binary frames of PCM are the microphone while it is open (voice modes; keying is still `api/ptt`), always **12 kHz mono s16le** in both apps; the first text frame is `{"kind": "hello", "format": {"encoding": "s16le", "rate": 12000, "channels": 1}}` |
@@ -140,6 +139,7 @@ fetches the session with `?since=`. `t` is UTC from the samples. Text is
 not yet coalesced: RTTY's results come a character or a few at a time,
 about seven a second at 45.45 Bd.
 
+
 ## Receive audio format
 
 `GET api/audio/rx` is 16-bit signed little-endian PCM, interleaved when it
@@ -169,37 +169,6 @@ play what they say.
 
 `rate`/`channels` are what a request with no query gets; `tx` is
 `api/audio/tx`'s microphone format.
-
-## S-meter calibration
-
-Radio only (QO-100 NB has no bands, and is outside this: its calibration
-stays a desktop-window preference). A calibration says what to add to the
-receiver's raw dBFS reading to get dBm, for one radio, one band and (an
-SDRplay RSP, say) one antenna input; held in the engine's own `sMeterCal`
-setting (ohsradio/state.py, ohscore/smeter_cal.py has the math), so the
-store web page and OpenHamShack Remote see the same calibrated S-units the
-desktop window does, not a figure only the desktop ever measured.
-
-It does not hold - and is reported as not holding rather than silently
-wrong - while the receiver's own AGC (`rxGainMode` not `manual`) chooses
-the gain, nobody here knows what it is, or (an SDRplay RSP) its LNA state
-(`sdrplayLna`) has moved since the calibration was made: that stage's
-steps are not a fixed number of dB, so it cannot be corrected for the way
-a later manual `rxGain` change is (dB for dB).
-
-The `meter` feed item (ENGINE-API.md) gains four fields on Radio,
-alongside its unchanged raw `rx` (dBFS): `dbm` and `s` (e.g. `"S9+12"`,
-IARU Region 1: S9 is -73 dBm below 30 MHz, -93 dBm at and above, 6 dB per
-S-unit) while a calibration holds for the dial's current radio, band and
-antenna; otherwise both are `null` and `why`/`whyText` say why not
-(`between_bands`, `no_calibration`, `agc`, `extra_changed` - an RSP's LNA
-state moved - with `why` `null` and `whyText` `""` while calibrated).
-
-| Method, path | Level | Does |
-|---|---|---|
-| `GET api/smeter/calibrate` | view | `{"calibrations": {key: {"offset", "gain", "when", "extraName"?, "extraValue"?}, ...}}`, every stored entry. `key` is the device, its address, `@`+antenna where the driver reports one, and `\|`+band - not meant to be parsed, only matched against itself. |
-| `POST api/smeter/calibrate` | control | `{"dbm": -93}`: the current reading (a 3 s power average, the same ballistics Calibrate… previews) is `-93` dBm. `{"dbfs": -78.2, "dbm": -93}`: a level of `-78.2` dBFS measured some other way is `-93` dBm. `dbm` must be a finite number, -140..+30 dBm (ohscore/smeter_cal.py `PLAUSIBLE_DBM_LO`/`HI` - generous, to catch a typo rather than second-guess a real extreme); otherwise `400 bad_params`. `409 cannot_calibrate` with a sentence while the AGC (or an RSP's LNA state) means no gain is known, between bands, with no reading, or within 3 dB of full scale (clipping). `200 {"calibration": {...}}`, the entry just stored. |
-| `DELETE api/smeter/calibrate` | control | clears the calibration for the dial's current radio, band and antenna (not the whole table). `200 {"ok": true}` whether or not one was stored. |
 
 ## Recordings
 

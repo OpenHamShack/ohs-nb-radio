@@ -1,10 +1,10 @@
-# shack-sdr, the decoder host, the Rust RTTY decoder, the runtime codec
+# shack-sdr, the decoder host, the Rust RTTY and DAB decoders, the runtime codec
 # loader and the receive-only RTL-SDR and SDRplay sources
 # (openhamshack docs/RADIO-SDR-PLAN.md, Milestone 1). Built by ohs-libs
-# tools/build-sdr-wheels.sh at ohs-libs main a921f90 (22/10/2026; still
-# 0.2.0 - antenna/input selection on the two sources, no version bump),
-# the wheels' own SHA256SUMS in ~/build/ohs-dist/shack-sdr matching the
-# lines below.
+# tools/build-sdr-wheels.sh at ohs-libs main a45dab2 (23/10/2026; still
+# 0.2.0 - the DAB decoder, the audio output, live configure and the
+# survey, no version bump), the wheels' own SHA256SUMS in
+# ~/build/ohs-dist/shack-sdr-dab matching the lines below.
 # 0.2.0 replaces 0.1.0 (dfcb334) for d62bafe: the RTTY decoder took its
 # frames' noise floor from a stale spectrum and printed one to three
 # characters of noise after an over ended, where rtty.py printed none
@@ -17,8 +17,8 @@
 # from this tree at release time (tools/build-ohsdigi.sh), but shack-sdr's
 # source is in ohs-libs, so a checkout, the suite, the .deb and the
 # Windows build host could not make it from here, and RTTY - in both apps,
-# since the mode table is shared - decodes with nothing else. 2.1 MB for
-# the three.
+# since the mode table is shared - decodes with nothing else. 3.3 MB for
+# the three since DAB came in (2.1 before).
 #
 # A checkout imports it through ohscore/shacklibs.py, which picks the
 # wheel for this machine's OS and architecture; the packages unpack the
@@ -28,9 +28,9 @@
 # There is no macOS wheel yet: the Mac's universal2 build has not run.
 # Until one is pinned here, build-macos.sh (through shack_vendor.py) stops
 # with that sentence rather than build a Radio that cannot decode RTTY.
-shack-sdr==0.2.0 --hash=sha256:0f4774739be269d0a0a047f22af2edb23178f6cebf416b007b1734c6c92abf21  # manylinux_2_35_x86_64
-shack-sdr==0.2.0 --hash=sha256:960eb0d90303ac3b8b90cb87040eb595f5b63ad3f9871d9fc2808a14c310255f  # manylinux_2_35_aarch64
-shack-sdr==0.2.0 --hash=sha256:b45c78f63c78f3e058854b6abe93e858ea903a8e8045524362169805ccb0d86d  # win_amd64
+shack-sdr==0.2.0 --hash=sha256:fb2da3c237cfec8dd3918770bf851c3bc0ca79d06d3891690c001683a074f575  # manylinux_2_35_x86_64
+shack-sdr==0.2.0 --hash=sha256:40877c868bfd8f3d929326c15642a0d398b35fc4831942a63628fa206d98d5dd  # manylinux_2_35_aarch64
+shack-sdr==0.2.0 --hash=sha256:9013ac8d337022a8866e473c12aab43bf24e54c394ac930ceabc5c1f2702a6a2  # win_amd64
 #
 # The encumbered check (RADIO-SDR-PLAN 5.5), copied from the same ohs-libs
 # commit: tools/check-encumbered.py and spec/encumbered.json, into
