@@ -101,15 +101,23 @@ class HsmodemPanel(unittest.TestCase):
         self.assertEqual(p.speed.currentData(), 2400)
 
     def test_a_picture_is_reduced_as_hsmodem_reduces_one(self):
-        from PyQt6.QtGui import QColor, QImage
+        from PyQt6.QtGui import QColor, QImage, QPainter
         from ohscore.ui.panels.hsmodem import QUALITIES
         win, bridge, radio = self.window()
         p = win.panel
-        # A big, busy picture: a camera's would be bigger still.
+        # A big, busy picture: a camera's would be bigger still. Filled 8x8
+        # blocks, not single coloured dots on an unset (black) image: a lone
+        # bright pixel surrounded by black is the one thing a JPEG encoder
+        # and Qt's smooth downscale both handle least predictably, so the
+        # compressed size swung by ~1000 bytes run to run - enough to clear
+        # 22_500 occasionally once this test stopped skipping (no ohsdigi
+        # built, so it never ran at all before).
         img = QImage(1600, 1200, QImage.Format.Format_RGB888)
+        painter = QPainter(img)
         for y in range(0, 1200, 8):
             for x in range(0, 1600, 8):
-                img.setPixelColor(x, y, QColor((x * 7) % 256, (y * 5) % 256, (x + y) % 256))
+                painter.fillRect(x, y, 8, 8, QColor((x * 7) % 256, (y * 5) % 256, (x + y) % 256))
+        painter.end()
         f = Path(self.tmp) / "big.png"
         img.save(str(f))
         for res, budget in (("640x480", 22_500), ("320x240", 11_250)):
