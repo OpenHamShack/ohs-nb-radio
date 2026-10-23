@@ -51,6 +51,8 @@ from pathlib import Path
 
 from ohscore.countries import distance_bearing, locator_position
 
+from ohsradio.i18n import _
+
 log = logging.getLogger("ohsradio.dabtx")
 
 BUNDLED = Path(__file__).resolve().parent / "data" / "dabtx"
@@ -114,7 +116,7 @@ def build_ofcom(raw: bytes, fetched: str) -> dict:
                      round(lat, 5), round(lon, 5), _erp_kw(r.get("In-Use ERP Total") or ""),
                      height])
     if not rows:
-        raise ValueError("no transmitters in the Ofcom file")
+        raise ValueError(_("There are no transmitters in the Ofcom file"))
     rows.sort(key=lambda x: (x[0] or "", x[3], x[4], x[5]))
     return {"schema": SCHEMA, "source": "ofcom", "fetched": fetched, "url": OFCOM_URL, "coverage": "United Kingdom",
             "attribution": ATTRIBUTION, "skipped": skipped, "fields": list(FIELDS), "rows": rows}
@@ -135,7 +137,7 @@ def read_file(path: Path) -> dict:
     data = json.loads(path.read_bytes())
     if not isinstance(data, dict) or data.get("schema") != SCHEMA or not isinstance(data.get("rows"), list) \
             or data.get("fields") != list(FIELDS):
-        raise ValueError(f"{path.name}: not a DAB transmitters file")
+        raise ValueError(_("{name}: not a DAB transmitters file").format(name=path.name))
     return data
 
 
@@ -239,7 +241,7 @@ class Transmitters:
         fails."""
         res = {"source": "ofcom-dab", "ok": False, "entries": 0, "why": ""}
         if self.data_dir is None:
-            res["why"] = "no data folder"
+            res["why"] = _("There is no data folder to keep a copy in")
             return res
         try:
             fetched = time.strftime("%Y-%m-%d", time.gmtime(clock()))

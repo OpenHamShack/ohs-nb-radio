@@ -330,6 +330,10 @@ msgstr ""
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
 
+#: ohsradio/dabtx.py:119
+msgid "There are no transmitters in the Ofcom file"
+msgstr ""
+
 #: ohsradio/cwskim.py:280
 msgid "There is no CW segment in the band plan here."
 msgstr ""
@@ -337,6 +341,10 @@ msgstr ""
 #: ohsradio/radio.py:1380
 #, python-brace-format
 msgid "There is no band called {name}"
+msgstr ""
+
+#: ohsradio/dabtx.py:244
+msgid "There is no data folder to keep a copy in"
 msgstr ""
 
 #: ohsradio/plutofix.py:441
@@ -543,6 +551,11 @@ msgstr ""
 #: ohsradio/ui/face.py:67
 #, python-brace-format
 msgid "{mhz:.4f} MHz is outside what OpenHamShack Radio tunes (0.1 MHz - 6 GHz)"
+msgstr ""
+
+#: ohsradio/dabtx.py:140
+#, python-brace-format
+msgid "{name}: not a DAB transmitters file"
 msgstr ""
 
 #: ohsradio/localfreq.py:173
