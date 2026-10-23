@@ -21,10 +21,7 @@ that is listed as available but will not construct is a failure, as is one
 listed as unavailable. FT8, FT4, Q65 and JS8 go further: a message
 encoded here is decoded through the very function the slot decoder calls
 with ohsdigi, so a module that imports but cannot decode is caught too;
-RTTY likewise through shack_sdr's decoder. Radio also proves DAB, which
-is not a mode but a decoder session (ohscore/decoders.py): shack_sdr's own
-transmitter model's ensemble is found, listed and its old-DAB station
-heard, which needs nothing installed.
+RTTY likewise through shack_sdr's decoder.
 
 Every mode the app offers must decode, in the store form too. Q65 and JS8
 were "not carried" there until ohsdigi decoded them (10/10/2026): they
@@ -131,38 +128,6 @@ def _decodes_rtty() -> str:
     return "" if ROUND_TRIP in got else f"shack_sdr decoded {got!r} from {ROUND_TRIP!r}"
 
 
-def _decodes_dab() -> str:
-    """'' if a DAB session finds shack_sdr's test ensemble (made here by its
-    transmitter model), lists it and plays its MP2 station, else why not.
-    No faad2 is involved: old DAB is ours from end to end."""
-    from . import sdr
-    m = sdr.load()
-    if m is None:
-        return sdr.why()
-    from shack_sdr import _native
-    iq = np.frombuffer(_native.testsig_dab(frames=12, rate=m.dab.IQ_RATE), np.complex64)
-    host_ = m.Host(threads=1, cpu_max=1.0, ring_s=60.0)
-    try:
-        sid = host_.start("dab", {"service": "C221", "block": "11D"}, input="iq", rate=m.dab.IQ_RATE, pinned=True)
-        for i in range(0, len(iq), 204_800):
-            host_.feed(sid, iq[i:i + 204_800], 0.0, i)
-        import time
-        deadline = time.monotonic() + 20.0
-        heard, meta = 0, None
-        while time.monotonic() < deadline:
-            heard += sum(len(r["pcm"]) for r in host_.audio(sid, max_s=10.0))
-            meta = host_.status(sid).get("meta") or {}
-            if heard and meta.get("complete") and host_.status(sid)["stats"].get("fed", 0) >= len(iq):
-                break
-            time.sleep(0.1)
-    finally:
-        host_.close()
-    labels = sorted(sv.get("label") or "" for sv in (meta or {}).get("services") or [])
-    if labels != ["Shack DAB+ Data", "Shack MP2 Tone"]:
-        return f"the DAB decoder listed {labels!r}"
-    return "" if heard else "the DAB decoder found the ensemble but played nothing"
-
-
 def _construct(mode: str, freedv_mode: str, folder: str) -> str:
     """'' if the engine's decoder for `mode` constructs, else why not."""
     info, missing = modes_glue._entry(mode, freedv_mode)
@@ -221,12 +186,6 @@ def check(app: str) -> list[dict]:
                 except Exception as e:  # noqa: BLE001 - a crash is a failure to report, not to hide
                     why = f"{type(e).__name__}: {e}"
                 rows.append({"mode": label, "ok": not why, "required": required, "why": why})
-    if app == "ohsradio":
-        try:
-            why = _decodes_dab()
-        except Exception as e:  # noqa: BLE001 - a crash is a failure to report, not to hide
-            why = f"{type(e).__name__}: {e}"
-        rows.append({"mode": "dab", "ok": not why, "required": True, "why": why})
     return rows
 
 

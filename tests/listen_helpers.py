@@ -13,7 +13,6 @@ from ohsradio.devices.sim import HamSim
 from ohsradio.radio import Radio
 
 RSPDX_RANGE = (1e3, 2e9)       # SDRplay's figure for the RSPdx: 1 kHz to 2 GHz
-HEARD = float(Radio.OUT_RATE)  # what the sound card is given: 48 kHz since 23/10/2026
 
 
 class Station:
@@ -105,7 +104,7 @@ def make_listener(stations=(), receive_only=True, fs=2_400_000.0, **over):
     return r, audio, dev
 
 
-def tone_snr(a, hz, rate=HEARD):
+def tone_snr(a, hz, rate=12_000.0):
     """(frequency of the strongest bin 100 Hz-5 kHz, SNR dB of `hz` against
     the rest of that band)."""
     w = np.hanning(len(a))
@@ -117,7 +116,7 @@ def tone_snr(a, hz, rate=HEARD):
     return peak, 10 * math.log10(A[near].sum() / (A[band & ~near].sum() + 1e-30))
 
 
-def peak_hz(a, rate=HEARD):
+def peak_hz(a, rate=12_000.0):
     """The strongest frequency in `a`, to a fraction of a bin (a parabola
     through the peak bin and its neighbours on the log spectrum)."""
     A = np.log(np.abs(np.fft.rfft(a * np.hanning(len(a)))) + 1e-30)

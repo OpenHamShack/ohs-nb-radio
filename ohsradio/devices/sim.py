@@ -22,9 +22,6 @@ rig on: the stations fade in over a second or two).
   the V/U channels, and two **repeaters** per band - fictional callsigns
   (GB3SIM...), real UK channel pairs - each with a CTCSS tone, relaying
   their own users now and then.
-- **DAB**: one ensemble on Band III's 11D (222.064 MHz), the test
-  ensemble of shack_sdr's DAB transmitter model (simdab.py), so a DAB
-  session finds stations with no radio.
 - **Our own transmission** comes back, a local signal, at the dial it was
   sent on (half duplex: the engine mutes it, the scope shows it). A
   repeater whose input we transmit on with its tone (or a 1750 Hz
@@ -274,14 +271,6 @@ class HamSim(SimCore):
         self.rx_conv = None                   # converters in front of the simulated radio
         self.tx_conv = None
         self.tx_radio = 0.0                   # what the engine tuned the transmitter to (the IF)
-        # A DAB ensemble on 11D (simdab.py): Band III has no amateur band,
-        # so the stations above never reach it, and a DAB session needs
-        # something to find there. Made only when first in view.
-        self.dab = None
-        if self.signals:
-            from . import simdab
-            if simdab.available():
-                self.dab = simdab.DabEnsemble("11D")
         self._init_loop()
 
     # -- set-up -------------------------------------------------------------
@@ -546,12 +535,6 @@ class HamSim(SimCore):
                 amp = (self.rng.uniform(0.05, 0.4, k) * np.exp(2j * np.pi * self.rng.random(k))).astype(np.complex64)
                 for j in range(3):
                     y[at + j] += amp * np.float32(1.0 - 0.3 * j)
-        dab = self.dab
-        if dab is not None and dab.in_view(self.rx_if, self.fs):
-            dab.prepare(self.fs, background=self.realtime)
-            z = dab.take(self.n, len(y), self.fs, self.rx_if)
-            if z is not None:
-                y += z
         self._loopback(y, 0.0)
         self.n += m * g.L
         return y

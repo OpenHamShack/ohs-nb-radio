@@ -101,12 +101,6 @@ with REG.after("rxGain"):
             "nothing. Beacon and satellite segments are refused whatever this says.")
     _k("nearLondon", "bool", False, "setting", auth=True,
        help="The station is within 100 km of Charing Cross, where 431-432 MHz may not be used.")
-    _k("sMeterCal", "str", "", "setting",
-       help="S-meter calibration, per radio, band and antenna input, as one line of JSON "
-            "({\"pluto:ip:192.168.2.1|2m\": {\"offset\": -12.3, \"gain\": 40.0, \"when\": \"2026-10-23\"}, ...}): "
-            "held here, not in a window's own preferences, so the store web page and OpenHamShack Remote read the "
-            "same calibrated S-units as this window. Settings' Radio page writes and reads it with Calibrate…, "
-            "never by hand (ohscore/smeter_cal.py has the math).")
 
 # --- operating controls -------------------------------------------------------
 _o("vfo", default=145_500_000.0, lo=100_000.0, hi=6_000_000_000.0, help="Receive dial (on-air frequency).")

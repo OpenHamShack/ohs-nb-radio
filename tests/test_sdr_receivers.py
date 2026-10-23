@@ -217,28 +217,11 @@ class SdrplayWithoutTheApi(unittest.TestCase):
             self.assertIn("Install SDRplay's API to use this radio", str(cm.exception))
 
     def test_a_controller_says_ask_the_administrator(self):
-        # A controller that lends host libraries (SHACK_HOSTLIBS set) but
-        # whose administrator has not installed sdrplay-api.
-        a, b, c = self.no_api()
-        with a, b, c, mock.patch.object(host, "STORE", True), tempfile.TemporaryDirectory() as libs, \
-                mock.patch.dict(os.environ, {"SHACK_HOSTLIBS": libs}):
-            ok, why = availability("sdrplay")
-            self.assertFalse(ok)
-            self.assertIn("Ask your controller's administrator to install SDRplay's API", why)
-
-    def test_a_controller_too_old_for_host_libraries_says_update_it(self):
-        # No SHACK_HOSTLIBS in the store form: the controller ignored the
-        # manifest's host_libraries, and nothing an administrator installs
-        # would reach the app.
         a, b, c = self.no_api()
         with a, b, c, mock.patch.object(host, "STORE", True):
             ok, why = availability("sdrplay")
             self.assertFalse(ok)
-            self.assertEqual(why, "Update the controller to use SDRplay radios and DAB+")
-            dev = SdrplayDevice({}, 2_400_000.0)
-            with self.assertRaises(DeviceError) as cm:
-                dev.open()
-            self.assertEqual(str(cm.exception), "Update the controller to use SDRplay radios and DAB+")
+            self.assertIn("Ask your controller's administrator to install SDRplay's API", why)
 
     def test_an_rsp_offers_only_2_4_ms(self):
         dev = SdrplayDevice({}, 1_200_000.0)
@@ -361,64 +344,6 @@ class SdrplayAntennaThroughAFakeSource(unittest.TestCase):
             self.assertEqual(dev.src.antenna, "Antenna B")     # refused, so unchanged
         finally:
             dev.close()
-
-
-@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
-class SoapySdrplayWithoutSoapySDRPlay3(unittest.TestCase):
-    """`device` soapy with driver=sdrplay (ohs-box's RSPdx, set up when the
-    image carried SoapySDRPlay3) where SoapySDR has no SDRplay module -
-    Radio's store image since it stopped carrying SDRplay's files: the
-    same RSP through shack_sdr's binding, its soapyArgs understood."""
-
-    ARGS = "driver=sdrplay,serial=240309F070,rfgain_sel=4"
-
-    def make(self, cfg, module: bool):
-        from ohscore.devices import registry
-        with mock.patch("ohscore.devices.sdrsource.soapy_has_driver", lambda d: module):
-            return registry.DeviceRegistry().make({"device": "soapy", "sampleRate": 2_400_000, **cfg})
-
-    def test_without_the_module_the_rsp_opens_through_the_sdrplay_api(self):
-        with mock.patch("shack_sdr.sources.SdrplaySource", FakeSdrplaySource):
-            dev = self.make({"soapyArgs": self.ARGS, "soapyAntenna": "Antenna C"}, module=False)
-            dev.open()
-        try:
-            self.assertEqual(dev.kind, "soapy")              # the station's settings and claim are unchanged
-            self.assertFalse(dev.can_tx)
-            self.assertEqual((dev.src.serial, dev.src.lna_state, dev.src.antenna), ("240309F070", 4, "Antenna C"))
-            self.assertEqual(dev.fs, 2_400_000.0)
-            st = dev.status()
-            self.assertEqual((st["kind"], st["via"], st["antenna"]), ("soapy", "sdrplay-api", "Antenna C"))
-            dev.set_rx_if(222_064_000.0)
-            self.assertEqual(dev.src.centre, 222_064_000.0)
-            self.assertEqual(len(dev.read(512)), 512)
-        finally:
-            dev.close()
-
-    def test_without_the_api_it_names_sdrplays_api(self):
-        a, b, c = SdrplayWithoutTheApi.no_api(self)
-        with a, b, c, mock.patch.object(host, "STORE", True):
-            dev = self.make({"soapyArgs": self.ARGS}, module=False)
-            with self.assertRaises(DeviceError) as cm:
-                dev.open()
-        self.assertEqual(str(cm.exception), "Update the controller to use SDRplay radios and DAB+")
-
-    def test_with_the_module_soapysdr_opens_it_as_before(self):
-        from ohscore.devices.soapy import SoapyDevice
-        dev = self.make({"soapyArgs": self.ARGS}, module=True)
-        self.assertIsInstance(dev, SoapyDevice)
-
-    def test_another_soapysdr_driver_is_left_to_soapysdr(self):
-        from ohscore.devices.soapy import SoapyDevice
-        self.assertIsInstance(self.make({"soapyArgs": "driver=rtlsdr"}, module=False), SoapyDevice)
-
-    def test_the_module_is_recognised_by_its_file_name(self):
-        from ohscore.devices import sdrsource
-        fake = mock.MagicMock()
-        fake.listModules.return_value = ("/usr/lib/x86_64-linux-gnu/SoapySDR/modules0.8/librtlsdrSupport.so",)
-        with mock.patch.dict("sys.modules", {"SoapySDR": fake}):
-            self.assertFalse(sdrsource.soapy_has_driver("sdrplay"))
-            fake.listModules.return_value += ("/usr/lib/x86_64-linux-gnu/SoapySDR/modules0.8/libsdrPlaySupport.so",)
-            self.assertTrue(sdrsource.soapy_has_driver("sdrplay"))
 
 
 class StoreClaims(unittest.TestCase):

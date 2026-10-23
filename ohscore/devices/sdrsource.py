@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .. import host, hostlibs, sdr
+from .. import host, sdr
 from ..i18n.text import _
 from .base import Device, DeviceError
 
@@ -80,10 +80,6 @@ def _sentence(kind: str, reason: str, detail: str) -> str:
 
 
 def sdrplay_missing_sentence() -> str:
-    if hostlibs.controller_too_old():
-        # The controller mounts no host libraries at all (ohscore/hostlibs.py):
-        # nothing its administrator could install would reach this app.
-        return hostlibs.update_sentence()
     if host.STORE:
         return _("Ask your controller's administrator to install SDRplay's API (Controller › Optional "
                  "libraries) to use this radio.")
@@ -118,10 +114,6 @@ class SourceDevice(Device):
     can_tx = False
     tx_refusal = RECEIVE_ONLY
     RATES: tuple[float, ...] = ()
-    # Which shack_sdr source opens it, for the sentences (_sentence): the
-    # same as `kind` except where another device setting reaches the same
-    # receiver (SoapySdrplayDevice, kind "soapy").
-    source = ""
 
     def __init__(self, cfg: dict, fs: float):
         self.cfg = dict(cfg or {})
@@ -162,7 +154,7 @@ class SourceDevice(Device):
                     src.close()
                 except Exception:  # noqa: BLE001 - tidying up a device that never finished opening
                     pass
-            raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
+            raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
 
     def _saved_antenna(self) -> str:
         return str(self.cfg.get("soapyAntenna", "") or "").strip()
@@ -200,7 +192,7 @@ class SourceDevice(Device):
         try:
             self.src.set_antenna(name)
         except self._error as e:
-            raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
+            raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
 
     def set_rx_if(self, hz: float) -> None:
         self.rx_if = float(hz)
@@ -209,7 +201,7 @@ class SourceDevice(Device):
         try:
             self.src.set_centre(hz)
         except self._error as e:
-            raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
+            raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
 
     def set_rx_gain(self, mode: str, db: float) -> None:
         if self.src is None:
@@ -217,16 +209,16 @@ class SourceDevice(Device):
         try:
             self.src.set_gain(self._gain(mode, db))
         except self._error as e:
-            raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
+            raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
 
     def read(self, n: int) -> np.ndarray:
         while len(self.left) < n:
             try:
                 block = self.src.read()
             except self._error as e:
-                raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
+                raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
             if block is None:
-                raise DeviceError(_sentence(self.source, "read-failed", ""))
+                raise DeviceError(_sentence(self.kind, "read-failed", ""))
             self.lost += block.dropped
             self.left = np.concatenate([self.left, block.samples])
         out, self.left = self.left[:n], self.left[n:]
@@ -253,7 +245,7 @@ class SourceDevice(Device):
 
 
 class RtlSdrDevice(SourceDevice):
-    kind = source = "rtlsdr"
+    kind = "rtlsdr"
     RATES = (1_200_000.0, 2_400_000.0)
 
     def _make(self):
@@ -264,7 +256,7 @@ class RtlSdrDevice(SourceDevice):
 
 
 class SdrplayDevice(SourceDevice):
-    kind = source = "sdrplay"
+    kind = "sdrplay"
     RATES = (2_400_000.0,)
     GR_RANGE = (20.0, 59.0)
 
@@ -280,69 +272,3 @@ class SdrplayDevice(SourceDevice):
         return SdrplaySource(self.rx_if or 145_000_000.0, self.fs, gain, serial=serial,
                              lna_state=int(self.cfg.get("sdrplayLna", 4)),
                              antenna=self._saved_antenna() or None)
-
-
-def soapy_has_driver(driver: str) -> bool:
-    """Whether SoapySDR here has a module for `driver` (looked for by its
-    file name, never loaded: loading SoapySDRPlay3 starts talking to
-    SDRplay's service)."""
-    try:
-        import SoapySDR
-        modules = [str(p) for p in SoapySDR.listModules()]
-    except Exception:  # noqa: BLE001 - no SoapySDR, or one too old to list: no module
-        return False
-    want = {"sdrplay": "sdrplaysupport"}.get(driver, driver.lower())
-    return any(want in m.rsplit("/", 1)[-1].lower() for m in modules)
-
-
-def soapy_args(args: str) -> dict[str, str]:
-    """soapyArgs ("driver=sdrplay,serial=X,rfgain_sel=4") as a dict."""
-    out = {}
-    for part in str(args or "").split(","):
-        k, eq, v = part.strip().partition("=")
-        if eq and k:
-            out[k.strip()] = v.strip()
-    return out
-
-
-class SoapySdrplayDevice(SdrplayDevice):
-    """`device` soapy with `driver=sdrplay`, where SoapySDR has no SDRplay
-    module: the same RSP through shack_sdr's own binding to SDRplay's API.
-
-    Why: SoapySDRPlay3 is built against SDRplay's headers, which come only
-    inside SDRplay's installer, and Radio's store image no longer carries
-    that installer, its API or anything built from it (RADIO-SDR-PLAN 6.3,
-    Brian 22/10/2026). The API itself now comes from the controller's host
-    library, which stages the library and the service but no headers, and
-    the image has no compiler to build against them if it did. So the
-    soapy path cannot keep SoapySDRPlay3; instead a station configured as
-    ohs-box is (device soapy, soapyArgs driver=sdrplay,rfgain_sel=4,
-    soapyAntenna "Antenna C") opens the RSP here with nothing changed in its
-    settings: `serial` picks the RSP as sdrSerial does, `rfgain_sel` is the
-    LNA state (SoapySDRPlay3's name for the same field sdrplayLna sets),
-    and the antenna names are SoapySDRPlay3's own (shack_sdr README). Its
-    kind stays "soapy", so the broker's claim, the settings and every
-    sentence naming the radio are the ones the station already has; its
-    status says which path opened it (`via`).
-
-    Where SoapySDR does have the module (a desktop with SoapySDRPlay3
-    installed, an image built with SHACK_STORE_DROP_SDRPLAY=0) SoapyDevice
-    opens it as before (ohscore/devices/registry.py)."""
-
-    kind = "soapy"
-
-    def __init__(self, cfg: dict, fs: float):
-        cfg = dict(cfg or {})
-        a = soapy_args(cfg.get("soapyArgs", ""))
-        if a.get("serial"):
-            cfg["sdrSerial"] = a["serial"]
-        try:
-            cfg["sdrplayLna"] = int(a["rfgain_sel"])
-        except (KeyError, ValueError):
-            pass
-        super().__init__(cfg, fs)
-
-    def status(self) -> dict:
-        st = super().status()
-        st.update(via="sdrplay-api", args=str(self.cfg.get("soapyArgs", "")))
-        return st

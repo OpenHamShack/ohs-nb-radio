@@ -241,11 +241,7 @@ ADDED_SINCE = {"txRadio", "civPort", "civBaud", "civAddress", "rigctldHost", "ri
                "decodersMax", "decodeCpuMax", "decoderSessions", "decoders",
                # The receive passband in state (23/10/2026, Engine._rx_passband):
                # wide FM's 180 kHz, which no client could know, for Remote's overlay.
-               "rxFilterLo", "rxFilterHi",
-               # Who holds the receiver (23/10/2026, Engine.hold_receiver: a DAB
-               # session in Radio; always {} in NB) and the controller's host
-               # libraries (ohscore/hostlibs.py).
-               "rxOwner", "hostLibs"}
+               "rxFilterLo", "rxFilterHi"}
 # Keys removed since, deliberately: the LNB's LO and the IC-9700's
 # upconverter LO and side became converter choices (07/10; ohsnb/config.py
 # migrates them - upconverterLo and upconverterSide had been added after

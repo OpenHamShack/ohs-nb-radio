@@ -20,7 +20,7 @@ from ohsradio import server as ham_server
 from ohsradio.radio import Radio
 
 from ham_helpers import close, pump
-from listen_helpers import HEARD, ListeningSim, Station, make_listener, peak_hz, tone_snr
+from listen_helpers import ListeningSim, Station, make_listener, peak_hz, tone_snr
 from test_server import SECRET, ServerTest
 
 # (name, lowest dial, highest dial, mode, step) - the contract's table. DAB
@@ -94,8 +94,8 @@ class EveryAreaIsHeard(unittest.TestCase):
                 settle(self.r)
                 pump(self.r, 0.5)
                 self.audio.take()
-                pump(self.r, 30, until=lambda: sum(len(c) for c in self.audio.chunks) >= 1.5 * HEARD)
-                a = self.audio.take()[4800:]
+                pump(self.r, 30, until=lambda: sum(len(c) for c in self.audio.chunks) >= 18_000)
+                a = self.audio.take()[1200:]
                 peak, snr = tone_snr(a, 1000.0)
                 self.assertAlmostEqual(peak, 1000.0, delta=10)
                 self.assertGreater(snr, 20.0)
@@ -170,8 +170,8 @@ class WholeHzDials(unittest.TestCase):
         pump(r, 0.5)
         self.assertEqual(r.vfo_ch.freq + r.centre, AIRBAND_DIAL)        # the channel the engine cuts
         audio.take()
-        pump(r, 60, until=lambda: sum(len(c) for c in audio.chunks) >= HEARD * 8)
-        a = audio.take()[4800:]
+        pump(r, 60, until=lambda: sum(len(c) for c in audio.chunks) >= 12_000 * 8)
+        a = audio.take()[1200:]
         # The carrier's line, to a fraction of the 0.13 Hz bins of 8 s.
         self.assertAlmostEqual(peak_hz(a), 1000.0, delta=0.5)
         self.assertEqual(r.state()["vfo"], AIRBAND_DIAL)

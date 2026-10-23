@@ -11,10 +11,7 @@
 # PortAudio, no sound card: audio goes over the API (ohscore/server/audio.py).
 
 # >>> sdrplay-in-image (tools/build-store.sh deletes from here to the
-# matching "<<<" line unless SHACK_STORE_DROP_SDRPLAY=0: RADIO-SDR-PLAN 6.3.
-# Since 23/10/2026 a Radio image carries nothing of SDRplay's - the API and
-# its service come from the controller's host library sdrplay-api - so this
-# stage is built only for an image asked for the old way.)
+# matching "<<<" line when SHACK_STORE_DROP_SDRPLAY=1: RADIO-SDR-PLAN 6.3)
 # The SDRplay receivers (an RSPdx on ohs-box, 12/10/2026), through SoapySDR
 # like any receive-only SDR (ohscore/devices/soapy.py). Debian has SoapySDR
 # but neither SDRplay's API nor SoapySDRPlay3, so this stage installs the
@@ -61,15 +58,12 @@ FROM docker.io/library/debian:13-slim
 # spin on cores the other apps use.
 # librtlsdr0: the RTL-SDR receiver (device rtlsdr, shack_sdr's ctypes
 # binding); its udev rule is the controller's (Host -> Hardware), not this
-# image's. SDRplay's API is never apt's: the controller's host library
-# mounted at /opt/hostlibs/sdrplay-api (entrypoint.sh), or in an image built
-# the old way the sdrplay-in-image blocks' copy. python3-soapysdr for the
-# soapy device: with no SDRplay module in the image, `device` soapy with
-# driver=sdrplay opens the RSP through shack_sdr's binding instead
-# (ohscore/devices/sdrsource.py SoapySdrplayDevice), and SoapySDR is what
-# says the module is absent; soapysdr-tools for SoapySDRUtil, which is how
-# to see from a shell on the controller what the container can find
-# (podman exec ... SoapySDRUtil --find).
+# image's. SDRplay's API is never apt's: in the image while the
+# sdrplay-in-image blocks are (above), and once they go, the controller's
+# host library mounted at /opt/hostlibs/sdrplay-api (entrypoint.sh).
+# python3-soapysdr and the SDRplay module built above, for the soapy device;
+# soapysdr-tools for SoapySDRUtil, which is how to see from a shell on the
+# controller what the container can find (podman exec ... SoapySDRUtil --find).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-numpy \
@@ -94,8 +88,8 @@ RUN ldconfig && SoapySDRUtil --info | grep -q sdrPlaySupport
 # unpacked into site-packages (no pip in the image; a wheel is a zip with
 # nothing to run at install).
 #
-# shack-sdr (the decoder host, RTTY's and DAB's decoders, the codec loader,
-# the RTL-SDR and SDRplay sources) is the one with native code: the wheel for
+# shack-sdr (the decoder host and RTTY's decoder, the codec loader, the
+# RTL-SDR and SDRplay sources) is the one with native code: the wheel for
 # this architecture, checked against tools/vendor/shack-sdr.lock.
 #
 # Then ohsdigi, the one decoder for FT8, FT4, Q65, JS8 and HSmodem (BETA-PLAN D9): the
@@ -124,7 +118,7 @@ RUN cd /tmp/vendor \
     && want="$(sed -n "s/^shack-sdr==.*--hash=sha256:\([0-9a-f]*\).*_${arch}$/\1/p" shack-sdr.lock)" \
     && echo "$want  $f" | sha256sum -c - \
     && python3 -m zipfile -e "$f" "$site" \
-    && python3 -c "import shack_sdr; assert {'rtty', 'dab'} <= {e['id'] for e in shack_sdr.catalogue()}" \
+    && python3 -c "import shack_sdr; assert any(e['id'] == 'rtty' for e in shack_sdr.catalogue())" \
     && f="$(ls ohs_ohsdigi-*-manylinux_*_${arch}.whl)" \
     && want="$(sed -n "s/^ohs-ohsdigi==.*--hash=sha256:\([0-9a-f]*\).*# ${arch}$/\1/p" ohsdigi.lock)" \
     && echo "$want  $f" | sha256sum -c - \
@@ -156,8 +150,7 @@ ENV SHACK_FORM=store \
 USER shack
 WORKDIR /opt/shack-radio
 # The image proves, as the user it runs as, that every decoder the app
-# offers loads, that FT8 and FT4 decode a slot and that a DAB ensemble is
-# found and its old-DAB station heard, before it can be
+# offers loads and that FT8 and FT4 decode a slot, before it can be
 # packaged: 0.1.10-beta.1 shipped with no FT8 decoder and nothing said so.
 # tools/store-check.sh runs the same check against a built image.
 RUN python3 -m ohscore.selftest ohsradio

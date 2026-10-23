@@ -48,14 +48,6 @@ openhamshack:
   release_request: /api/shack/release
   busy: /api/shack/busy
   broker_devices: [pluto, libresdr, hl2, sdrplay, rtlsdr]
-  # What this image may not carry, from the controller's host instead
-  # (RADIO-SDR-PLAN 5.6, 6.3): faad2 for DAB+ sound, SDRplay's API (its
-  # library and service) for an RSP. The platform mounts each at
-  # /opt/hostlibs/<name> read-only and sets SHACK_HOSTLIBS=/opt/hostlibs;
-  # its administrator installs them (Controller > Optional libraries). A
-  # controller older than platform beta.9 ignores the key: the app then
-  # says "Update the controller to use SDRplay radios and DAB+".
-  host_libraries: [faad2, sdrplay-api]
   actions: pad-actions.json
   controller_layout: pad-layout.json
 
