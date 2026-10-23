@@ -937,6 +937,11 @@ msgstr ""
 msgid "Voice memory {number} is empty: record it first (Radio › Voice memories…)"
 msgstr ""
 
+#: ohscore/dsp/wfm.py:92
+#, python-brace-format
+msgid "Wide FM needs a channel of at least {least:g} S/s in whole multiples of {audio:g} S/s; {rate:g} S/s was given"
+msgstr ""
+
 #: ohscore/licences/__init__.py:295
 msgid "Your licence can have at most 100 segments"
 msgstr ""
