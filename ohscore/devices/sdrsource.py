@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .. import host, sdr
+from .. import host, hostlibs, sdr
 from ..i18n.text import _
 from .base import Device, DeviceError
 
@@ -80,6 +80,10 @@ def _sentence(kind: str, reason: str, detail: str) -> str:
 
 
 def sdrplay_missing_sentence() -> str:
+    if hostlibs.controller_too_old():
+        # The controller mounts no host libraries at all (ohscore/hostlibs.py):
+        # nothing its administrator could install would reach this app.
+        return hostlibs.update_sentence()
     if host.STORE:
         return _("Ask your controller's administrator to install SDRplay's API (Controller › Optional "
                  "libraries) to use this radio.")
@@ -272,3 +276,69 @@ class SdrplayDevice(SourceDevice):
         return SdrplaySource(self.rx_if or 145_000_000.0, self.fs, gain, serial=serial,
                              lna_state=int(self.cfg.get("sdrplayLna", 4)),
                              antenna=self._saved_antenna() or None)
+
+
+def soapy_has_driver(driver: str) -> bool:
+    """Whether SoapySDR here has a module for `driver` (looked for by its
+    file name, never loaded: loading SoapySDRPlay3 starts talking to
+    SDRplay's service)."""
+    try:
+        import SoapySDR
+        modules = [str(p) for p in SoapySDR.listModules()]
+    except Exception:  # noqa: BLE001 - no SoapySDR, or one too old to list: no module
+        return False
+    want = {"sdrplay": "sdrplaysupport"}.get(driver, driver.lower())
+    return any(want in m.rsplit("/", 1)[-1].lower() for m in modules)
+
+
+def soapy_args(args: str) -> dict[str, str]:
+    """soapyArgs ("driver=sdrplay,serial=X,rfgain_sel=4") as a dict."""
+    out = {}
+    for part in str(args or "").split(","):
+        k, eq, v = part.strip().partition("=")
+        if eq and k:
+            out[k.strip()] = v.strip()
+    return out
+
+
+class SoapySdrplayDevice(SdrplayDevice):
+    """`device` soapy with `driver=sdrplay`, where SoapySDR has no SDRplay
+    module: the same RSP through shack_sdr's own binding to SDRplay's API.
+
+    Why: SoapySDRPlay3 is built against SDRplay's headers, which come only
+    inside SDRplay's installer, and Radio's store image no longer carries
+    that installer, its API or anything built from it (RADIO-SDR-PLAN 6.3,
+    Brian 22/10/2026). The API itself now comes from the controller's host
+    library, which stages the library and the service but no headers, and
+    the image has no compiler to build against them if it did. So the
+    soapy path cannot keep SoapySDRPlay3; instead a station configured as
+    ohs-box is (device soapy, soapyArgs driver=sdrplay,rfgain_sel=4,
+    soapyAntenna "Antenna C") opens the RSP here with nothing changed in its
+    settings: `serial` picks the RSP as sdrSerial does, `rfgain_sel` is the
+    LNA state (SoapySDRPlay3's name for the same field sdrplayLna sets),
+    and the antenna names are SoapySDRPlay3's own (shack_sdr README). Its
+    kind stays "soapy", so the broker's claim, the settings and every
+    sentence naming the radio are the ones the station already has; its
+    status says which path opened it (`via`).
+
+    Where SoapySDR does have the module (a desktop with SoapySDRPlay3
+    installed, an image built with SHACK_STORE_DROP_SDRPLAY=0) SoapyDevice
+    opens it as before (ohscore/devices/registry.py)."""
+
+    kind = "soapy"
+
+    def __init__(self, cfg: dict, fs: float):
+        cfg = dict(cfg or {})
+        a = soapy_args(cfg.get("soapyArgs", ""))
+        if a.get("serial"):
+            cfg["sdrSerial"] = a["serial"]
+        try:
+            cfg["sdrplayLna"] = int(a["rfgain_sel"])
+        except (KeyError, ValueError):
+            pass
+        super().__init__(cfg, fs)
+
+    def status(self) -> dict:
+        st = super().status()
+        st.update(via="sdrplay-api", args=str(self.cfg.get("soapyArgs", "")))
+        return st

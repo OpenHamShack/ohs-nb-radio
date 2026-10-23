@@ -26,6 +26,13 @@ def _pluto(cfg: dict, fs: float) -> Device:
 
 
 def _soapy(cfg: dict, fs: float) -> Device:
+    from .sdrsource import SoapySdrplayDevice, soapy_args, soapy_has_driver
+    # An SDRplay RSP where SoapySDR has no SDRplay module (Radio's store
+    # image since it stopped carrying SDRplay's files): the same RSP through
+    # shack_sdr's binding to the API, its soapyArgs understood
+    # (sdrsource.SoapySdrplayDevice says why).
+    if soapy_args(cfg.get("soapyArgs", "")).get("driver") == "sdrplay" and not soapy_has_driver("sdrplay"):
+        return SoapySdrplayDevice(cfg, fs)
     from .soapy import SoapyDevice
     return SoapyDevice(cfg.get("soapyArgs", ""), fs, cfg)
 
