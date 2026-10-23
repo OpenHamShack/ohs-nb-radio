@@ -2,8 +2,8 @@
 sound card, api/audio/rx and the recordings get, and what stays at 12 kHz.
 
 - **Heard:** every mode at 48 kHz, mono; wide FM flat to 15 kHz; stereo
-  wherever the WFM stereo hook has the pilot (a stand-in decoder here:
-  shack_sdr's has not landed).
+  while shack_sdr's receiver has a station's pilot (simfm.py's stereo
+  station: a tone in L, silence in R).
 - **Not changed:** the decoders get the same 12 kHz audio as before, FT8
   decodes from the simulated band, and a voice over still takes 12 kHz
   microphone blocks and gives the monitor 12 kHz.
@@ -45,16 +45,18 @@ from test_server import SECRET
 BROADCAST = 97_700_000.0
 
 
-class FakeStereo:
-    """Stands in for shack_sdr's stereo decoder at the WfmDemod hook: the
-    composite decimated to 48 kHz in L, silence in R - a shape, not a
-    decoder, so a test can tell the two sides apart."""
+def stereo_on_air(dev):
+    """A stereo station in place of the mono one on BROADCAST: shack_sdr's
+    test transmitter with its pilot, 1 kHz in L and nothing in R, so a test
+    can tell the two sides apart. Until 23/10/2026 a stand-in decoder at
+    WfmDemod's stereo hook did this; the real receiver needs a real pilot."""
+    from ohsradio.devices.simfm import FmBand, FmStation
+    dev.stations = []
+    dev.fm = FmBand([FmStation(BROADCAST, -20.0, None, stereo=True, left_hz=1000.0, right_hz=0.0)])
 
-    pilot = True
 
-    def __call__(self, mpx):
-        n = len(mpx) // 5
-        return np.stack([np.asarray(mpx[::5][:n], np.float32) * 0.5, np.zeros(n, np.float32)], axis=1)
+def rms(a) -> float:
+    return float(np.sqrt(np.mean(np.asarray(a, np.float64) ** 2)))
 
 
 class Radio12(Radio):
@@ -98,15 +100,15 @@ class Heard(unittest.TestCase):
         self.assertAlmostEqual(peak_hz(audio.take()[4800:]), 12_000.0, delta=2)
 
     def test_stereo_reaches_the_sound_card_while_the_decoder_has_the_pilot(self):
-        r, audio, _dev = make_listener([Station(BROADCAST, "wfm")], vfo=BROADCAST, mode="wfm")
+        r, audio, dev = make_listener([Station(BROADCAST, "wfm")], vfo=BROADCAST, mode="wfm")
         self.addCleanup(close, r)
+        stereo_on_air(dev)
         r.start()
-        r.wfmdemod.stereo = FakeStereo()
-        pump(r, 5, until=lambda: any(c.ndim == 2 for c in audio.chunks))
-        c = [c for c in audio.chunks if c.ndim == 2][-1]
+        pump(r, 10, until=lambda: sum(len(c) for c in audio.chunks if c.ndim == 2) > 48_000)
+        c = [c for c in audio.chunks if c.ndim == 2][-1]            # past the blend's first moments
         self.assertEqual(c.shape[1], 2)
-        self.assertGreater(float(np.abs(c[:, 0]).max()), 0.0)
-        self.assertEqual(float(np.abs(c[:, 1]).max()), 0.0)
+        self.assertGreater(rms(c[:, 0]), 0.05)
+        self.assertLess(rms(c[:, 1]), rms(c[:, 0]) / 30)          # R is the silent side
         self.assertEqual(r.audio_channels(), 2)
         r.set(mode="am")
         self.assertEqual(r.audio_channels(), 1)
@@ -320,8 +322,8 @@ class StoreForm(unittest.TestCase):
         cfg = {"device": "sim", "audioBackend": "null", "simRealtime": False, "simSeed": 7, "simHourUtc": 12.0,
                "simSignals": False, "callsign": "GM4BRI", "licenceClass": "full", "vfo": BROADCAST, "mode": "wfm"}
         self.audio = StreamAudio(realtime=False)
-        self.radio = Radio(cfg, persist=False, data_dir=tmp.name, audio=self.audio,
-                           device=ListeningSim(dict(cfg), 2_400_000.0, [Station(BROADCAST, "wfm")]))
+        self.dev = ListeningSim(dict(cfg), 2_400_000.0, [Station(BROADCAST, "wfm")])
+        self.radio = Radio(cfg, persist=False, data_dir=tmp.name, audio=self.audio, device=self.dev)
         self.srv = Server(self.radio, ham_server.info("9.9.9"), self.audio, secret=SECRET)
         httpd = self.srv.serve("127.0.0.1", 0)
         self.port = httpd.server_address[1]
@@ -377,13 +379,13 @@ class StoreForm(unittest.TestCase):
         np.testing.assert_array_equal(pcm[:, 0], pcm[:, 1])
 
     def test_two_channels_in_stereo_keep_the_sides_apart_and_mono_is_their_average(self):
+        stereo_on_air(self.dev)
         self.start()
-        self.radio.wfmdemod.stereo = FakeStereo()
         self.assertTrue(self.wait(lambda: self.req("GET", "/api/status", level="view")[1]["audio"]["stereo"]))
         _ct, _fmt, lr = self.listen("?channels=2", nbytes=96_000)
         lr = lr[-6000:]
-        self.assertTrue(lr[:, 0].any())
-        self.assertFalse(lr[:, 1].any())
+        self.assertGreater(rms(lr[:, 0]), 1000.0)
+        self.assertLess(rms(lr[:, 1]), rms(lr[:, 0]) / 30)
         _ct, fmt, m = self.listen(nbytes=48_000)
         self.assertEqual(fmt["channels"], 1)
         # Half of L (R is silence), so never as loud as L alone.
@@ -406,7 +408,7 @@ class StoreForm(unittest.TestCase):
         self.assertEqual((e["sampleRate"], e["channels"]), (48_000, 1))
         self.assertEqual(flac_rate_and_channels(Path(self.radio.recordings_dir(), e["parts"]["data"]["name"])),
                          (48_000, 1))
-        self.radio.wfmdemod.stereo = FakeStereo()
+        stereo_on_air(self.dev)
         self.assertTrue(self.wait(lambda: self.radio.audio_channels() == 2))
         e = self.record()
         self.assertEqual((e["sampleRate"], e["channels"]), (48_000, 2))

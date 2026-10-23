@@ -40,12 +40,22 @@ The path, each step chosen to stay vectorised over a block:
 - **The decoders' 12 kHz:** every decoder and the engine's timing take
   12 kHz mono (Engine docstring), so `for_decoders` brings the heard audio
   down by 4 with multirate's lowpass (flat to 5 kHz), as it was before.
-- **Stereo plugs in at `stereo`** (shack_sdr's pilot PLL and matrix, when
-  it comes): a callable taking the composite at the channel rate, as
-  `composite()` gives it, and returning (n, 2) float32 L and R at
-  AUDIO_RATE, de-emphasised, at LEVEL for full deviation, with `pilot`
-  saying whether it locked. While it is None, or has no pilot, the mono
-  path here is what is heard; `channels` says which.
+- **Stereo plugs in at `stereo`**: a callable taking the composite at the
+  channel rate, as `composite()` gives it, and returning (n, 2) float32 L
+  and R at AUDIO_RATE, de-emphasised, at LEVEL for full deviation, with
+  `pilot` saying whether it locked. While it is None, or has no pilot, the
+  mono path here is what is heard; `channels` says which.
+
+**Since 23/10/2026 Radio hears shack_sdr's receiver instead** (`StereoWfm`,
+chosen by `make_demod`): ohs-libs' `wfm.Receiver` takes the same channel
+IQ and gives 48 kHz stereo with blend and RDS, all in Rust off the GIL, and
+was measured against this module's numbers (README "Broadcast FM"). The
+pilot PLL and RDS are loops with memory, so unlike this module it needs
+`reset()` on every retune. This module stays as the fallback for an
+installation without the shack-sdr wheel (a package built for no platform
+in particular), where wide FM is still mono and has no RDS, rather than
+no wide FM at all; `stereo` above is how the receiver was first meant to
+plug in, kept because nothing else needs changing for it.
 
 No squelch: a broadcast listener wants the station, and the noise
 between stations is how an operator knows the dial is between stations.
@@ -176,7 +186,8 @@ class WfmDemod:
         self.prev = x[-1]
         return (np.angle(x * np.conj(prevs)).astype(np.float32) * self.scale).astype(np.float32)
 
-    def __call__(self, x: np.ndarray) -> tuple[np.ndarray, float]:
+    def __call__(self, x: np.ndarray, t0: float | None = None) -> tuple[np.ndarray, float]:
+        # t0 (the block's UTC) is StereoWfm's, for RDS times; nothing here needs it.
         x = np.asarray(x, np.complex64)
         if not len(x):
             return np.zeros(0, np.float32), -200.0
@@ -204,3 +215,89 @@ class WfmDemod:
         if a.ndim == 2:
             a = a.mean(axis=1, dtype=np.float32)
         return self.decode_down(a.astype(np.complex64)).real.astype(np.float32)
+
+    def reset(self) -> None:
+        """A retune: nothing here remembers the last station."""
+
+    def rds(self) -> None:
+        """No RDS without shack_sdr."""
+        return None
+
+    @property
+    def stereo_on(self) -> bool:
+        return self.channels == 2
+
+
+class StereoWfm:
+    """shack_sdr's broadcast FM receiver (`wfm.Receiver`) behind WfmDemod's
+    interface: channel IQ at `rate` in, 48 kHz audio out - (n, 2) while the
+    station is heard in stereo, else mono (n,), so a mono station plays and
+    records exactly as WfmDemod's did - with its level for the S-meter,
+    plus RDS and the stereo state."""
+
+    def __init__(self, m, rate: float, tau_us: float = 50.0):
+        if not can_receive(rate):
+            raise ValueError(_("Wide FM needs a channel of at least {least:g} S/s in whole multiples of "
+                               "{audio:g} S/s; {rate:g} S/s was given").format(least=WFM_RATE, audio=AUDIO_RATE,
+                                                                               rate=rate))
+        self.rate = float(rate)
+        self.tau_us = float(tau_us)
+        self.rx = m.wfm.Receiver(rate=self.rate, deemphasis_us=self.tau_us, audio_rate=int(AUDIO_RATE), channels=2)
+        self.decode_down = Decimator(int(AUDIO_RATE // DECODE_RATE))
+        self.stereo_on = False
+
+    def set_deemphasis(self, tau_us: float) -> None:
+        tau_us = float(tau_us)
+        if tau_us != self.tau_us:
+            self.tau_us = tau_us
+            self.rx.set_deemphasis(tau_us)
+
+    def reset(self) -> None:
+        self.rx.reset()
+        self.stereo_on = False
+
+    def __call__(self, x: np.ndarray, t0: float | None = None) -> tuple[np.ndarray, float]:
+        x = np.asarray(x, np.complex64)
+        if not len(x):
+            return np.zeros(0, np.float32), -200.0
+        level = 10 * math.log10(float(np.mean(np.abs(x) ** 2)) + 1e-20)
+        lr = self.rx.process(x, t0)
+        # The receiver's own flag (pilot held 150 ms, its hysteresis), not
+        # the blend: a station blended to mono on a weak signal is still a
+        # stereo station, and the badge and api/status say so.
+        self.stereo_on = bool(self.rx.status().get("stereo"))
+        if self.stereo_on:
+            return np.ascontiguousarray(lr, np.float32), level
+        # Without the pilot the matrix gives L = R: the mono path's shape.
+        return np.ascontiguousarray(lr[:, 0], np.float32), level
+
+    @property
+    def channels(self) -> int:
+        return 2 if self.stereo_on else 1
+
+    def rds(self) -> dict | None:
+        """The receiver's RDS (shack_sdr README), or None until it has
+        decoded a programme identification: a stereo flag alone is not RDS."""
+        d = self.rx.rds()
+        if d.get("pi") is None:
+            return None
+        return d
+
+    def status(self) -> dict:
+        return self.rx.status()
+
+    def for_decoders(self, heard: np.ndarray) -> np.ndarray:
+        a = np.asarray(heard, np.float32)
+        if a.ndim == 2:
+            a = a.mean(axis=1, dtype=np.float32)
+        return self.decode_down(a.astype(np.complex64)).real.astype(np.float32)
+
+
+def make_demod(rate: float, tau_us: float = 50.0):
+    """The wide FM demodulator Radio uses: shack_sdr's stereo receiver with
+    RDS where this installation has the wheel, else WfmDemod (mono)."""
+    from .. import sdr
+    m = sdr.load()
+    if m is not None and getattr(m, "wfm", None) is not None:
+        return StereoWfm(m, rate, tau_us)
+    return WfmDemod(rate, tau_us)

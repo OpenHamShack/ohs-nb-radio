@@ -35,8 +35,11 @@ calls (docs/ham/DESIGN-HAM.md sections 3-6):
   tone squelch and the CTCSS tone heard; modulated with CTCSS and the
   1750 Hz toneburst (ohscore/dsp/fm.py); AM transmits;
 - **wide FM** (broadcast listening): its own 180 kHz channel of at least
-  240 kS/s (ohscore/dsp/wfm.py), refused on a receiver too slow to hold
-  one (a Hermes-Lite 2 below 384 kS/s), and never transmitted;
+  240 kS/s, refused on a receiver too slow to hold one (a Hermes-Lite 2
+  below 384 kS/s), and never transmitted; heard in stereo with RDS
+  through shack_sdr's receiver (ohscore/dsp/wfm.py StereoWfm), which
+  starts again on every retune, its RDS in `rds` (state) and its stereo
+  flag on the meter;
 - **half duplex**: receive audio is muted while keyed;
 - **band stacks**: three registers per band, recalled and cycled by
   band(); the log's ADIF says which band from the frequency;
@@ -197,6 +200,11 @@ class Radio(Engine):
         self.swr_avg = None
         self.ctcss_heard = 0.0
         self.wfm_ch = self.wfmdemod = None      # built at start when the rate allows (_start_consumers)
+        # The receive dial wide FM last heard (None: start again before the
+        # next block) and the RDS revision last published: the receive
+        # thread's own, so a retune resets the receiver exactly once.
+        self._wfm_dial: float | None = None
+        self._rds_rev = -1
         self.over_count = 0
         self.st["seqState"] = "rx"
         # The converter the receiver works through now (with the centre),
@@ -569,6 +577,12 @@ class Radio(Engine):
             self._drive_device(self.dev, self._over_drive())
         if self.running and any(k in changed for k in ("vfo", "rit", "ritOn", "rptReverse", "rptShift", "mode",
                                                        "rptOffsetHz")):
+            # The last station's RDS goes the moment the dial does, not a
+            # block later: a client reading the state after its own set()
+            # must never see the old name against the new frequency. The
+            # receive thread resets the receiver itself (_demodulate_wfm).
+            if s.get("rds") is not None:
+                self._status(rds=None)
             self._maybe_recentre()
         if any(k in changed for k in ("seqDelayMs",)) and self.seq is not None:
             self.seq.delay = s["seqDelayMs"] / 1000.0
@@ -619,7 +633,8 @@ class Radio(Engine):
         wd = g.decimation_for(wfm.WFM_RATE)
         if wfm.can_receive(g.fs / wd):
             self.wfm_ch = Channel(g, wd, cutoff=wfm.HALF_WIDTH)
-            self.wfmdemod = wfm.WfmDemod(self.wfm_ch.rate, self.st["wfmDeemphasis"])
+            self.wfmdemod = wfm.make_demod(self.wfm_ch.rate, self.st["wfmDeemphasis"])
+            self._wfm_dial = None
         else:
             self.wfm_ch = self.wfmdemod = None
             if self.st["mode"] == "wfm":
@@ -657,6 +672,10 @@ class Radio(Engine):
             fn(conv)
 
     def _held_retune(self) -> None:
+        # Whoever takes or gives back the receiver retunes it: what wide FM
+        # had decoded belongs to the station it was on.
+        self._wfm_dial = None
+        self._status(rds=None)
         if self.running:
             self._maybe_recentre()
 
@@ -777,6 +796,10 @@ class Radio(Engine):
     def _demodulate(self, X, starts, rx_dial: float):
         if self.st["mode"] == "wfm":
             return self._demodulate_wfm(X, starts, rx_dial)
+        if self.st.get("rds") is not None or self._wfm_dial is not None:
+            # Out of wide FM: its station's RDS goes, and coming back is a retune.
+            self._wfm_dial = None
+            self._status(rds=None)
         if self.st["mode"] != "fm":
             return super()._demodulate(X, starts, rx_dial)
         self.fm_ch.set_freq(self._off(rx_dial))
@@ -795,19 +818,53 @@ class Radio(Engine):
             # and the start's toast say why.
             n = X.shape[0] * (self.geo.L // self.geo.decimation_for(AUDIO_RATE))
             return np.zeros(n, np.float32), -200.0
+        d = self.wfmdemod
+        if rx_dial != self._wfm_dial:
+            # A retune (or the first block in wide FM): the pilot loop, the
+            # blend and RDS start again, and the last station's RDS is never
+            # shown against the new one. Every dial change counts, however
+            # small: a few kHz off a station is another tuning to the PLL.
+            d.reset()
+            self._wfm_dial = rx_dial
+            self._rds_rev = -1
+            self._status(rds=None)
         self.wfm_ch.set_freq(self._off(rx_dial))
-        heard, level = self.wfmdemod(self.wfm_ch.take(X, starts))
+        heard, level = d(self.wfm_ch.take(X, starts), time.time())
         # Heard at 48 kHz as it was demodulated (never through the 12 kHz
         # path and back up); the engine's decoders and timing get 12 kHz.
         self.heard_hi = heard
         # No squelch in wide FM: what is heard is always open.
         self._status(sqlOpen=True)
-        return self.wfmdemod.for_decoders(heard), level
+        if self._rx_dial(self.st) == rx_dial:
+            # Not for a block demodulated on a dial set() has just moved:
+            # its RDS is the old station's (the next block resets).
+            self._rds_publish(d.rds())
+        return d.for_decoders(heard), level
+
+    # The RDS fields published (shack_sdr wfm.Receiver.rds(), the library's
+    # own names), in the order docs/SERVER-API.md lists them.
+    RDS_FIELDS = ("pi", "ps", "rt", "pty", "ptyName", "ta", "tp", "ct", "af", "stereo", "ts")
+
+    def _rds_publish(self, d: dict | None) -> None:
+        """`rds` in the state when the receiver's RDS changed: published only
+        on a new revision (the library raises `rev` when a field or the
+        stereo flag changes), so ten blocks a second cost one comparison."""
+        if d is None:
+            if self.st.get("rds") is not None:
+                self._status(rds=None)
+            return
+        rev = d.get("rev", 0)
+        if rev == self._rds_rev:
+            return
+        self._rds_rev = rev
+        self._status(rds={k: d.get(k) for k in self.RDS_FIELDS})
 
     def audio_channels(self) -> int:
         if self.held is not None:
             return super().audio_channels()
         d = self.wfmdemod
+        # In wide FM, 2 while the station's pilot holds the receiver's
+        # stereo flag (StereoWfm): api/status audio.stereo follows it.
         return d.channels if self.st["mode"] == "wfm" and d is not None else 1
 
     def _rx_audio_gain(self, s: dict) -> float:
@@ -836,6 +893,11 @@ class Radio(Engine):
     def _meter_extra(self, s: dict) -> dict:
         out = {"fwd": s["fwdW"], "swr": s["swr"], "paTemp": s["paTemp"], "seq": s["seqState"],
                "sql": s["sqlOpen"], "estPep": s["estPep"]}
+        if s["mode"] == "wfm" and self.held is None:
+            # Ten times a second, so a stereo badge follows the pilot as it
+            # comes and goes; `rds` in the state carries it too, but only
+            # once a station has RDS.
+            out["stereo"] = self.audio_channels() == 2
         out.update(self._smeter_fields(s))
         return out
 

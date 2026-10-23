@@ -9,8 +9,8 @@ Flex share (its README is the contract). What is NB and Radio's own:
   kHz for Radio, 12 kHz for QO-100 NB), the ones api/audio/rx sends:
   demodulated, after the engine's noise reduction when it is on. Encoded
   as FLAC (shack_rec.flac says why). Stereo when the mode is making stereo
-  as the recording starts (Radio's wide FM, once its stereo decoder is
-  in), mono otherwise, and that channel count holds for the whole file: a
+  as the recording starts (Radio's wide FM with a station's pilot, or
+  DAB), mono otherwise, and that channel count holds for the whole file: a
   FLAC stream's channel count is in its header, so a later mode change is
   converted to it (StreamAudio.play), never a second format in one file.
 - **IQ** is the engine's own SigMF recorder (ohscore/sigmf.py, which the

@@ -166,8 +166,8 @@ play what they say.
   the same audio on both sides, so a mode change never needs a new
   header. Without it, a stereo mode is sent averaged (L+R)/2, as a mono
   FM receiver plays it. `audio.stereo` in `api/status` says whether the
-  current mode is making stereo now (wide FM with its pilot, once the
-  stereo decoder is in), or a DAB station playing in stereo.
+  current mode is making stereo now (wide FM with its pilot), or a DAB
+  station playing in stereo.
 
 `api/status` `audio`:
 
@@ -225,7 +225,7 @@ same on Icom and Flex; what is this app's own:
   (a recording can be decoded again later), played by every browser,
   ExoPlayer and AVPlayer; NB's about 30-45 MB an hour, Radio's about four
   times that. `channels` is 2 when the mode was making stereo as the
-  recording started (wide FM once its stereo decoder is in), else 1, and
+  recording started (wide FM with its pilot, or DAB), else 1, and
   holds for the whole file: a later mode change is converted to it (mono
   on both sides, or stereo averaged). The sidecar `<id>.json`
   has `station` (the callsign), `freqHz` (the receive dial), `mode`,
@@ -515,16 +515,46 @@ app runs on. `{}` outside the store form.
 What openhamshack-remote `docs/RADIO-LISTEN-CONTRACT.md` §1-2 asked of the
 server, as built on 23/10/2026 (code `ohscore/dsp/wfm.py`,
 `ohsradio/radio.py`; tests `tests/test_ham_wfm.py`,
-`tests/test_ham_listen.py`, `tests/test_core_wfm.py`).
+`tests/test_ham_fmstereo.py`, `tests/test_ham_listen.py`,
+`tests/test_core_wfm.py`).
 
 - **`mode: "wfm"`** is in `api/spec`'s `mode` choices and `state.modes`,
   and is set like any mode: `POST api/set {"changes": {"mode": "wfm"}}`.
-  Mono, 50 us de-emphasis by default; `wfmDeemphasis` (control level,
-  `50` or `75`, unit us) is the other. The audio is the ordinary
-  `api/audio/rx` stream, 48 kHz since 23/10/2026, flat to 15 kHz (it was
-  12 kHz and 5 kHz); stereo (`?channels=2`, and `audio.stereo` in status)
-  and RDS wait for shack_sdr's decoder (RADIO-SDR-PLAN M3). No squelch in
-  wfm: `sqlOpen` reads true.
+  50 us de-emphasis by default; `wfmDeemphasis` (control level, `50` or
+  `75`, unit us) is the other. The audio is the ordinary `api/audio/rx`
+  stream, 48 kHz since 23/10/2026, flat to 15 kHz (it was 12 kHz and
+  5 kHz). No squelch in wfm: `sqlOpen` reads true.
+- **Stereo** (since 23/10/2026, shack_sdr's `wfm.Receiver`: pilot PLL,
+  blend to mono on a weak signal): a station with its 19 kHz pilot is
+  heard in stereo with `?channels=2` and averaged without, exactly as a
+  DAB station is. `audio.stereo` in `api/status` is the receiver's stereo
+  flag (the pilot held 150 ms; off after 300 ms without it), and the
+  `meter` item carries `stereo` (true/false) in wfm, ten times a second.
+  A blended weak station is still a stereo station: the flag says so,
+  the sound is nearer mono. Without the shack-sdr wheel (a package built
+  for no platform) wide FM is mono and has no RDS.
+- **RDS** in `api/state` (and its `state` diffs on `api/events`) as `rds`:
+
+  ```json
+  {"pi": "C201", "ps": "SIM ONE ", "rt": "Sim One: a tone of 1 kHz left, 1.5 kHz right", "pty": 10,
+   "ptyName": "Pop music", "ta": false, "tp": false, "ct": "2026-10-23T15:05:00+01:00",
+   "af": [91300000], "stereo": true, "ts": 1792747301.5}
+  ```
+
+  The library's field names (ohs-libs `rust/shack_sdr/README.md`
+  "Broadcast FM"): `pi` the programme identification in hex, `ps` the
+  8-character name as sent (padding kept; trim it to show it), `rt`
+  RadioText (null until a whole one is heard twice alike), `pty` the
+  programme type number and `ptyName` its name (European table, in the
+  server's language), `ta`/`tp` traffic flags, `ct` the station's clock
+  (ISO 8601 with its offset, or null), `af` alternative frequencies in Hz,
+  `stereo` the stereo flag, `ts` when the newest field arrived (UTC
+  seconds). A field is published only once it is stable, and never half
+  old and half new. `rds` is **null** until a station's PI is heard,
+  outside wfm, while something else holds the receiver (`rxOwner`), and
+  from the moment the dial moves: every retune, however small, clears it
+  in the same `api/set` and starts the receiver again, so the last
+  station's name is never shown against a new frequency.
 - **The passband in state:** `rxFilterLo` and `rxFilterHi`, Hz from the
   receive dial (`rxDial`), the demodulator's real edges in every mode.
   wfm is `-90000`/`90000`: a 180 kHz channel, the bank's filter at those

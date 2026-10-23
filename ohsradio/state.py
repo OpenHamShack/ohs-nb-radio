@@ -248,6 +248,9 @@ with REG.after("txDial"):
         ("cwSkimCpu", "float", 0.0, "CW skimmer: its share of one core, per cent."),
         ("cwSkimDropped", "int", 0, "CW skimmer: receive blocks it fell too far behind to take, since it "
                                     "started. Receiving is never held up."),
+        ("rds", "dict", None, "Wide FM: the station's RDS as the receiver decoded it (shack_sdr), "
+                              "{pi, ps, rt, pty, ptyName, ta, tp, ct, af, stereo, ts}; null until a station's "
+                              "programme identification is heard, and again on every retune."),
     ]:
         _k(name, type_, default, "status", help=help_)
 

@@ -323,7 +323,7 @@ class Engine:
     # better audio than that hands it over in `heard_hi` (_rx_block), and
     # everything else is upsampled here, once, after noise reduction.
     # Radio plays at 48 kHz (23/10/2026: broadcast FM flat to 15 kHz,
-    # stereo to come); QO-100 NB keeps 12 kHz, which is all an SSB
+    # and in stereo); QO-100 NB keeps 12 kHz, which is all an SSB
     # transponder's audio has and what its clients already take.
     OUT_RATE = AUDIO_RATE
 
