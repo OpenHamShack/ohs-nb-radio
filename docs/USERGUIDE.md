@@ -533,7 +533,9 @@ The **QSO** fields - their call and the report (599) - fill in the macros, your 
 
 ### PSK31, PSK63, PSK125 and RTTY
 
-The same terminal, typing line, queue and macros as CW. The decoder listens at 1000 Hz in the audio; **Signals**, on the right, lists the carriers in your passband once a second, and clicking one tunes it onto the decoder (it is marked **◀ decoding**). Clicking a signal on a scope does the same. RTTY is 45.45 baud, 170 Hz shift. Decoded text also appears on the waterfall beside the signal. On noise the RTTY decoder prints stray characters, as any RTTY decoder does.
+The same terminal, typing line, queue and macros as CW. The decoder listens at 1000 Hz in the audio; **Signals**, on the right, lists the carriers in your passband once a second, and clicking one tunes it onto the decoder (it is marked **◀ decoding**). RTTY is 45.45 baud, 170 Hz shift; in RTTY, clicking a signal on a scope tunes it onto the decoder too. Decoded text also appears on the waterfall beside the signal. On noise the RTTY decoder prints stray characters, as any RTTY decoder does.
+
+PSK decodes **several stations at once**: click a station on the zoom scope and it is decoded too, with a *+ 1450* flag on the zoom and a line of its own under **Also decoding**. Click it again to stop it, or **Stop all**; up to sixteen at once. The terminal stays the decoder's own channel, the one you answer on; **Shift-click** a station, or click it in **Signals**, to tune it onto that channel.
 
 ![RTTY on the simulator: the terminal, macros, and the signal list.](screenshots/main-rtty-1920.png)
 

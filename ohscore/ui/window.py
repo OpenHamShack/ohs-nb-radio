@@ -68,6 +68,8 @@ from .tuning import DEFAULT_STEP, click_to_dial
 # layout the operator left.
 LEGACY_PREFS = {"voice": "splitters", "digital": "slotSplitters"}
 TEXT_INPUTS = (QLineEdit, QPlainTextEdit, QTextEdit, QAbstractSpinBox, QComboBox)
+# PSK's extra stations at most (state.py pskChannels), beside the mode's own.
+PSK_MORE_MAX = 15
 
 
 class PageStack(QStackedWidget):
@@ -437,6 +439,7 @@ class BaseWindow(QMainWindow):
         self.zoom.clicked.connect(self.scope_click)
         self.zoom.wheel_step.connect(lambda d: self.step_tune(d))
         self.zoom.offset_clicked.connect(self.offset_click)
+        self.zoom.channel_clicked.connect(self.psk_channel_click)
         for sc in (self.wide, self.zoom):
             sc.palette_changed.connect(self.set_palette)
             sc.colours_requested.connect(self.open_scope_colours)
@@ -995,6 +998,29 @@ class BaseWindow(QMainWindow):
             p.set_offsets(tx=off)
         else:
             p.set_offsets(rx=off, tx=None if p.hold.on else off)
+
+    def psk_channel_click(self, off: float):
+        """A click on a station on the zoom in PSK: decode it too (one more
+        of pskChannels), or stop decoding it when it already is. The mode's
+        own channel, at its offset, is always decoded. Within a signal's
+        width of a channel counts as that channel."""
+        st = self.bridge.st
+        mode = st.get("mode", "psk31")
+        near = max(20.0, 1.5 * {"psk63": 62.5, "psk125": 125.0}.get(mode, 31.25))
+        chans = [float(c) for c in st.get("pskChannels") or []]
+        hit = next((c for c in chans if abs(c - off) <= near), None)
+        if hit is not None:
+            chans.remove(hit)
+        elif abs(off - mode_offset(mode)) <= near:
+            self.bridge.say(self.tr("That station is the one on the decoder's own channel"), "info")
+            return
+        elif len(chans) >= PSK_MORE_MAX:
+            self.bridge.say(self.tr("PSK decodes at most {n} stations at once: click one to stop it first").format(
+                n=PSK_MORE_MAX + 1), "info")
+            return
+        else:
+            chans.append(float(round(off)))
+        self.bridge.set(quiet=True, pskChannels=chans)
 
     def set_mode(self, mode: str):
         """A mode button or mode key: a request to operate in `mode`."""

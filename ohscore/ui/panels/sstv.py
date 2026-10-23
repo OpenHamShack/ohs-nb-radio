@@ -1,5 +1,9 @@
 """SSTV receive: the picture paints line by line as it arrives; finished
-pictures join a gallery read from the data directory."""
+pictures join a gallery read from the data directory.
+
+Received by shack_sdr's sstv decoder since Radio's SDR milestone 2, in its
+fourteen modes (SSTV_NAMES); sent by sstv.py's encoder in its four, as
+before."""
 from __future__ import annotations
 
 import base64
@@ -13,6 +17,20 @@ from PyQt6.QtWidgets import QHBoxLayout, QLabel, QListView, QListWidget, QListWi
 from .. import theme
 from ..controls import Button, Card, Segmented
 from .common import ModePanel
+
+
+# shack_sdr's SSTV mode ids, as the operator knows them, in the decoder's
+# own order (shack_sdr sstv.modes()).
+SSTV_NAMES = {"martin1": "Martin M1", "martin2": "Martin M2", "scottie1": "Scottie S1", "scottie2": "Scottie S2",
+              "scottiedx": "Scottie DX", "robot36": "Robot 36", "robot72": "Robot 72", "pd50": "PD50",
+              "pd90": "PD90", "pd120": "PD120", "pd160": "PD160", "pd180": "PD180", "pd240": "PD240",
+              "pd290": "PD290"}
+
+
+def sstv_name(mode_id: str) -> str:
+    """An SSTV mode's name ("Martin M1") from either decoder's id."""
+    return SSTV_NAMES.get(mode_id) or {"martinm1": "Martin M1", "scottie_s1": "Scottie S1"}.get(mode_id) \
+        or str(mode_id or "").upper()
 
 
 class Picture(QWidget):
@@ -192,7 +210,11 @@ class SstvPanel(ModePanel):
         st = ev.get("state")
         if st == "start":
             self.pic.start(int(ev.get("width", 320)), int(ev.get("height", 256)))
-            self.info.setText(self.tr("{mode}  starting").format(mode=ev.get('fmt', '')))
+            if ev.get("partial"):
+                # Started from its line syncs: tuned in part way through.
+                self.info.setText(self.tr("{mode}  joined part way").format(mode=sstv_name(ev.get("fmt", ""))))
+            else:
+                self.info.setText(self.tr("{mode}  starting").format(mode=sstv_name(ev.get("fmt", ""))))
         elif st == "line":
             try:
                 self.pic.put_row(int(ev.get("line", 0)), base64.b64decode(ev.get("row", "")))
@@ -203,3 +225,7 @@ class SstvPanel(ModePanel):
             self.info.setText(self.tr("done — saved"))
             if ev.get("path"):
                 self._add_thumb(ev["path"])
+        elif st == "unsupported":
+            self.info.setText(self.tr("{mode}: a mode that cannot be shown yet").format(mode=sstv_name(ev.get("fmt"))))
+        elif st == "bad_vis":
+            self.info.setText(self.tr("a picture's header was too weak to read"))

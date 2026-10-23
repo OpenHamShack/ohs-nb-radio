@@ -286,14 +286,19 @@ class MainWindow(BaseWindow):
         self.decoders_view = DecodersView(self.bridge, self.prefs, self.decoders_store, self.decoder_tune)
         return self.decoders_view
 
-    def decoder_tune(self, f: float, decoder: str):
+    def decoder_tune(self, f: float, decoder: str, params: dict | None = None):
         """Put the dial on a decoder session's signal, in that mode where
         Radio has it (RTTY's dial is its tones' middle less the mode's
-        1000 Hz offset, as a click on the scope would put it). Only tunes."""
+        1000 Hz offset, as a click on the scope would put it; a PSK session
+        is the PSK mode of its speed; SSTV's frequency is its 1900 Hz leader,
+        so the dial goes 1900 Hz below it). Only tunes."""
         from ohscore.ui.tuning import click_to_dial
         st = self.bridge.st
+        params = params or {}
+        if decoder == "psk":
+            decoder = {62.5: "psk63", 125.0: "psk125"}.get(float(params.get("baud", 31.25)), "psk31")
         mode = decoder if decoder in self.bridge.radio.STATE.modes else st.get("mode", "usb")
-        target = click_to_dial(mode, float(f), st)
+        target = click_to_dial(mode, float(f), st) if mode != "sstv" else round(float(f) - 1900.0)
         if st.get("ritOn"):
             target -= float(st.get("rit") or 0)
         sp = self.bridge.spec("vfo")

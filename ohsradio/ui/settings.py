@@ -32,6 +32,7 @@ class SettingsDialog(core.SettingsDialog):
     LABELS = {**core.LABELS,
               "sdrSerial": "Receiver serial", "sdrplayLna": "RSP LNA state", "dcBlock": "DC spike removal",
               "decodersMax": "Decoders at once", "decodeCpuMax": "Processor share for decoders",
+              "decoderFilesKeep": "Pictures kept",
               "hl2Address": "Hermes-Lite 2 address", "hl2Rate": "Hermes-Lite 2 rate", "hl2Lna": "HL2 receiver gain",
               "hl2Pa": "HL2 power amplifier", "hl2TxSwapIQ": "Swap HL2 transmit I/Q",
               "ppm": "Reference error", "plan": "Band plan", "planGuard": "Band-plan guard",
@@ -152,6 +153,9 @@ class SettingsDialog(core.SettingsDialog):
             "codecs some decoders need. A change here applies when the radio next starts."))
         self._add(lay, "decodersMax")
         self._add(lay, "decodeCpuMax")
+        # SSTV's received pictures (ohscore/decoders.py prune_files): applies
+        # at the next picture, not at a restart.
+        self._add(lay, "decoderFilesKeep")
         # The FM and DAB lists (View › Stations; ohsradio/bandscan.py): these
         # apply at once, unlike the two above.
         self._section(lay, self.tr("Station lists"))

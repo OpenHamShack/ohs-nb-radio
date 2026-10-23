@@ -125,10 +125,18 @@ def _poly(n: int) -> tuple[QPolygonF, np.ndarray]:
     return poly, np.frombuffer(ptr, np.float64).reshape(n, 2)
 
 
+# PSK's modes, and where on the zoom a click adds a station to decode: the
+# audio passband the decoder hears, less a little at each edge for the
+# signal's own width (state.py pskChannels takes 200-2900 Hz).
+PSK_MODES = ("psk31", "psk63", "psk125")
+PSK_CLICK_LO, PSK_CLICK_HI = 200.0, 2900.0
+
+
 class ScopeView(QWidget):
     clicked = pyqtSignal(float, object)      # dial Hz, Qt.KeyboardModifier
     wheel_step = pyqtSignal(int)             # +1 / -1 steps
     offset_clicked = pyqtSignal(float, bool)  # zoom, slot modes: audio offset Hz, is_tx
+    channel_clicked = pyqtSignal(float)       # zoom, PSK: a station's audio Hz, to decode it too (or stop)
     palette_changed = pyqtSignal(str)
     colours_requested = pyqtSignal()          # the adjust panel's "Colours..." (Settings › Display)
     context_requested = pyqtSignal(float, object)  # right-click: dial Hz, global QPoint
@@ -833,6 +841,17 @@ class ScopeView(QWidget):
             off = f - dial
             if 100.0 <= off <= 3200.0:
                 self.offset_clicked.emit(round(off), bool(e.modifiers() & Qt.KeyboardModifier.ShiftModifier))
+                return
+        if (not self.wide and self._st("mode") in PSK_MODES
+                and not e.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            # PSK hears several stations at once (shack_sdr's psk decoder): a
+            # click on one in the passband decodes it too, a click on one
+            # already decoded stops it; shift-click tunes it onto the mode's
+            # own channel, as a click did before.
+            dial = float(self._st("rxDial") or self._st("vfo"))
+            off = f - dial
+            if PSK_CLICK_LO <= off <= PSK_CLICK_HI:
+                self.channel_clicked.emit(round(off))
                 return
         self.clicked.emit(f, e.modifiers())
 
@@ -1562,10 +1581,23 @@ class ScopeView(QWidget):
                                 col))
             return out
         if mode in ("psk31", "psk63", "psk125", "rtty"):
+            out = []
             off = self.audio_offsets.get("rx")
             if off is not None:
-                return [(self.fmap.x(dial + off), y0, f"RX {off:.0f}", theme.sc("ok"))]
+                out.append((self.fmap.x(dial + off), y0, f"RX {off:.0f}", theme.sc("ok")))
+            for c in self._psk_channels(mode):
+                out.append((self.fmap.x(dial + c), y0 + 18, f"+ {c:.0f}", theme.sc("rx")))
+            return out
         return []
+
+    def _psk_channels(self, mode: str) -> list[float]:
+        """PSK's extra stations (pskChannels), audio Hz: none in other modes."""
+        if mode not in PSK_MODES:
+            return []
+        try:
+            return [float(c) for c in self._st("pskChannels") or []]
+        except (TypeError, ValueError):
+            return []
 
     def _paint_mode_marks(self, p: QPainter, dial: float):
         if self.wide:
@@ -1599,6 +1631,10 @@ class ScopeView(QWidget):
                 x = self.fmap.x(dial + off)
                 p.setPen(QPen(theme.sc("ok", 0.9), 1, Qt.PenStyle.DashLine))
                 p.drawLine(QPointF(x, y0 + 14), QPointF(x, self.r_wf.bottom()))
+            p.setPen(QPen(theme.sc("rx", 0.7), 1, Qt.PenStyle.DotLine))
+            for c in self._psk_channels(mode):
+                x = self.fmap.x(dial + c)
+                p.drawLine(QPointF(x, y0 + 32), QPointF(x, self.r_wf.bottom()))
         p.setFont(self._flag_font())
         for x, y, text, col in self.mode_flags(dial):
             self._flag(p, x, y, text, col)

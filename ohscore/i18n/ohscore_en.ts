@@ -188,253 +188,263 @@
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="233" />
+        <location filename="../ui/window.py" line="235" />
         <location filename="../ui/recording.py" line="165" />
         <source>Record receive IQ…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="98" />
+        <location filename="../ui/window.py" line="100" />
         <source>Digital</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="99" />
+        <location filename="../ui/window.py" line="101" />
         <source>Voice</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="100" />
+        <location filename="../ui/window.py" line="102" />
         <source>Watch</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="232" />
+        <location filename="../ui/window.py" line="234" />
         <source>&amp;File</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="237" />
+        <location filename="../ui/window.py" line="239" />
         <source>Open recordings folder</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/playback.py" line="123" />
-        <location filename="../ui/window.py" line="240" />
+        <location filename="../ui/window.py" line="242" />
         <source>Play IQ recording…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="244" />
+        <location filename="../ui/window.py" line="246" />
         <source>Loop playback</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="248" />
+        <location filename="../ui/window.py" line="250" />
         <source>Export log as ADIF…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="252" />
+        <location filename="../ui/window.py" line="254" />
         <source>Quit</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="256" />
+        <location filename="../ui/window.py" line="258" />
         <source>&amp;View</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="257" />
+        <location filename="../ui/window.py" line="259" />
         <source>Second display</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="261" />
+        <location filename="../ui/window.py" line="263" />
         <source>Light theme</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="267" />
+        <location filename="../ui/window.py" line="269" />
         <source>Full screen</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="274" />
+        <location filename="../ui/window.py" line="276" />
         <source>Workspace</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="277" />
+        <location filename="../ui/window.py" line="279" />
         <source>Auto - follows the mode	Shift+W</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="286" />
+        <location filename="../ui/window.py" line="288" />
         <source>Reset this workspace's layout</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="457" />
-        <location filename="../ui/window.py" line="290" />
+        <location filename="../ui/window.py" line="460" />
+        <location filename="../ui/window.py" line="292" />
         <source>Operate</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="458" />
-        <location filename="../ui/window.py" line="291" />
+        <location filename="../ui/window.py" line="461" />
+        <location filename="../ui/window.py" line="293" />
         <source>Logbook</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="459" />
-        <location filename="../ui/window.py" line="292" />
+        <location filename="../ui/window.py" line="462" />
+        <location filename="../ui/window.py" line="294" />
         <source>Memories</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="300" />
+        <location filename="../ui/window.py" line="302" />
         <source>Keyboard shortcuts</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="303" />
+        <location filename="../ui/window.py" line="305" />
         <source>&amp;Radio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="304" />
+        <location filename="../ui/window.py" line="306" />
         <source>Settings…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="308" />
+        <location filename="../ui/window.py" line="310" />
         <source>Restart the radio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="311" />
+        <location filename="../ui/window.py" line="313" />
         <source>Voice memories…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="315" />
+        <location filename="../ui/window.py" line="317" />
         <source>&amp;Help</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="319" />
+        <location filename="../ui/window.py" line="321" />
         <source>Welcome…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="322" />
+        <location filename="../ui/window.py" line="324" />
         <source>Check for updates…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="326" />
+        <location filename="../ui/window.py" line="328" />
         <source>Save diagnostics…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="329" />
+        <location filename="../ui/window.py" line="331" />
         <source>Send diagnostics…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="332" />
+        <location filename="../ui/window.py" line="334" />
         <source>Open log folder</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="336" />
+        <location filename="../ui/window.py" line="338" />
         <source>About {app}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="396" />
+        <location filename="../ui/window.py" line="398" />
         <source>Second display (Ctrl+D)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="398" />
+        <location filename="../ui/window.py" line="400" />
         <source>Settings (Ctrl+,)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="400" />
+        <location filename="../ui/window.py" line="402" />
         <source>Keyboard shortcuts (?)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="402" />
+        <location filename="../ui/window.py" line="404" />
         <source>Logbook (Ctrl+L)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="414" />
+        <location filename="../ui/window.py" line="416" />
         <source>Second display, Settings, Logbook, Keyboard shortcuts</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="417" />
+        <location filename="../ui/window.py" line="419" />
         <source>Second display	Ctrl+D</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="418" />
+        <location filename="../ui/window.py" line="420" />
         <source>Settings…	Ctrl+,</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="419" />
+        <location filename="../ui/window.py" line="421" />
         <source>Logbook	Ctrl+L</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="420" />
+        <location filename="../ui/window.py" line="422" />
         <source>Keyboard shortcuts	?</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="484" />
+        <location filename="../ui/window.py" line="487" />
         <source>Controls</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="486" />
+        <location filename="../ui/window.py" line="489" />
         <source>The mode, transmit and receive controls, over the right of the panel. Esc closes them when nothing is on the air.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="494" />
+        <location filename="../ui/window.py" line="497" />
         <source>How the window is laid out: follows the mode (Auto), or the one you chose. W steps through them, Shift+W goes back to Auto.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="702" />
+        <location filename="../ui/window.py" line="705" />
         <source>{secs} s periods</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="704" />
+        <location filename="../ui/window.py" line="707" />
         <source>receive only</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1505" />
+        <location filename="../ui/window.py" line="1531" />
         <source>chosen</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1506" />
+        <location filename="../ui/window.py" line="1532" />
         <source>auto</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1507" />
+        <location filename="../ui/window.py" line="1533" />
         <source>Workspace: {name} · {how}</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/window.py" line="1015" />
+        <source>That station is the one on the decoder's own channel</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/window.py" line="1018" />
+        <source>PSK decodes at most {n} stations at once: click one to stop it first</source>
         <translation type="unfinished" />
     </message>
     <message>
@@ -1199,137 +1209,190 @@
 </context><context>
     <name>DecodersView</name>
     <message>
-        <location filename="../ui/decodersview.py" line="55" />
+        <location filename="../ui/decodersview.py" line="67" />
         <source>reversed</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="58" />
+        <location filename="../ui/decodersview.py" line="70" />
         <source>pitch {hz} Hz</source>
         <translation type="unfinished" />
     </message>
+    <message numerus="yes">
+        <location filename="../ui/decodersview.py" line="75" />
+        <source>%n station(s)</source>
+        <translation>
+            <numerusform>%n station</numerusform>
+            <numerusform>%n stations</numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename="../ui/decodersview.py" line="63" />
+        <location filename="../ui/decodersview.py" line="79" />
+        <source>any mode</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="96" />
         <source>starting</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="64" />
+        <location filename="../ui/decodersview.py" line="97" />
         <source>listening</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="65" />
+        <location filename="../ui/decodersview.py" line="98" />
         <source>no signal</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="66" />
+        <location filename="../ui/decodersview.py" line="99" />
         <source>copying</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="67" />
+        <location filename="../ui/decodersview.py" line="100" />
         <source>out of view</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="68" />
+        <location filename="../ui/decodersview.py" line="101" />
         <source>paused</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="69" />
+        <location filename="../ui/decodersview.py" line="102" />
         <source>failed</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="70" />
+        <location filename="../ui/decodersview.py" line="103" />
         <source>stopped</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="175" />
+        <location filename="../ui/decodersview.py" line="275" />
         <source>Tune</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="176" />
+        <location filename="../ui/decodersview.py" line="276" />
         <source>Put the dial on this signal</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="179" />
+        <location filename="../ui/decodersview.py" line="279" />
         <source>Stop</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="200" />
+        <location filename="../ui/decodersview.py" line="307" />
+        <source>Waiting for a picture…</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="315" />
+        <source>This decoder's recent pictures</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="329" />
         <source>{name} - the mode's decoder, on the dial</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="211" />
+        <location filename="../ui/decodersview.py" line="340" />
         <source>SNR {db} dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="213" />
+        <location filename="../ui/decodersview.py" line="342" />
         <source>{hz} Hz off</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="238" />
+        <location filename="../ui/decodersview.py" line="418" />
         <source>The decoder to start</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="242" />
+        <location filename="../ui/decodersview.py" line="422" />
         <source>MHz (the dial's when empty)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="243" />
-        <source>Where the signal is, MHz: for RTTY the middle of its two tones. Empty: the dial's frequency. Right-click a signal on a scope to start one there.</source>
+        <location filename="../ui/decodersview.py" line="423" />
+        <source>Where the signal is, MHz: for RTTY the middle of its two tones, for SSTV its 1900 Hz leader. Empty: where the dial puts the mode's signal. Right-click a signal on a scope to start one there.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="250" />
+        <location filename="../ui/decodersview.py" line="431" />
         <source>Add</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="305" />
+        <location filename="../ui/decodersview.py" line="486" />
         <source>Bd</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="305" />
+        <location filename="../ui/decodersview.py" line="486" />
         <source>Hz shift</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="316" />
+        <location filename="../ui/decodersview.py" line="487" />
         <source>Reversed</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="335" />
+        <location filename="../ui/decodersview.py" line="487" />
+        <source>AFC</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="487" />
+        <source>Join part way</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="493" />
+        <source>Any SSTV mode</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="496" />
+        <source>The picture mode to listen for</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="501" />
+        <source>stations, Hz from it</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="502" />
+        <source>More stations in the same session, Hz from its frequency, separated by commas, such as -400,0,350. Empty: the one on its frequency.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="543" />
         <source>The frequency is a number of MHz, such as 14.0835</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="380" />
+        <location filename="../ui/decodersview.py" line="588" />
         <source>No decoders can run on frequencies of their own in this installation.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="383" />
+        <location filename="../ui/decodersview.py" line="591" />
         <source>Each decoder here listens on its own frequency, whatever the dial does, as long as the receiver's span covers it. Up to {n} at once (Settings › Decoders). They only listen.</source>
         <translation type="unfinished" />
     </message>
     <message numerus="yes">
-        <location filename="../ui/decodersview.py" line="386" />
+        <location filename="../ui/decodersview.py" line="594" />
         <source>%n decoder(s) running</source>
         <translation>
             <numerusform>%n decoder running</numerusform>
@@ -1337,7 +1400,7 @@
         </translation>
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="388" />
+        <location filename="../ui/decodersview.py" line="596" />
         <source>processor share allowed {pct} %</source>
         <translation type="unfinished" />
     </message>
@@ -2583,7 +2646,7 @@ from an HSmodem station at the same speed</source>
 </context><context>
     <name>Picture</name>
     <message>
-        <location filename="../ui/panels/sstv.py" line="26" />
+        <location filename="../ui/panels/sstv.py" line="44" />
         <source>Waiting for a picture…
 Tune to an SSTV signal</source>
         <translation type="unfinished" />
@@ -2723,17 +2786,17 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>QsoFields</name>
     <message>
-        <location filename="../ui/panels/text.py" line="51" />
+        <location filename="../ui/panels/text.py" line="60" />
         <source>Their call</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="58" />
+        <location filename="../ui/panels/text.py" line="67" />
         <source>Report sent ({RST})</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="59" />
+        <location filename="../ui/panels/text.py" line="68" />
         <source>QSO</source>
         <translation type="unfinished" />
     </message>
@@ -3154,27 +3217,27 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>ScopeView</name>
     <message>
-        <location filename="../ui/scope.py" line="449" />
+        <location filename="../ui/scope.py" line="457" />
         <source>RBW {rbw}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/scope.py" line="695" />
+        <location filename="../ui/scope.py" line="703" />
         <source>Adjust</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/scope.py" line="698" />
+        <location filename="../ui/scope.py" line="706" />
         <source>Adjust the wide scope: scale, peaks, waterfall levels and palette</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/scope.py" line="699" />
+        <location filename="../ui/scope.py" line="707" />
         <source>Adjust the zoom scope: scale, peaks, waterfall levels and palette</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/scope.py" line="1474" />
+        <location filename="../ui/scope.py" line="1493" />
         <source>Span held for decoders</source>
         <translation type="unfinished" />
     </message>
@@ -3722,68 +3785,83 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>SstvPanel</name>
     <message>
-        <location filename="../ui/panels/sstv.py" line="92" />
+        <location filename="../ui/panels/sstv.py" line="110" />
         <source>Receiving</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="95" />
+        <location filename="../ui/panels/sstv.py" line="113" />
         <source>Idle</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="100" />
+        <location filename="../ui/panels/sstv.py" line="118" />
         <source>Gallery</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="111" />
+        <location filename="../ui/panels/sstv.py" line="129" />
         <source>Open folder</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="117" />
+        <location filename="../ui/panels/sstv.py" line="135" />
         <source>Picture mode for sending</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="118" />
+        <location filename="../ui/panels/sstv.py" line="136" />
         <source>Send a picture…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="174" />
+        <location filename="../ui/panels/sstv.py" line="192" />
         <source>Send a picture</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="175" />
+        <location filename="../ui/panels/sstv.py" line="193" />
         <source>Pictures (*.png *.jpg *.jpeg *.bmp *.gif)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="180" />
+        <location filename="../ui/panels/sstv.py" line="198" />
         <source>That file is not a picture Qt can read</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="187" />
+        <location filename="../ui/panels/sstv.py" line="205" />
         <source>sending {name}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="195" />
+        <location filename="../ui/panels/sstv.py" line="215" />
+        <source>{mode}  joined part way</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/panels/sstv.py" line="217" />
         <source>{mode}  starting</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="201" />
+        <location filename="../ui/panels/sstv.py" line="223" />
         <source>line {line}/{of}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/sstv.py" line="203" />
+        <location filename="../ui/panels/sstv.py" line="225" />
         <source>done — saved</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/panels/sstv.py" line="229" />
+        <source>{mode}: a mode that cannot be shown yet</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/panels/sstv.py" line="231" />
+        <source>a picture's header was too weak to read</source>
         <translation type="unfinished" />
     </message>
 </context><context>
@@ -3813,68 +3891,93 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>TextPanel</name>
     <message>
-        <location filename="../ui/panels/text.py" line="78" />
+        <location filename="../ui/panels/text.py" line="87" />
         <source>Keyboard</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="82" />
+        <location filename="../ui/panels/text.py" line="91" />
         <source>Type to transmit — Enter sends (Morse)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="83" />
+        <location filename="../ui/panels/text.py" line="92" />
         <source>Type to transmit — Enter sends</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="102" />
+        <location filename="../ui/panels/text.py" line="111" />
         <source>Keyer</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="102" />
+        <location filename="../ui/panels/text.py" line="111" />
         <source>Signals</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="104" />
+        <location filename="../ui/panels/text.py" line="113" />
         <source>Speed</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="107" />
+        <location filename="../ui/panels/text.py" line="116" />
         <source>Pitch</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="110" />
+        <location filename="../ui/panels/text.py" line="119" />
         <source>Filter</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="188" />
-        <location filename="../ui/panels/text.py" line="115" />
+        <location filename="../ui/panels/text.py" line="224" />
+        <location filename="../ui/panels/text.py" line="124" />
         <source>Decoder speed —</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="120" />
+        <location filename="../ui/panels/text.py" line="129" />
         <source>Carriers in the passband. Click one to tune it to the decoder.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="180" />
+        <location filename="../ui/panels/text.py" line="138" />
+        <source>Also decoding</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/panels/text.py" line="142" />
+        <source>Stop all</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/panels/text.py" line="143" />
+        <source>Stop decoding the stations below; the decoder's own channel carries on</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/panels/text.py" line="149" />
+        <source>Click a station on the zoom to decode it too, and again to stop. Shift-click puts it on the decoder's own channel.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/panels/text.py" line="216" />
         <source>Decoder hears {wpm} wpm</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="257" />
+        <location filename="../ui/panels/text.py" line="255" />
+        <source>Click a station on the zoom to decode it too</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/panels/text.py" line="316" />
         <source>{signal}   ◀ decoding</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/panels/text.py" line="260" />
+        <location filename="../ui/panels/text.py" line="319" />
         <source>No carriers heard</source>
         <translation type="unfinished" />
     </message>

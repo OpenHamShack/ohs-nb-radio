@@ -1,5 +1,11 @@
 """CW, PSK and RTTY: a terminal, type-ahead transmit, macros - and for the
-keyboard modes a signal browser that lists the carriers in the passband."""
+keyboard modes a signal browser that lists the carriers in the passband.
+
+PSK decodes several stations at once (shack_sdr's psk decoder, Radio's SDR
+milestone 2): the terminal is the mode's own channel, the one the dial puts
+at its offset and transmit answers on; each further station - a click on
+it on the zoom, kept in pskChannels - is a line under "Also decoding" with
+the end of what it is sending, and its text is on the zoom at its signal."""
 from __future__ import annotations
 
 import time
@@ -9,11 +15,14 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QWidget
 
 from .. import theme
-from ..controls import Card, Slider
+from ..controls import Button, Card, Slider
 from ..prefs import expand_macro, macro_missing
 from .common import MacroBar, ModePanel, Terminal, TxEntry, TxQueue
 
 TEXT_MODES = ("psk31", "psk63", "psk125", "rtty")
+PSK_MODES = ("psk31", "psk63", "psk125")
+# Characters of each further PSK station's text shown on its line.
+STATION_KEEP = 48
 
 # What a decoder may hand the terminal that the terminal must not draw.
 # PSK's varicode covers all 256 byte values, so noise (or a station's
@@ -125,12 +134,31 @@ class TextPanel(ModePanel):
             self.sig.setFont(theme.font(13, mono=True))
             self.sig.itemClicked.connect(self._pick_signal)
             side.lay.addWidget(self.sig, 1)
+            more = QHBoxLayout()
+            self.more_title = QLabel(self.tr("Also decoding"))
+            self.more_title.setFont(theme.caps())
+            self.more_title.setStyleSheet(f"color: {theme.t()['text3']};")
+            more.addWidget(self.more_title, 1)
+            self.more_clear = Button(self.tr("Stop all"), small=True)
+            self.more_clear.setToolTip(self.tr("Stop decoding the stations below; the decoder's own channel carries on"))
+            self.more_clear.clicked.connect(lambda: bridge.set(quiet=True, pskChannels=[]))
+            more.addWidget(self.more_clear)
+            side.lay.addLayout(more)
+            self.more = QListWidget()
+            self.more.setFont(theme.font(12, mono=True))
+            self.more.setToolTip(self.tr("Click a station on the zoom to decode it too, and again to stop. "
+                                         "Shift-click puts it on the decoder's own channel."))
+            side.lay.addWidget(self.more, 1)
         lay.addWidget(side, 2)
+        # PSK's further stations: audio Hz -> the end of what each sent.
+        self.station_text: dict[float, str] = {}
         self.side = side
         self.txq = TxQueue(bridge, self._send_opts, lambda t: self.term.put(t, "tx"))
         self.carriers: list[tuple[float, float]] = []
         self.last_scan = 0.0
         self.offset = prefs["textOffset"]
+        if not cw:
+            self._show_stations()
 
     def _send_opts(self):
         mode = self.st("mode")
@@ -173,6 +201,14 @@ class TextPanel(ModePanel):
         text = printable(ev["text"])
         if not text:
             return
+        chan = ev.get("channel")
+        if not self.cw and chan is not None and abs(float(chan) - mode_offset(mode)) > 1.0:
+            # A further PSK station: its own line, not the terminal.
+            key = float(chan)
+            line = (self.station_text.get(key, "") + text.replace("\n", " "))[-STATION_KEEP:]
+            self.station_text[key] = line
+            self._show_stations()
+            return
         # The CW decoder spells a pattern it cannot read as "[.-..-]": shown,
         # but quietly - it is noise more often than it is a message.
         self.term.put(text, "dim" if text.startswith("[") and text.endswith("]") else "rx")
@@ -197,6 +233,29 @@ class TextPanel(ModePanel):
         if "mode" in ch and not self.cw:
             self.main.title = {"rtty": "RTTY 45.45 / 170"}.get(ch["mode"], str(ch["mode"]).upper())
             self.main.update()
+        if not self.cw and ("mode" in ch or "pskChannels" in ch):
+            self._show_stations()
+
+    def _show_stations(self):
+        """The "Also decoding" list: PSK only, one line per further station
+        (pskChannels), what it last sent beside its frequency."""
+        psk = self.st("mode") in PSK_MODES
+        for w in (self.more_title, self.more_clear, self.more):
+            w.setVisible(psk)
+        chans = [float(c) for c in (self.st("pskChannels") or [])] if psk else []
+        for k in [k for k in self.station_text if k not in chans]:
+            del self.station_text[k]
+        self.more.clear()
+        for c in sorted(chans):
+            it = QListWidgetItem(f"{c:5.0f} Hz  {self.station_text.get(c, '').strip()}")
+            it.setData(Qt.ItemDataRole.UserRole, c)
+            self.more.addItem(it)
+        self.more_clear.setEnabled(bool(chans))
+        if psk and not chans:
+            it = QListWidgetItem(self.tr("Click a station on the zoom to decode it too"))
+            it.setForeground(theme.c("text3"))
+            it.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.more.addItem(it)
 
     def adopt(self, other: "TextPanel"):
         """Start a mirror with what the main terminal already shows."""

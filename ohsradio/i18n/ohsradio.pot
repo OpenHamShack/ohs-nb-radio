@@ -42,7 +42,7 @@ msgstr ""
 msgid "Band III (DAB)"
 msgstr ""
 
-#: ohsradio/ui/settings.py:581
+#: ohsradio/ui/settings.py:585
 #, python-brace-format
 msgid "Bands & power, {band}: not a number"
 msgstr ""
