@@ -637,7 +637,7 @@ server, as built on 23/10/2026 (code `ohscore/dsp/wfm.py`,
 - **RDS** in `api/state` (and its `state` diffs on `api/events`) as `rds`:
 
   ```json
-  {"pi": "C201", "ps": "SIM ONE ", "rt": "Sim One: a tone of 1 kHz left, 1.5 kHz right", "pty": 10,
+  {"pi": "C201", "ps": "SIM ONE ", "rt": "Sim One: 1 kHz left, 1.5 right", "pty": 10,
    "ptyName": "Pop music", "ta": false, "tp": false, "ct": "2026-10-23T15:05:00+01:00",
    "af": [91300000], "stereo": true, "ts": 1792747301.5}
   ```

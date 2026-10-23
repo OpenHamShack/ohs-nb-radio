@@ -16,8 +16,10 @@ and 0.17 s of one core to make, once per process.
 **The loop's seam** restarts the transmitter's RDS groups and its tones
 once every LOOP_S: the receiver loses RDS sync there for a few groups,
 which a real station never asks of it, and is otherwise unbroken. 3 s
-holds a programme service name twice and the radiotext once over, which is
-what the band scan waits for (measured with shack_sdr 0.2.0, 72ced6a).
+holds a programme service name twice, which is what the band scan waits
+for, and a RadioText of up to about 32 characters twice (a longer one is
+cut off by the seam before its end is heard twice; measured with shack_sdr
+0.2.0, 72ced6a), so the stations' texts are short.
 
 The stations in BAND are fictional: names and PI codes made up for the
 simulator, on frequencies chosen to exercise the scanner - one programme
@@ -82,9 +84,9 @@ class FmStation:
 # dBFS in a 180 kHz channel, so the weakest here is 13 dB over it - enough
 # for RDS (shack_sdr reads PS down to 10 dB) and for the scan (10 dB).
 BAND = (
-    FmStation(88_600_000.0, -38.0, 0xC201, "SIM ONE", "Sim One: a tone of 1 kHz left, 1.5 kHz right", 10,
+    FmStation(88_600_000.0, -38.0, 0xC201, "SIM ONE", "Sim One: 1 kHz left, 1.5 right", 10,
               True, 1000.0, 1500.0, seed=1),
-    FmStation(91_300_000.0, -47.0, 0xC201, "SIM ONE", "Sim One: a tone of 1 kHz left, 1.5 kHz right", 10,
+    FmStation(91_300_000.0, -47.0, 0xC201, "SIM ONE", "Sim One: 1 kHz left, 1.5 right", 10,
               True, 1000.0, 1500.0, seed=2),
     FmStation(93_500_000.0, -44.0, 0xC3B4, "SIMNEWS", "The news, read by nobody", 1, False, 700.0, 0.0, seed=3),
     FmStation(97_700_000.0, -46.0, None, stereo=True, left_hz=440.0, right_hz=880.0, seed=4),
