@@ -106,7 +106,7 @@ radio.stop()                       # unkeys, closes, saves
 | `decoders.start(decoder, freq_hz, params=None, drop_sessions=False) -> dict` | a decoder session on `freq_hz` (a dial frequency: the signal's own, RTTY's centre between mark and space), independent of the dial; saved in `decoderSessions` and started again with the radio. Returns the session (below). In Radio a fixed session **pins** the receiver's centre while it runs (SERVER-API "The pinned span"): the centre now if it and every other session and the dial fit, else the middle of them, never one of them within 5 kHz of DC; `outside_span` when nothing fits. DAB (which takes the whole receiver) is refused `span_pinned` while sessions pin the span, unless `drop_sessions`. | `ohscore.decoders.Refused(sentence)` (a `ValueError`) with `code`: `unknown_decoder`, `decoder_unavailable` (`needs` names a codec, if that is why), `bad_params`, `outside_span`, `too_many_sessions` (`decodersMax`), `not_running`, `receiver_busy` (DAB plays), `span_pinned` (`sessions` lists them) |
 | `decoders.stop_background() -> list[dict]` | stop every session that pins the span (the operator agreed); the ones stopped | |
 | `decoders.stop(id) -> bool` | stop a session and forget it; False if there was none | |
-| `decoders.sessions() -> list[dict]` | the mode decoder (`id` `"vfo"`, while the mode is decoded by shack_sdr: RTTY, PSK, SSTV) and every fixed session | |
+| `decoders.sessions() -> list[dict]` | the mode decoder (`id` `"vfo"`, while the mode is decoded by shack_sdr: RTTY, SSTV) and every fixed session | |
 | `decoders.session(id, since=None) -> dict or None` | one session, with `results`: its kept results (the last 500 or 30 minutes) newer than `rev` `since` | |
 | `decoders.files() -> list[dict]` | the pictures decoders saved (SSTV), newest first: `{name, session, decoder, t, size}`; with the radio stopped too | |
 | `decoders.file(name) -> bytes or None` | one of them, by a name `files()` lists; None for any other | |
@@ -322,10 +322,9 @@ Decoder output as DESIGN.md "Modes" defines it, each with `"mode"`, plus `"t"`
   The same whichever decoder produced it (ohsdigi, or jt9: `ft8DecoderInUse`); `{"mode":..,"slot":..,"error":".."}` when a slot could not be decoded at all.
 - psk/rtty/cw: streaming text. RTTY's, decoded by shack_sdr since Radio's SDR milestone 1, are
   `{"mode":"rtty","text":"CQ","center":1000.0,"offsetHz":-2.1,"snr":11.0}`: `text` may be several characters,
-  `offsetHz` is how far the signal sits from `center`. PSK's, decoded by shack_sdr since milestone 2 and on
-  several stations at once, are `{"mode":"psk31","text":"C","center":1001.2,"df":1001.2,"snr":12.4,"channel":1000.0}`:
-  `center` and `df` the audio frequency the station is tracked on, `snr` in the symbol's bandwidth, `channel`
-  the audio frequency of its channel - 1000 (the mode's own) or one of `pskChannels`.
+  `offsetHz` is how far the signal sits from `center`. PSK's are `{"mode":"psk31","df":1001.2,"center":1001.2,
+  "text":"C","snr":12.4}` from psk.py's decoder: shack_sdr's, which hears several stations (`channel`,
+  `pskChannels`), is switched off until its library fix lands (ohscore/sdr.py `PSK_ON_SHACK_SDR`).
 - freedv: `{"mode":"freedv","sync":true,"snr":4.1,"text":"..."}`
 - sstv: `{"mode":"sstv","state":"start|line|done","name":"...","line":n,"of":m}` - a `start` with `"partial": true` is a picture joined part way through, started from its line syncs with no VIS header heard: its first line is not the top, and it ends when the syncs stop (its PNG has only the lines received). Decoded by shack_sdr since milestone 2: `start`'s `fmt` is its mode id (`martin1`, `pd120`, fourteen of them), a `line` (from 1, `row` base64 RGB) may come again when the picture is straightened at its end, and `done` has `path` and `file` (its name for `decoders.file()` and api/decoders/files). `{"state":"unsupported"|"bad_vis","fmt"}` is a header in a mode not decoded, or too weak to read.
 - hsmodem (NB): `{"mode":"hsmodem","kind":...}` with the kinds and fields of
@@ -345,7 +344,7 @@ Decoder sessions' results (`ohscore/decoders.py`; RADIO-SDR-PLAN §4.3-4.4 in
 the openhamshack repo). Not in anyone's default set: a client asks for it.
 A session is shack_sdr's (Rust decoders on threads of their own, the GIL
 released) or a Python-backed one (CW through shack_cw); the mode decoder
-is the session `"vfo"` while the mode is decoded by shack_sdr (RTTY, PSK, SSTV), and
+is the session `"vfo"` while the mode is decoded by shack_sdr (RTTY, SSTV), and
 keeps sending its `events` items as well, unchanged. A fixed session takes
 a 12 kHz channel at its frequency from the engine's filter bank.
 
@@ -360,7 +359,7 @@ a 12 kHz channel at its frequency from the engine's filter bank.
 - `type`: `text` (`text`, `offsetHz`, `snrDb`), `image` (SSTV: `event`
   `start` with `width`/`height`, `lines` with `from` and `rgb` base64,
   `done` with `file`; never a path), `meta` (`fields`: DAB's ensemble,
-  wide FM's RDS, PSK's channels, the SSTV picture's progress), `frame`
+  wide FM's RDS, the SSTV picture's progress), `frame`
   (later milestones), or `state` (`state`, `why` a code, `whyText`).
   SERVER-API "Decoders" has each decoder's.
 - States: `starting`, `running`, `nosignal`, `synced`, `outside` (the
