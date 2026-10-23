@@ -7,7 +7,11 @@ listening tests (tests/listen_helpers.py).
 What is on it is the transmitter model's test ensemble, "Shack Test Mux"
 (C1CE): "Shack MP2 Tone" (C221, old DAB, MPEG Layer II, a 1 kHz tone on the
 left and 1.5 kHz on the right, with programme text) and "Shack DAB+ Data"
-(C3A7, DAB+, which plays only where faad2 is installed).
+(C3A7, DAB+, which plays only where faad2 is installed). Two transmitters
+send it, as in a single-frequency network: their TII codes are two real
+Sound Digital sites' (SITES), and the model's EId, C1CE, happens to be
+Sound Digital's too, so the transmitter lookup (ohsradio/dabtx.py) names
+them from the bundled Ofcom list - Crystal Palace, and Wrotham 8 dB down.
 
 **Made once, then replayed.** The model builds every layer from the audio
 up to OFDM and costs about 0.1 s of CPU per 96 ms frame, so it cannot run
@@ -34,6 +38,10 @@ import threading
 import numpy as np
 
 LOOP_FRAMES = 24
+# (TII main, sub, delay us, gain dB) of each transmitter: Sound Digital's
+# Crystal Palace and Wrotham (Ofcom's list). A shack_sdr before TII takes
+# no `sites`, and gets one transmitter with no TII.
+SITES = [(11, 1, 0.0, 0.0), (1, 7, 60.0, -8.0)]
 FRAME_S = 0.096                 # DAB mode I: one transmission frame
 DAB_RATE = 2_048_000.0          # the rate the model makes, DAB's elementary rate
 HALF_WIDTH = 768_000.0          # half the 1.536 MHz block
@@ -63,7 +71,11 @@ def loop(fs: float) -> np.ndarray | None:
             if m is None:
                 return None
             from shack_sdr import _native
-            z = np.frombuffer(_native.testsig_dab(frames=LOOP_FRAMES, rate=DAB_RATE), np.complex64)
+            try:
+                raw = _native.testsig_dab(frames=LOOP_FRAMES, rate=DAB_RATE, sites=SITES)
+            except TypeError:
+                raw = _native.testsig_dab(frames=LOOP_FRAMES, rate=DAB_RATE)
+            z = np.frombuffer(raw, np.complex64)
             per = int(round(FRAME_S * DAB_RATE))
             z = z[len(z) - LOOP_FRAMES * per:]          # the lead-in off: whole frames from a null symbol
             _base = (z / np.sqrt(np.mean(np.abs(z) ** 2))).astype(np.complex64)

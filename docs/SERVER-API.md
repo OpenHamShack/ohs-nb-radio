@@ -693,10 +693,10 @@ usual one with `"panel": "meta"`, `"holdsReceiver": true`, `"block":
          {"main": 1, "sub": 7, "levelDb": -8.5, "confidence": 1.0}],
  "transmitters": [{"main": 11, "sub": 1, "levelDb": -0.5, "confidence": 1.0, "site": "Crystal Palace",
                    "area": "London", "ensemble": "SDL National", "erpKw": 5.73, "lat": 51.42417, "lon": -0.07494,
-                   "distanceKm": 4.2, "bearingDeg": 7, "match": "eid"},
+                   "distanceKm": 3.8, "bearingDeg": 113, "match": "eid"},
                   {"main": 1, "sub": 7, "levelDb": -8.5, "confidence": 1.0, "site": "Wrotham",
                    "area": "North West Kent", "ensemble": "SDL National", "erpKw": 25.0, "lat": 51.3207,
-                   "lon": 0.2877, "distanceKm": 30.1, "bearingDeg": 117, "match": "eid"}]}
+                   "lon": 0.2877, "distanceKm": 31.4, "bearingDeg": 114, "match": "eid"}]}
 ```
 
 `ensemble` is null and `services` empty until heard. `dls` is the playing
@@ -730,11 +730,11 @@ Strongest first; empty until about 1.5 s after sync, then updated every
 | `distanceKm`, `bearingDeg` | From the station's locator (great circle, to 0.1 km; bearing from true north, whole degrees); null without a locator or a site. |
 | `match` | How it was found: `eid` (the ensemble's id and the code: certain), `block` (the code on this block, nearest the station, because the list has no row for this ensemble id), or null. |
 
-A TV might show "Crystal Palace, 4 km N, 0 dB" a line each. Nothing about
+A TV might show "Crystal Palace, 4 km ESE, 0 dB", a line each. Nothing about
 it is needed to play a station. The simulator's ensemble on 11D is sent
 by two transmitters, with the codes of Sound Digital's Crystal Palace
 and, 8 dB down, Wrotham (its EId, C1CE, is Sound Digital's), as in the
-example above.
+example above, seen from IO91WK.
 
 **The codes** (the feed's `why`, a service's, the session's), each with
 its sentence in `whyText`; prefer your own translation of the code:
