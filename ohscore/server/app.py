@@ -295,6 +295,11 @@ class Server:
         return self.httpd
 
     def shutdown(self) -> None:
+        # First, before the HTTP server, the recordings and the radio are
+        # wound down: SIGTERM from a container stop comes with a grace
+        # period, and the operator's dial must be on disk inside it
+        # (Engine.save_now; stop_radio saves again at its end).
+        self.radio.save_now()
         self.stop_ev.set()
         self.recordings.stop()
         if self.httpd is not None:

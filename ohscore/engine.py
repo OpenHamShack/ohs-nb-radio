@@ -22,6 +22,9 @@ Threads:
   live here and not in the rx thread, so a stalled device read cannot stop
   them unkeying. It also batches status into the "state" feed and persists
   the config.
+- **saver**: only while something is unsaved, running or not: writes the
+  operator's changes a second after the last of a burst (three at most),
+  so a dial moved while the radio is stopped is not lost (`dirty`).
 
 Two ways an over ends. A **normal end** - the message is all sent, PTT
 is released - stops taking audio and lets the device send what it already
@@ -497,6 +500,22 @@ class Engine:
         self.running = False
         self.stop_ev = threading.Event()
         self.pending: dict = {}
+        # Unsaved operator state is written by its own saver thread
+        # (_saver_loop), debounced: SAVE_QUIET_S after the last change of a
+        # burst, and never more than SAVE_LONGEST_S after its first.
+        # Before 23/10/2026 the supervisor wrote it on its next pass (0.1 s),
+        # which had two holes: the supervisor runs only while the radio
+        # does, and stop() saved only a running radio, so a dial moved while
+        # the radio was stopped, failing to open or waiting for the broker
+        # was never written at all; and a supervisor that died left every
+        # later change for a stop() that a SIGKILL after podman's grace
+        # period never reached. ohs-box came back on 145.500 after the
+        # 0.1.22-beta.3 update with the dial on 145.650. The debounce is
+        # also what spares an SD card a write per dial step.
+        self.save_cv = threading.Condition()
+        self.saver_thread: threading.Thread | None = None
+        self.save_due = 0.0
+        self.dirty_since = 0.0
         self.dirty = False
         # Set for state the engine corrects continuously by itself (NB's lock
         # corrections): saved too, but at most every 30 s (see _save).
@@ -1054,10 +1073,18 @@ class Engine:
 
     def stop(self) -> None:
         if not self.running:
+            # Changes made while stopped (or while the radio would not open)
+            # have no supervisor to write them: written here, on the way out.
+            self._save(force=True)
             return
         # A hold that gives way puts the operator's settings back while the
-        # radio still runs, so the save below writes theirs.
+        # radio still runs, so the saves below write theirs.
         self.preempt_receiver("stop")
+        # Saved before the teardown, which can take seconds (threads joined,
+        # the device closed): a container stop gives SIGTERM a grace period
+        # and then kills, and the dial must be on disk by then. Saved again
+        # at the end for anything the teardown itself changes.
+        self._save(force=True)
         self.keyer.shutdown()
         self.tx_clear("keyer")
         self._unkey("", None, "radio stopped")
@@ -1125,6 +1152,67 @@ class Engine:
     def heartbeat(self) -> None:
         self.last_heartbeat = time.monotonic()
 
+    # How soon unsaved operator state reaches the disk (see __init__).
+    SAVE_QUIET_S = 1.0
+    SAVE_LONGEST_S = 3.0
+
+    @property
+    def dirty(self) -> bool:
+        """Operator state not yet on disk. A property so every place that
+        marks it - the engine's, Radio's and NB's alike - also schedules
+        the debounced save, without each having to remember to."""
+        return self._dirty
+
+    @dirty.setter
+    def dirty(self, value: bool) -> None:
+        if not value:
+            self._dirty = False
+            return
+        now = time.monotonic()
+        if not getattr(self, "_dirty", False):
+            self.dirty_since = now
+        self._dirty = True
+        self.save_due = min(now + self.SAVE_QUIET_S, self.dirty_since + self.SAVE_LONGEST_S)
+        if self.persist:
+            self._saver_wake()
+
+    def _saver_wake(self) -> None:
+        # Callers usually hold self.lock; save_cv is never held while taking
+        # self.lock (the saver drops it before _save), so no ordering hazard.
+        with self.save_cv:
+            self.save_cv.notify()
+            if self.saver_thread is None:
+                self.saver_thread = threading.Thread(target=self._saver_loop, name=f"{self.THREAD_PREFIX}-saver",
+                                                     daemon=True)
+                self.saver_thread.start()
+
+    def _saver_loop(self) -> None:
+        """Writes unsaved state once it is due, running or not; ends when
+        nothing is left unsaved, and the next change starts it again (an
+        engine that is idle, or a test's, keeps no thread)."""
+        while True:
+            with self.save_cv:
+                if not self.dirty:
+                    self.saver_thread = None
+                    return
+                wait = self.save_due - time.monotonic()
+                if wait > 0:
+                    self.save_cv.wait(wait)
+                    continue
+            try:
+                self._save()
+            except Exception:  # noqa: BLE001 - a failed save is toasted in _save; the thread must live on
+                self.log.warning("saving settings failed", exc_info=True)
+                with self.save_cv:
+                    self.saver_thread = None
+                return
+
+    def save_now(self) -> None:
+        """Write unsaved state now, waiting for a write already under way:
+        for a shutdown, before anything slow can delay it past the
+        process's grace period."""
+        self._save(force=True)
+
     def _save(self, force: bool = False):
         if not self.persist:
             return
@@ -1132,8 +1220,11 @@ class Engine:
             idle = not (self.dirty or self.dirty_locks)
             # Lock corrections change every half second; writing them that
             # often would wear an SD card for nothing. Operator changes go out
-            # within a couple of seconds, lock-only changes every 30 s.
+            # once they are due (SAVE_QUIET_S/SAVE_LONGEST_S), lock-only
+            # changes every 30 s.
             now = time.monotonic()
+            if not idle and not force and self.dirty and now < self.save_due:
+                return
             if not idle and not force and not self.dirty and now - self.last_save < 30:
                 return
             if not idle:
