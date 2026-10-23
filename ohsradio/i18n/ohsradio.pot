@@ -30,7 +30,7 @@ msgstr ""
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1068
+#: ohsradio/radio.py:1228
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -76,7 +76,7 @@ msgstr ""
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
 
-#: ohsradio/radio.py:583
+#: ohsradio/radio.py:601
 #, python-brace-format
 msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
 msgstr ""
@@ -148,7 +148,7 @@ msgstr ""
 msgid "Not scanning now: {why}"
 msgstr ""
 
-#: ohsradio/radio.py:707
+#: ohsradio/radio.py:863
 #, python-brace-format
 msgid "Radio is scanning {label} for its station list: it is yours again the moment you use it"
 msgstr ""
@@ -213,7 +213,7 @@ msgstr ""
 msgid "The CW skimmer stopped."
 msgstr ""
 
-#: ohsradio/radio.py:662
+#: ohsradio/radio.py:818
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
@@ -278,12 +278,12 @@ msgstr ""
 msgid "The {device} does not receive the FM band"
 msgstr ""
 
-#: ohsradio/radio.py:544
+#: ohsradio/radio.py:562
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz ({radio} MHz through {converter}) is outside it"
 msgstr ""
 
-#: ohsradio/radio.py:547
+#: ohsradio/radio.py:565
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
@@ -292,7 +292,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1026
+#: ohsradio/radio.py:1186
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -315,6 +315,11 @@ msgstr ""
 msgid "Transmitting"
 msgstr ""
 
+#: ohsradio/radio.py:774
+#, python-brace-format
+msgid "Tuning to {freq} stops {sessions}: the receiver stays on {lo} to {hi} while they run"
+msgstr ""
+
 #: ohsradio/plutofix.py:539
 #, python-brace-format
 msgid "Waiting for the radio to come back… ({why})"
@@ -324,7 +329,7 @@ msgstr ""
 msgid "Waiting for the radio to restart…"
 msgstr ""
 
-#: ohsradio/radio.py:744
+#: ohsradio/radio.py:902
 #, python-brace-format
 msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""
@@ -458,7 +463,7 @@ msgstr ""
 msgid "{error}. The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:660
+#: ohsradio/radio.py:816
 #, python-brace-format
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""
@@ -481,6 +486,16 @@ msgstr ""
 #: ohsradio/localfreq.py:245
 #, python-brace-format
 msgid "{field} must be text"
+msgstr ""
+
+#: ohsradio/radio.py:719
+#, python-brace-format
+msgid "{freq} does not fit in the {width} the receiver covers together with the dial ({dial}) and {sessions}"
+msgstr ""
+
+#: ohsradio/radio.py:716
+#, python-brace-format
+msgid "{freq} is too far from the dial ({dial}): the receiver covers {width} at once, so tune nearer to it first"
 msgstr ""
 
 #: ohsradio/ui/face.py:67

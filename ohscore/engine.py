@@ -175,6 +175,20 @@ class ReceiverHeld(ValueError):
     code = "receiver_busy"
 
 
+class SpanPinned(ValueError):
+    """set() refused to tune the dial out of the span the background
+    decoder sessions hold (Radio.pin_plan; RADIO-SDR-PLAN §8.5): the
+    message is the sentence, `sessions` the sessions it would stop
+    ({id, decoder, freqHz, label}). The store's api/set answers it 409
+    `span_pinned`; set(drop_sessions=True) stops them and tunes."""
+
+    code = "span_pinned"
+
+    def __init__(self, sentence: str, sessions: list[dict]):
+        super().__init__(sentence)
+        self.sessions = sessions
+
+
 SLOT_SEC = {"ft8": 15.0, "ft4": 7.5, "q65": 60.0, "js8": 15.0}
 # Where in its slot a transmission normally starts. Q65-60 starts 1 s in,
 # as WSJT-X's Modulator starts it and its decoder expects (DT 0); it was
@@ -340,6 +354,11 @@ class Engine:
     # What the operator had before a session took the receiver, put back
     # when it lets go (an app adds what tuning away would change with it).
     HOLD_PRIOR: tuple = ("vfo", "mode")
+    # Whether background decoder sessions pin the receiver's centre (an
+    # app whose centre follows its dial: Radio's pin_plan). QO-100 NB's
+    # receiver is on the transponder whatever the dial does, so there is
+    # nothing to pin and its sessions keep the `outside` rule.
+    PINS_SPAN = False
 
     # Supplied by the app's subclass.
     STATE = None                 # ohscore.state.Registry
@@ -742,10 +761,12 @@ class Engine:
             self.cfg[key] = value
             self.dirty = True
 
-    def set(self, authorise: bool = False, **changes) -> dict:
+    def set(self, authorise: bool = False, drop_sessions: bool = False, **changes) -> dict:
         """Validate and apply. All-or-nothing: one bad value and nothing
         changes. Raises ValueError with a sentence for the operator. Never
-        keys the transmitter (safety rule 1)."""
+        keys the transmitter (safety rule 1). A dial the background decoder
+        sessions' span cannot hold raises SpanPinned, unless
+        `drop_sessions`, which stops them first (the operator said yes)."""
         spec_of = self.STATE.spec
         clean = {}
         for k, v in changes.items():
@@ -768,6 +789,8 @@ class Engine:
             moved = [k for k in self.HELD_KEYS if k in clean and clean[k] != self.st.get(k)]
             if moved:
                 raise ReceiverHeld(self._held_why(held, "tune"))
+        if not holder:
+            self._pin_check(clean, drop_sessions)
         with self.lock:
             self._adjust_set(clean)
             merged = dict(self.st)
@@ -2026,6 +2049,37 @@ class Engine:
     def _held_retune(self) -> None:
         """Move the receiver's centre now the hold has begun or ended (an
         app that retunes its hardware to its dial)."""
+
+    # ------------------------------------------------- the pinned span
+    # Background decoder sessions (fixed ones: not the mode's, not one
+    # holding the receiver) want their frequencies to stay in the span
+    # however the operator tunes. An app whose receiver centre follows its
+    # dial (PINS_SPAN: Radio) pins the centre while any run: the dial moves
+    # freely inside the span, the centre stays, and a tune that would leave
+    # the span is refused (SpanPinned) unless the operator lets it stop
+    # them. The hooks below are that app's; here they do nothing, so an
+    # engine that does not pin keeps the `outside` rule (decoders.py).
+    def pin_plan(self, freq: float, half_width: float) -> float | None:
+        """The centre that holds every background session, a new one at
+        `freq` (± `half_width`) and the dial; raises decoders.Refused
+        `outside_span` when none does. None: this engine does not pin."""
+        return None
+
+    def pin_to(self, centre: float) -> None:
+        """Pin the receiver's centre at `centre` (a new session fitted)."""
+
+    def span_changed(self) -> None:
+        """The background sessions changed: unpin when none is left, and
+        say so in `span`."""
+
+    def span_view(self) -> dict:
+        """`span` in the state: {centreHz, loHz, hiHz, pinned, by,
+        sessions}; {} for an engine that does not pin."""
+        return {}
+
+    def _pin_check(self, clean: dict, drop: bool) -> None:
+        """set(): refuse (SpanPinned) a change that would take the dial
+        out of the pinned span, or stop the sessions first when `drop`."""
 
     def _held_block(self, X, raw: np.ndarray) -> tuple[np.ndarray, float]:
         """A held block's 12 kHz audio (silence: the mode decoder and the

@@ -19,10 +19,17 @@ from the bank (the same `Channel` the VFO, zoom and the CW skimmer use;
 no second channeliser, §3.3) and feeds that IQ. Fixed sessions are saved in
 the settings (decoderSessions) and start again with the radio.
 
-**The span.** The receiver covers what its sample rate covers around the
-dial, so a session the operator tuned away from goes `outside` and is fed
-nothing, and comes back by itself when the span covers it again - the CW
-skimmer's rule (ENGINE-API "cwskim"). Its results stop; it is not stopped.
+**The span.** The receiver covers what its sample rate covers around its
+centre. In an app whose centre follows the dial (Radio, Engine.PINS_SPAN)
+the fixed sessions **pin** it (Brian, 23/10/2026; RADIO-SDR-PLAN §8.5):
+starting one chooses a centre that holds every session and the dial
+(Engine.pin_plan; ohscore/span.py) or is refused `outside_span`, and while
+any runs the dial moves inside that span and a tune out of it is refused
+(SpanPinned) unless the operator lets it stop them (stop_background). The
+last one stopping unpins it (Engine.span_changed). Elsewhere (QO-100 NB) a
+session the span no longer covers goes `outside` and is fed nothing, and
+comes back by itself when the span covers it again - the CW skimmer's rule
+(ENGINE-API "cwskim"). Its results stop; it is not stopped.
 
 **Results** carry `session`, `rev` (rising by one per result, so a gap says
 one was missed), `t` (UTC from the samples) and `type`. The supervisor
@@ -132,10 +139,12 @@ class Refused(ValueError):
     """A session that cannot start: `code` for clients (SERVER-API
     api/decoders), the sentence as the message, `needs` naming a codec."""
 
-    def __init__(self, code: str, sentence: str, needs: str | None = None):
+    def __init__(self, code: str, sentence: str, needs: str | None = None, sessions: list | None = None):
         super().__init__(sentence)
         self.code = code
         self.needs = needs
+        # span_pinned: the sessions holding the span ({id, decoder, freqHz, label}).
+        self.sessions = sessions
 
 
 class Link:
@@ -162,6 +171,9 @@ class _Fixed:
     def __init__(self, sid: str, decoder: str, freq: float, params: dict, panel: str):
         self.id, self.decoder, self.freq, self.params, self.panel = sid, decoder, float(freq), dict(params), panel
         self.ch: Channel | None = None
+        # How far either side of `freq` its channel reaches, for fitting it
+        # into a pinned span (Engine.pin_plan).
+        self.half = 1500.0
         self.index = 0
         self.outside = False
         self.results: collections.deque = collections.deque(maxlen=RESULTS_KEPT)
@@ -221,6 +233,8 @@ class Decoders:
         for f in fixed:
             if f.held:
                 self.engine.release_receiver(f.id)
+        # Nothing pins the span once they are gone (Engine.span_changed).
+        self.engine.span_changed()
         if host is None:
             return True
         joined = host.close()
@@ -278,8 +292,11 @@ class Decoders:
         return {"sessions": int(s.get("decodersMax", 4)), "cpuMax": float(s.get("decodeCpuMax", 0.25)),
                 "threads": 1}
 
-    def start(self, decoder: str, freq_hz: float, params: dict | None = None, *, save: bool = True) -> dict:
-        """A fixed session on `freq_hz` (a dial frequency). Raises Refused."""
+    def start(self, decoder: str, freq_hz: float, params: dict | None = None, *, save: bool = True,
+              drop_sessions: bool = False) -> dict:
+        """A fixed session on `freq_hz` (a dial frequency). Raises Refused.
+        `drop_sessions`: a session that takes the receiver (DAB) stops the
+        background sessions pinning the span rather than being refused."""
         m = sdr.load()
         if m is None:
             raise Refused("decoder_unavailable", sdr.why())
@@ -295,7 +312,7 @@ class Decoders:
         # scan holding it gives it back first (Engine.client_activity).
         self.engine.client_activity("decoder")
         if self.holds_receiver(decoder):
-            return self._start_held(m, entry, freq_hz, params)
+            return self._start_held(m, entry, freq_hz, params, drop_sessions)
         try:
             freq = float(freq_hz)
         except (TypeError, ValueError):
@@ -304,39 +321,62 @@ class Decoders:
             host = self.host
             if host is None or not self.engine.running:
                 raise Refused("not_running", _("Start the radio before adding a decoder"))
+            held = self.engine.held
+            if held is not None:
+                # DAB has the receiver in Band III: a session here would only
+                # ever be `outside`, and pinning cannot move a held receiver.
+                # The DAB station goes first (precedence: SERVER-API "The
+                # pinned span").
+                raise Refused("receiver_busy", _("The receiver is playing DAB from block {block}: stop the DAB "
+                                                 "station to add a decoder").format(block=held["block"]))
             if len(self.fixed) >= self.limits()["sessions"]:
                 raise Refused("too_many_sessions",
                               _("There are already {n} decoders running, the most Settings › Decoders allows")
                               .format(n=len(self.fixed)))
-            if not self._covers(freq, entry):
-                raise Refused("outside_span", _("{freq} is outside what the receiver covers now")
-                              .format(freq=_mhz(freq)))
             inputs = entry.get("inputs") or []
             kind = "iq" if "iq" in inputs else "audio"
+            # A decoder that takes only audio (CW through shack_cw) is fed the
+            # channel as USB audio with its signal at its pitch, so its
+            # channel is centred that far below the signal (rx()) and reaches
+            # that much further down.
+            pitch = float(params.get("pitchHz", 700.0)) if kind == "audio" else 0.0
+            half = float(entry.get("bandwidthHz") or 3000.0) / 2 + pitch
+            pin = self.engine.pin_plan(freq, half)
+            if pin is None and not self._covers(freq, entry):
+                raise Refused("outside_span", _("{freq} is outside what the receiver covers now")
+                              .format(freq=_mhz(freq)))
             try:
                 sid = host.start(decoder, params, input=kind, rate=AUDIO_RATE)
             except m.DecoderError as e:
                 raise self._refusal(e) from None
             f = _Fixed(sid, decoder, freq, params, entry.get("panel", "text"))
-            f.kind = kind
-            # A decoder that takes only audio (CW through shack_cw) is fed the
-            # channel as USB audio with its signal at its pitch, so its
-            # channel is centred that far below the signal (rx()).
-            f.pitch = float(params.get("pitchHz", 700.0)) if kind == "audio" else 0.0
+            f.kind, f.pitch, f.half = kind, pitch, half
             self.fixed[sid] = f
+            if pin is not None:
+                self.engine.pin_to(pin)
         log.info("decoder session %s: %s at %.0f Hz %s", sid, decoder, freq, params)
         if save:
             self._save()
         self._publish_status()
         return self._view(f)
 
-    def _start_held(self, m, entry: dict, freq_hz, params: dict) -> dict:
+    def _start_held(self, m, entry: dict, freq_hz, params: dict, drop_sessions: bool = False) -> dict:
         """A session that takes the receiver (module docstring, "Held
         sessions"). Raises Refused."""
         decoder = entry["id"]
         centre, block = self._tuning(m, decoder, freq_hz, params)
         if block:
             params["block"] = block
+        pinning = self.pinned_by()
+        if pinning and self.engine.PINS_SPAN:
+            # The background sessions were there first and DAB would take
+            # their span to Band III: refused, as a tune out of the span is,
+            # unless the operator said to stop them (SERVER-API "The pinned
+            # span": precedence).
+            if not drop_sessions:
+                raise Refused("span_pinned", _("Playing DAB takes the receiver to Band III and stops {sessions}")
+                              .format(sessions=sessions_text(pinning)), sessions=pinning)
+            self.stop_background()
         with self.lock:
             host = self.host
             if host is None or not self.engine.running:
@@ -452,7 +492,33 @@ class Decoders:
         log.info("decoder session %s stopped", sid)
         self._save()
         self._publish_status()
+        if not f.held:
+            self.engine.span_changed()
         return True
+
+    def background(self) -> list[_Fixed]:
+        """The sessions that pin the span: fixed ones on frequencies of
+        their own (not the mode's, not one holding the receiver)."""
+        with self.lock:
+            return [f for f in self.fixed.values() if not f.held]
+
+    def pinned_by(self) -> list[dict]:
+        """The background sessions as a client names them: {id, decoder,
+        freqHz, label} ("RTTY on 14.0933 MHz")."""
+        return [{"id": f.id, "decoder": f.decoder, "freqHz": f.freq, "label": session_label(f.decoder, f.freq)}
+                for f in self.background()]
+
+    def stop_background(self) -> list[dict]:
+        """Stop every background session (the operator chose to tune out
+        of their span, or to play DAB): the ones stopped. They leave
+        decoderSessions too: the operator chose to end them."""
+        gone = self.pinned_by()
+        for g in gone:
+            self.stop(g["id"])
+        if gone:
+            log.info("background decoder sessions stopped to free the span: %s",
+                     ", ".join(g["label"] for g in gone))
+        return gone
 
     def sessions(self) -> list[dict]:
         with self.lock:
@@ -773,6 +839,17 @@ def codec_sentence(st: dict) -> str:
         return _("Not found: {codec} is normally included; reinstalling the program puts it back.").format(codec=cid)
     return _("Not installed. This program never includes {codec}: install it yourself, or put it in the codecs folder.") \
         .format(codec=cid)
+
+
+def session_label(decoder: str, freq: float) -> str:
+    """How a sentence names a session: "RTTY on 14.0933 MHz"."""
+    return _("{decoder} on {freq}").format(decoder=decoder.upper(), freq=_mhz(freq))
+
+
+def sessions_text(sessions: list[dict]) -> str:
+    """Several sessions' labels in one phrase ("RTTY on 14.0933 MHz, APRS
+    on 144.8000 MHz")."""
+    return ", ".join(s["label"] for s in sessions)
 
 
 def _takes_receiver(entry: dict) -> bool:

@@ -13,6 +13,10 @@ calls (docs/ham/DESIGN-HAM.md sections 3-6):
   whole band is on the scope); a wider one keeps the dial in view, DC a
   quarter of the span below it, re-centring only when the dial leaves the
   span. The device's reference error (`ppm`) is taken out of every tune.
+  While a background decoder session runs, the centre is **pinned**
+  instead (Brian, 23/10/2026; the "pinned span" section below): the dial
+  moves inside the span, the centre stays, and a tune out of it is
+  refused unless the operator lets it stop the sessions.
 - **dials**: the transmit dial adds a repeater shift in FM (auto from the
   plan's UK channel pairs, or minus/plus by hand) and reverse swaps input
   and output;
@@ -55,6 +59,7 @@ calls (docs/ham/DESIGN-HAM.md sections 3-6):
 from __future__ import annotations
 
 import math
+import threading
 import time
 from collections import deque
 
@@ -62,11 +67,14 @@ import numpy as np
 
 from ohscore import converters as cv
 from ohscore import licences, smeter_cal, txguard
+from ohscore import span as spanfit
+from ohscore.decoders import Refused, sessions_text
+from ohscore.i18n import fmt
 from ohscore.dsp import wfm
 from ohscore.dsp.bank import Channel, Geometry, Source
 from ohscore.dsp.fm import FM_RATE, FmDemod, FmMod
 from ohscore.dsp.mod import AmMod
-from ohscore.engine import AUDIO_RATE, Engine, TxRefused
+from ohscore.engine import AUDIO_RATE, Engine, SpanPinned, TxRefused
 
 from ohsradio.i18n import _
 
@@ -181,6 +189,11 @@ class Radio(Engine):
     HOLDS_RECEIVER = True
     HELD_KEYS = Engine.HELD_KEYS + ("rptReverse", "rptShift")
     HOLD_PRIOR = Engine.HOLD_PRIOR + ("rptOffsetHz",)
+    # Background decoder sessions pin the receiver's centre (pin_plan).
+    PINS_SPAN = True
+    # Every setting that moves the receive dial or widens what it hears:
+    # what a pinned span judges (_pin_check).
+    PIN_KEYS = ("vfo", "mode", "rit", "ritOn", "rptReverse", "rptShift", "rptOffsetHz")
 
     def _diag_extra(self, s: dict) -> str:
         info = s.get("licenceInfo") or {}
@@ -225,6 +238,11 @@ class Radio(Engine):
         # back exactly when it ends (_held_retune): the dial alone would
         # give a band-following centre that need not be the one it had.
         self._centre_before: tuple | None = None
+        # The centre the background decoder sessions pinned (pin_to), None
+        # while it follows the dial; and, per calling thread, what a set()
+        # that passed _pin_check does to it once applied (_after_set).
+        self.pin: float | None = None
+        self._pin_tls = threading.local()
         # The weekly FM and DAB scan (bandscan.py), told of everything a
         # person does so it knows when the radio is idle.
         self.bandscan = BandScanner(self)
@@ -595,16 +613,19 @@ class Radio(Engine):
             # receive thread resets the receiver itself (_demodulate_wfm).
             if s.get("rds") is not None:
                 self._status(rds=None)
+            self._pin_apply()
             self._maybe_recentre()
         if any(k in changed for k in ("seqDelayMs",)) and self.seq is not None:
             self.seq.delay = s["seqDelayMs"] / 1000.0
 
     def _maybe_recentre(self):
         held = self.held
-        if held is not None:
+        if held is not None or self.pin is not None:
             # A session holds the receiver: its centre exactly, DC on the
-            # block's unused middle carrier, whatever the dial says.
-            want = held["centre"]
+            # block's unused middle carrier, whatever the dial says. Or
+            # background sessions pinned it: where pin_plan put it, which
+            # holds them and the dial (_pin_check keeps the dial inside).
+            want = held["centre"] if held is not None else self.pin
             conv = self._conv_at(want, rx=True)
             pending = self.pending_centre is not None
             if (self.pending_centre if pending else self.centre) != want or \
@@ -625,12 +646,147 @@ class Radio(Engine):
         band_based = b is not None and plan_centre(b.lo, b, fs, rr) == plan_centre(b.hi, b, fs, rr) == want
         # Into or out of a converter's band, the device retunes whatever the centre.
         other = conv != (self.pending_conv if pending else self.rx_conv)
-        # Wide FM's channel reaches 90 kHz either side of the dial; it has
-        # to stay inside the span too, not only the dial.
-        edge = wfm.HALF_WIDTH + 10_000.0 if self.st["mode"] == "wfm" else 3_000.0
+        edge = self._dial_edge(self.st)
         if c is None or other or not (c - half + edge <= rx <= c + half - edge) or (band_based and c != want):
             self.pending_conv = conv
             self.pending_centre = want
+
+    @staticmethod
+    def _dial_edge(s: dict) -> float:
+        """How far either side of the receive dial what it hears reaches.
+        Wide FM's channel reaches 90 kHz either side of the dial; it has to
+        stay inside the span too, not only the dial."""
+        return wfm.HALF_WIDTH + 10_000.0 if s["mode"] == "wfm" else 3_000.0
+
+    # ------------------------------------------------------------ the pinned span
+    # Brian, 23/10/2026 (RADIO-SDR-PLAN §8.5, "fixed sessions against a
+    # moving span"): a background decoder session - APRS on 144.800, a
+    # second RTTY - is on a frequency of its own, and a centre that follows
+    # the dial would leave it `outside` the moment the operator tuned away.
+    # So while one runs the centre is pinned: the dial moves freely inside
+    # the span (the VFO channel follows it; the centre does not), and a
+    # tune that would take the dial out of it is refused with the sessions
+    # it would stop, unless the operator says to stop them. The other
+    # choice, a second receiver for the background, needs two devices and
+    # the engine has one.
+    #
+    # The span is the wide scope's (USABLE of fs/2 either side): what the
+    # operator sees is exactly where the dial may go, and well inside the
+    # bank's filter edges, where the decoders' channels lose nothing. No
+    # session and not the dial ever sits within spanfit.DC_GUARD_HZ of the
+    # centre (DC's spike). The centre is chosen when a session starts: the
+    # one there now if everything fits; else the middle of the sessions
+    # and the dial, nudged off any of them; else the session is refused
+    # (`outside_span`, with the sentence). A dial tuned onto DC inside the
+    # span moves the pin the least that clears it, when it can.
+    #
+    # Precedence: DAB and the band scan hold the whole receiver. The pinned
+    # sessions win over a DAB start (refused `span_pinned` unless it says
+    # to stop them) and a band scan (not while a decoder runs; a session
+    # starting ends a scan); a session cannot start while DAB plays
+    # (`receiver_busy`). Transmit never looks at any of this: it follows
+    # the transmit dial through its own LO (_tx_key_up), never the capture.
+    def _span_half(self) -> float:
+        return USABLE * self._fs() / 2
+
+    def _centre_now(self) -> float | None:
+        return self.pending_centre if self.pending_centre is not None else self.centre
+
+    def _centre_range(self, dial: float) -> tuple[float, float]:
+        """Where the centre may go for a span around `dial`: the device's
+        reach, through the converter `dial` is worked through."""
+        return self._air_range(self._ranges()[0], self._conv_at(dial, rx=True))
+
+    def _pin_items(self, extra: tuple = ()) -> list[tuple[float, float]]:
+        return [(f.freq, f.half) for f in self.decoders.background()] + list(extra)
+
+    def pin_plan(self, freq: float, half_width: float) -> float | None:
+        if not self.PINS_SPAN or self.centre is None:
+            return None
+        s = self.st
+        dial = (self._rx_dial(s), self._dial_edge(s))
+        others = self._pin_items()
+        lo, hi = self._centre_range(dial[0])
+        keep = self.pin if self.pin is not None else self._centre_now()
+        c = spanfit.choose_centre(others + [(freq, half_width), dial], self._span_half(), keep=keep, lo=lo, hi=hi)
+        if c is not None:
+            return c
+        width = fmt.frequency(int(round(2 * self._span_half())), "kHz", 0)
+        if not others:
+            raise Refused("outside_span", _("{freq} is too far from the dial ({dial}): the receiver covers {width} "
+                                            "at once, so tune nearer to it first").format(
+                freq=_mhz(freq), dial=_mhz(dial[0]), width=width))
+        raise Refused("outside_span", _("{freq} does not fit in the {width} the receiver covers together with the "
+                                        "dial ({dial}) and {sessions}").format(
+            freq=_mhz(freq), dial=_mhz(dial[0]), width=width, sessions=sessions_text(self.decoders.pinned_by())))
+
+    def pin_to(self, centre: float) -> None:
+        moved = self.pin != centre
+        self.pin = float(centre)
+        if moved:
+            self.log.info("receiver centre pinned at %.0f Hz for %s", centre,
+                          ", ".join(b["label"] for b in self.decoders.pinned_by()))
+        if self.running:
+            self._maybe_recentre()
+        self._status(span=self.span_view())
+
+    def span_changed(self) -> None:
+        if self.pin is not None and not self.decoders.background():
+            self.pin = None
+            self.log.info("receiver centre unpinned: it follows the dial again")
+            if self.running and self.centre is not None:
+                self._maybe_recentre()
+        self._status(span=self.span_view())
+
+    def span_view(self) -> dict:
+        c = self._centre_now()
+        if c is None or not self.running:
+            return {}
+        half = self._span_half()
+        by = self.decoders.pinned_by() if self.pin is not None else []
+        return {"centreHz": c, "loHz": c - half, "hiHz": c + half, "pinned": self.pin is not None,
+                "by": [b["id"] for b in by], "sessions": by}
+
+    def _pin_check(self, clean: dict, drop: bool) -> None:
+        t = self._pin_tls
+        t.drop, t.move = False, None
+        if self.pin is None or not any(k in clean for k in self.PIN_KEYS):
+            return
+        merged = {**self.st, **clean}
+        rx, edge = self._rx_dial(merged), self._dial_edge(merged)
+        c, half = self.pin, self._span_half()
+        if abs(rx - c) + edge <= half:
+            if abs(rx - c) < edge + spanfit.DC_GUARD_HZ:
+                # Inside the span but on DC: the least move of the pin that
+                # clears it and still holds every session. None can (they
+                # fill the span): the dial goes there anyway, as an
+                # unpinned one may, rather than refusing a frequency the
+                # span shows as reachable.
+                lo, hi = self._centre_range(rx)
+                t.move = spanfit.choose_centre(self._pin_items(((rx, edge),)), half, prefer=c, lo=lo, hi=hi)
+            return
+        if drop:
+            # Stopped once the change has applied (_pin_apply): a set()
+            # refused for another reason stops nothing.
+            t.drop = True
+            return
+        sessions = self.decoders.pinned_by()
+        raise SpanPinned(_("Tuning to {freq} stops {sessions}: the receiver stays on {lo} to {hi} while they "
+                           "run").format(freq=_mhz(rx), sessions=sessions_text(sessions), lo=_mhz(c - half),
+                                         hi=_mhz(c + half)), sessions)
+
+    def _pin_apply(self) -> None:
+        """After a set() that _pin_check let through: stop the sessions
+        the operator agreed to stop, or move the pin off the dial."""
+        t = self._pin_tls
+        drop, move = getattr(t, "drop", False), getattr(t, "move", None)
+        t.drop, t.move = False, None
+        if drop:
+            self.decoders.stop_background()
+        elif move is not None and self.pin is not None and move != self.pin:
+            self.pin = float(move)
+            self.log.info("pinned centre moved to %.0f Hz: the dial was on it", move)
+            self._status(span=self.span_view())
 
     # --------------------------------------------------------------- lifecycle
     def _start_consumers(self) -> None:
@@ -718,7 +874,9 @@ class Radio(Engine):
 
     def _start_status(self) -> dict:
         lo, hi = self.wide_span()
-        return {"spanLo": lo, "spanHi": hi, "seqState": "rx", "swr": 0.0, "fwdW": 0.0}
+        self.pin = None
+        return {"spanLo": lo, "spanHi": hi, "seqState": "rx", "swr": 0.0, "fwdW": 0.0,
+                "span": {"centreHz": self.centre, "loHz": lo, "hiHz": hi, "pinned": False, "by": [], "sessions": []}}
 
     def _mode_caps(self, info: dict) -> dict:
         info = dict(info)
@@ -746,6 +904,8 @@ class Radio(Engine):
 
     def stop(self) -> None:
         super().stop()
+        self.pin = None
+        self._status(span={})
         self._cwskim_enable(False)
         if self.seq is not None:
             self.seq.close()
@@ -932,7 +1092,7 @@ class Radio(Engine):
             self.dev.set_rx_if(self.rx_if)
             self.settle_at = self.rx_samples + int(RETUNE_SETTLE * self.geo.fs)
             lo, hi = self.wide_span()
-            self._status(spanLo=lo, spanHi=hi)
+            self._status(spanLo=lo, spanHi=hi, span=self.span_view())
 
     def _rx_settled(self) -> bool:
         # Between a dial change that leaves the span and the end of the
@@ -1414,3 +1574,8 @@ class Radio(Engine):
         before = [("BAND", ADIF_BAND[b.name])] if b else []
         before.append(("FREQ", f"{r['rf'] / 1e6:.6f}"))
         return before, []
+
+
+def _mhz(hz: float) -> str:
+    """A frequency in a sentence: "144.8000 MHz" in the operator's locale."""
+    return fmt.frequency(int(round(hz)), "MHz", 4)

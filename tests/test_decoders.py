@@ -6,7 +6,7 @@ results come out numbered on the `decoders` feed and are kept for a client
 that missed some; a session the span no longer covers goes `outside` and
 comes back by itself; the limits and refusals are codes with sentences;
 sessions are saved and start again with the radio; and stopping the radio
-closes the host."""
+closes the host. How they pin Radio's span is test_ham_span_pin."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import unittest
 
@@ -50,6 +50,9 @@ class FixedSessions(unittest.TestCase):
         self.assertEqual(self.r.state()["decoders"]["sessions"], 1)
 
     def test_a_session_the_span_leaves_goes_outside_and_comes_back(self):
+        # An engine that does not pin its span (QO-100 NB's rule; Radio
+        # pins it: test_ham_span_pin).
+        self.r.PINS_SPAN = False
         sess = self.r.decoders.start("rtty", RTTY_HZ)
         self.r.set(vfo=7_050_000.0)
         pump(self.r, 30, until=lambda: self.r.decoders.session(sess["id"])["state"] == "outside")

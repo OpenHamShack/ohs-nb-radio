@@ -487,6 +487,10 @@ def add_shared_keys(reg: Registry) -> None:
         ("rxOwner", "dict", {}, "The decoder session holding the receiver ({} while the operator has it): "
                                 "{by, session, block, freqHz, prior, text}. While it does, set() refuses to "
                                 "tune and every key-up is refused (Engine.hold_receiver)."),
+        ("span", "dict", {}, "What the receiver covers now: {centreHz, loHz, hiHz, pinned, by, sessions}. "
+                             "pinned while background decoder sessions hold it (by: their ids; sessions: "
+                             "{id, decoder, freqHz, label}); the dial may not leave it then. {} while stopped, "
+                             "and in an app that does not pin (QO-100 NB)."),
         ("hostLibs", "dict", {}, "On a controller, the host libraries this app can use (ohscore/hostlibs.py): "
                                  "{supported, root, libraries, why}; {} elsewhere."),
     ]:
