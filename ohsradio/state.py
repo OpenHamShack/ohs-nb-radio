@@ -107,6 +107,14 @@ _o("vfo", default=145_500_000.0, lo=100_000.0, hi=6_000_000_000.0, help="Receive
 _o("txVfo", default=145_500_000.0, lo=100_000.0, hi=6_000_000_000.0,
    help="Transmit dial (VFO B) when split is on.")
 _o("mode", default="fm")
+# AM's filter, either side of the carrier: 4 kHz here (8 kHz in all) against
+# the shared 3 kHz. 3 kHz put the filter's -6 dB point on the top of
+# airband voice (±3-4 kHz on an 8.33 kHz channel) and cut a 9 kHz MW or LW
+# broadcast station to telephone quality; 4 kHz still stops short of an
+# 8.33 kHz neighbour's sideband (5.3 kHz away). NB, on QO-100, keeps 3 kHz.
+_o("amWidth", default=4000.0,
+   help="AM filter, either side of the carrier: 4 kHz suits airband voice and broadcast; narrower for a crowded "
+        "amateur band.")
 # Which modes noise reduction applies to is ohscore.dsp.nr.NR_MODES; each
 # app names its own here, so the help never offers a mode the app lacks.
 _o("nr", help="Noise reduction (WDSP's NR2) on what you hear in USB, LSB, CW, AM and FM. Decoders always get the "
