@@ -358,6 +358,9 @@ class Server:
                 # What the receiver covers, and whether background decoder
                 # sessions pin it (Radio; {} in QO-100 NB).
                 "span": st.get("span") or {},
+                # The gain a broadcast station plays with in place of the
+                # operator's (Radio; {} while none plays, and in NB).
+                "broadcastGain": st.get("broadcastGain") or {},
                 "hostLibs": st.get("hostLibs") or {}}
 
     def shared_log(self) -> dict:

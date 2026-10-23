@@ -37,7 +37,7 @@ the desktop apps.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET /` | view | a status page and the Recordings (record, play, download, delete); nothing fetched from elsewhere, one small script that posts to `api/recordings` |
-| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `span` (what the receiver covers and whether background decoder sessions pin it: "The pinned span" below; `{}` in QO-100 NB), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below) |
+| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `span` (what the receiver covers and whether background decoder sessions pin it: "The pinned span" below; `{}` in QO-100 NB), `broadcastGain` (the receiver gain a DAB station or wide FM plays with in place of the operator's: "Broadcast gain" below; `{}` while none plays, and in QO-100 NB), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below) |
 | `GET api/state` | view | `Radio.state()`: every key |
 | `GET api/spec` | view | the settings registry (type, limits, choices, help, auth, restart) |
 | `POST api/set` | control (transmit for `auth` keys) | `{key: value, …}` or `{"changes": {…}}` through `Radio.set()`, all or nothing; answers `{"changed": {…}}`. A tune out of the span background decoders pin is `409 span_pinned` with the sessions it would stop, unless the body has `"dropSessions": true` ("The pinned span" below); a receiver DAB holds is `409 receiver_busy`. The station profile's keys (callsign, locator, country, licence, class, own licence, conditions) are refused: they are set on the controller. So are the device addresses and audio devices (the broker and the API own those). |
@@ -431,7 +431,8 @@ IARU Region 1: S9 is -73 dBm below 30 MHz, -93 dBm at and above, 6 dB per
 S-unit) while a calibration holds for the dial's current radio, band and
 antenna; otherwise both are `null` and `why`/`whyText` say why not
 (`between_bands`, `no_calibration`, `agc`, `extra_changed` - an RSP's LNA
-state moved - with `why` `null` and `whyText` `""` while calibrated).
+state moved - `broadcast_gain` - a broadcast station's gain moved it: "Broadcast
+gain" below - with `why` `null` and `whyText` `""` while calibrated).
 
 | Method, path | Level | Does |
 |---|---|---|
@@ -720,6 +721,61 @@ installed later is picked up after `POST api/decoders/codecs/rescan`.
 DAB transmitter model's test ensemble, the one in the example above (old
 DAB C221 with programme text, a 1 kHz tone left and 1.5 kHz right; DAB+
 C3A7), heard when the simulator runs at 2.4 MS/s (`sampleRate`).
+
+## Broadcast gain (Radio)
+
+A broadcast station is the strongest thing on the antenna by tens of dB,
+so it does not play at the operator's manual `rxGain`, which is set for
+weak amateur signals (an RSPdx on a local DAB multiplex at rxGain 40
+reported thousands of overloads and dropped audio at 48 dB SNR). While a
+DAB session holds the receiver, or the mode is `wfm`, Radio applies a gain
+of its own (ohsradio/bcastgain.py has the reasoning):
+
+- **The operator's settings never change.** `rxGain`, `rxGainMode` and
+  the antenna keep what the operator set, in `api/state`, Settings and the
+  saved configuration; only what the device is given changes. When the
+  station ends - the session stopped, `api/stop`, a mode change out of
+  `wfm`, the radio stopping - the device gets the operator's exact gain
+  back.
+- It starts at a broadcast default for the device's `gainModel` (`db`:
+  30; `sdrplay`: 30, gRdB 49; `soapysdrplay3`: 43, gRdB 59 at LNA state
+  4), or the operator's own where that is already less gain; steps down
+  every 0.5 s while the device reports overload (`deviceStatus`
+  `overloaded`, or `overloads` rising: SDRplay RSPs) until clear for 5 s;
+  and creeps back up one step after 30 s clear, never past where it
+  started and never into a gain that overloaded in the last 5 minutes.
+  A radio that reports no overload (RTL-SDR, Pluto, SoapySDR, the
+  simulator) holds the default.
+- Nothing changes under the radio's own AGC (`rxGainMode` not `manual`),
+  on a Hermes-Lite 2 (its gain is `hl2Lna`), or while a recording plays.
+  The band scan and background `wfm` decoder sessions keep the operator's
+  gain: the scan gives the receiver back at once, and a background session
+  shares it with the dial.
+
+`broadcastGain` in `api/state` and `api/status`, for a client to show:
+
+```json
+{"auto": true, "db": 46.0, "operatorDb": 40.0, "gainModel": "soapysdrplay3", "adaptive": true,
+ "state": "settled", "overloaded": false, "backoffs": 3, "atLimit": false,
+ "text": "Broadcast gain 46, chosen for this station. Your own gain, 40, is back when it stops."}
+```
+
+`db` is in `rxGain`'s own units and sense (`gainModel`, "S-meter
+calibration" above: under `soapysdrplay3` a higher figure is less gain).
+`state`: `settling` (watching for overload, the first 5 s), `backing_off`,
+`limit` (still overloaded at the least gain it may set: `atLimit`),
+`settled`, or `fixed` (`adaptive` false: no overload report). While a
+station plays and the operator's gain stands it is `{"auto": false, "db":
+null, "why": "agc" | "no_rx_gain" | "playback", "text": ...}`; `{}` while
+none plays. There is no per-session override: set `rxGainMode` to an AGC
+mode to keep the device's own control for broadcast listening.
+
+The S-meter reads the gain applied: a calibration made at the operator's
+gain is corrected for it dB for dB, or, where the broadcast gain moved an
+RSP's LNA state (`soapysdrplay3`), does not hold (`why`
+`broadcast_gain`). `POST api/smeter/calibrate` answers `409
+cannot_calibrate` while a broadcast gain applies; the stored calibrations
+are never touched.
 
 ## Station lists (Radio)
 

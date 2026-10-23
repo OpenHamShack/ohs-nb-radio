@@ -79,7 +79,7 @@ from ohscore.engine import AUDIO_RATE, Engine, SpanPinned, TxRefused
 
 from ohsradio.i18n import _
 
-from . import bands, config, guard, power, state, xvtr
+from . import bands, bcastgain, config, guard, power, state, xvtr
 from .bandscan import BandScanner, rds_text
 from .cwskim import CwSkim, off_item
 from .devices import REGISTRY
@@ -213,6 +213,11 @@ class Radio(Engine):
 
     def __init__(self, *a, **kw):
         self.cwskim: CwSkim | None = None
+        # The gain a broadcast station gets while it plays (bcastgain.py),
+        # and the device's overload count when last looked at. Before the
+        # engine's own set-up, which asks _rx_gain_wanted.
+        self.bgain = bcastgain.Policy()
+        self._bg_overloads = None
         super().__init__(*a, **kw)
         self.centre = None
         self.pending_centre = None
@@ -902,6 +907,78 @@ class Radio(Engine):
 
     def _app_tick(self, now: float) -> None:
         self.bandscan.tick()
+        self._broadcast_tick(now)
+
+    # ------------------------------------------------------------ broadcast gain
+    # A DAB session holding the receiver, or wide FM, plays with a gain of
+    # its own (bcastgain.py says why and how). Decided here, ten times a
+    # second, from what holds the receiver and the mode - not from hooks
+    # on each way a station can end (stop, the radio stopping, a mode
+    # change, a new session...), so a way added later cannot leave the
+    # broadcast gain behind: whatever ended it, the next tick sees no
+    # broadcast and the operator's own gain is what _rx_gain_wanted says.
+    # The band scan's hold is not one: it hops across the band for a
+    # moment at a time, and gives the receiver back the moment anyone
+    # uses it. Nor is a background `wfm` decoder session: it shares the
+    # receiver with the dial and every other session in the span.
+    def _broadcast_key(self):
+        h = self.held
+        if h is not None:
+            return ("dab", h["session"]) if h.get("by") == "dab" else None
+        return ("wfm",) if self.st["mode"] == "wfm" else None
+
+    def _broadcast_tick(self, now: float) -> None:
+        s, bg = self.st, self.bgain
+        key = self._broadcast_key()
+        was = bg.wanted
+        why = None
+        if key is None:
+            if bg.active():
+                self.log.info("broadcast gain ends: the operator's %s %g dB again", s["rxGainMode"], s["rxGain"])
+            bg.end()
+        elif self.play is not None:
+            why = ("playback", _("A recording is playing: its gain was fixed when it was recorded."))
+        elif self._kind() == "hl2":
+            why = ("no_rx_gain", _("The Hermes-Lite 2's receive gain is its LNA setting, which stays yours."))
+        elif s["rxGainMode"] != "manual":
+            why = ("agc", _("Receiver gain control is automatic: the radio's own AGC follows the station."))
+        if why is not None:
+            bg.idle(key, *why)
+        elif key is not None:
+            ds = s.get("deviceStatus") or {}
+            count = ds.get("overloads")
+            count = int(count) if isinstance(count, (int, float)) else None
+            if bg.key != key or bg.wanted is None:
+                bg.begin(key, now, ds.get("gainModel") or "db", ds.get("rfgrRange"), float(s["rxGain"]),
+                         "overloaded" in ds or "overloads" in ds)
+                self.log.info("broadcast gain for %s: %g (the operator's %g; %s model, %s)", key[0], bg.gain,
+                              bg.operator, bg.ladder.model, "backs off on overload" if bg.adaptive else "fixed")
+            else:
+                if float(s["rxGain"]) != bg.operator:
+                    bg.operator_changed(now, float(s["rxGain"]))
+                # A new overload is the count rising where the device keeps
+                # one (the SDRplay API reports each detection, acknowledged
+                # and re-armed, so a lasting overload keeps counting). Its
+                # `overloaded` flag only falls on a "corrected" event, and
+                # read alone a flag left up after the gain came down would
+                # walk the gain to the floor; it is the signal only for a
+                # device with no count.
+                if count is not None:
+                    over = self._bg_overloads is not None and count > self._bg_overloads
+                else:
+                    over = bool(ds.get("overloaded"))
+                before = bg.gain
+                if bg.tick(now, over):
+                    self.log.info("broadcast gain %g -> %g (%s)", before, bg.gain,
+                                  "overload" if bg.overloaded else "clear: creeping back")
+            self._bg_overloads = count
+        if bg.wanted != was:
+            self.reconf = True
+        self._status(broadcastGain=bg.view())
+
+    def _rx_gain_wanted(self, s: dict) -> tuple:
+        b = self.bgain.wanted
+        return b if b is not None else super()._rx_gain_wanted(s)
 
     def _yielding_why(self, h: dict) -> str:
         return _("Radio is scanning {label} for its station list: it is yours again the moment you use it").format(
@@ -949,7 +1026,11 @@ class Radio(Engine):
     def stop(self) -> None:
         super().stop()
         self.pin = None
-        self._status(span={})
+        # The device is closed: it reopens with the operator's gain (the
+        # configuration was never changed), so the policy starts afresh.
+        self.bgain.end()
+        self._bg_overloads = None
+        self._status(span={}, broadcastGain={})
         self._cwskim_enable(False)
         if self.seq is not None:
             self.seq.close()
@@ -972,6 +1053,10 @@ class Radio(Engine):
                "ppm": s.get("ppm")}
         if self._kind() == "hl2":
             out["hl2Lna"] = s.get("hl2Lna")
+        if s.get("broadcastGain"):
+            # The gain recorded beside it (openhamshack:gain) is the
+            # operator's setting; this is what the device actually had.
+            out["broadcastGain"] = s["broadcastGain"]
         return out
 
     # ------------------------------------------------------------------ receive

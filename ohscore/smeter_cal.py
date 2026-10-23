@@ -199,11 +199,36 @@ def known_gain(st: dict) -> float | None:
     dev = st.get("device") or "sim"
     if dev == "hl2":
         return float(st.get("hl2Lna", 20.0))
+    bg = broadcast_gain(st)
+    if bg is not None:
+        return bg
     if st.get("rxGainMode") == "manual":
         return float(st.get("rxGain", 40.0))
     if dev == "sim":
         from .devices.simcore import SimCore
         return float(SimCore.RX_GAIN_REF_DB)
+    return None
+
+
+def broadcast_gain(st: dict) -> float | None:
+    """The rxGain a broadcast station has applied in place of the
+    operator's (Radio's `broadcastGain` status, ohsradio/bcastgain.py), or
+    None while the operator's own is in force.
+
+    The meter reads it rather than `rxGain` because it is what the device
+    has: a calibration made at the operator's gain is then corrected for
+    it exactly as for any manual change (`gain_split`), or - where the
+    broadcast gain moved a stage that cannot be corrected, an RSP's LNA
+    state under SoapySDRPlay3 - reported as not holding
+    (`broadcast_gain`), never shown at the wrong level. The calibration
+    itself is never touched: it stays keyed and stored at the operator's
+    gain, and is whole again the moment the station stops."""
+    bg = st.get("broadcastGain") or {}
+    if bg.get("auto") and bg.get("db") is not None:
+        try:
+            return float(bg["db"])
+        except (TypeError, ValueError):
+            return None
     return None
 
 
@@ -316,6 +341,10 @@ def effective(store, st: dict) -> CalState:
                 "extra_changed", rec)
     level_now, stage_now = gain_split(st, g)
     level_then, stage_then = gain_split(st, rec["gain"])
+    if stage_now != stage_then and broadcast_gain(st) is not None:
+        return CalState(rec["offset"], False, _(
+            "Uncalibrated while this broadcast station plays: its gain moves a stage that cannot be corrected "
+            "for. Your calibration is back when it stops."), "broadcast_gain", rec)
     if stage_now != stage_then:
         label = _STAGE_LABELS.get(stage_now[0], lambda: stage_now[0])()
         return CalState(rec["offset"], False, _(
@@ -342,6 +371,11 @@ def calibrate(store, st: dict, measured_dbfs: float | None, known_dbm: float, wh
     key = cal_key(st)
     if key is None:
         raise ValueError(_("The dial is between bands; tune into a band to calibrate it."))
+    if broadcast_gain(st) is not None:
+        # A calibration belongs to the operator's own gain; the broadcast
+        # one moves under the station (ohsradio/bcastgain.py).
+        raise ValueError(_(
+            "A broadcast station is setting the receiver's gain now; calibrate once it has stopped."))
     g = known_gain(st)
     if g is None:
         raise ValueError(_(
