@@ -37,13 +37,13 @@ podman run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --tm
 # by ohs-libs' own tool (vendored, hash-checked) over an export of the
 # image, never by anything run inside it.
 #
-# One exception, for now: Radio's image still carries SDRplay's API and
-# SoapySDRPlay3 so ohs-box's RSPdx keeps working until the platform's host
-# libraries ship (RADIO-SDR-PLAN 6.3's order). While it does, the API's own
-# files and symbols are left out of the denylist for that image alone, and
-# this says so. An image built with SHACK_STORE_DROP_SDRPLAY=1
-# (tools/build-store.sh) carries none and is checked against the whole
-# list, as is NB's.
+# One exception: a Radio image built the old way (SHACK_STORE_DROP_SDRPLAY=0,
+# tools/build-store.sh) still carries SDRplay's API and SoapySDRPlay3. For
+# such an image alone the API's own files and symbols are left out of the
+# denylist, and this says so. Radio's default image since 23/10/2026 carries
+# none (the controller lends the API as a host library, RADIO-SDR-PLAN 6.3)
+# and is checked against the whole list, as is NB's, and also for any
+# SoapySDRPlay3 module left behind.
 SDRPLAY_SKIP=""
 if [ "$APP" = radio ] && podman run --rm --entrypoint test "$IMAGE" -e /usr/local/bin/sdrplay_apiService; then
     SDRPLAY_SKIP="libsdrplay_api* sdrplay_api*.dll sdrplay_apiService* sdrplay_api_*"
@@ -54,6 +54,15 @@ trap 'rm -rf "$EXPORT"' EXIT
 ctr=$(podman create --entrypoint true "$IMAGE")
 podman export "$ctr" | tar -x -C "$EXPORT" 2>/dev/null || true
 podman rm "$ctr" >/dev/null
+if [ "$APP" = radio ] && [ -z "$SDRPLAY_SKIP" ]; then
+    left=$(find "$EXPORT" \( -iname 'libsdrPlaySupport*' -o -name 'sdrplay_api*.h' -o -name 'libsdrplay_api*' \) -print)
+    if [ -n "$left" ]; then
+        echo "store-check: an image without SDRplay's API still carries SDRplay files:" >&2
+        echo "$left" >&2
+        exit 1
+    fi
+    echo "store-check: no SDRplay API or SoapySDRPlay3 in the image (host library sdrplay-api)" >&2
+fi
 python3 - "$ROOT" "$EXPORT" $SDRPLAY_SKIP <<'EOF'
 import sys
 from pathlib import Path

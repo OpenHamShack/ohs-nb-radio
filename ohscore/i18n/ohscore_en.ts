@@ -188,7 +188,7 @@
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="229" />
+        <location filename="../ui/window.py" line="233" />
         <location filename="../ui/recording.py" line="165" />
         <source>Record receive IQ…</source>
         <translation type="unfinished" />
@@ -209,231 +209,231 @@
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="228" />
+        <location filename="../ui/window.py" line="232" />
         <source>&amp;File</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="233" />
+        <location filename="../ui/window.py" line="237" />
         <source>Open recordings folder</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/playback.py" line="123" />
-        <location filename="../ui/window.py" line="236" />
+        <location filename="../ui/window.py" line="240" />
         <source>Play IQ recording…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="240" />
+        <location filename="../ui/window.py" line="244" />
         <source>Loop playback</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="244" />
+        <location filename="../ui/window.py" line="248" />
         <source>Export log as ADIF…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="248" />
+        <location filename="../ui/window.py" line="252" />
         <source>Quit</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="252" />
+        <location filename="../ui/window.py" line="256" />
         <source>&amp;View</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="253" />
+        <location filename="../ui/window.py" line="257" />
         <source>Second display</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="257" />
+        <location filename="../ui/window.py" line="261" />
         <source>Light theme</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="263" />
+        <location filename="../ui/window.py" line="267" />
         <source>Full screen</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="270" />
+        <location filename="../ui/window.py" line="274" />
         <source>Workspace</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="273" />
+        <location filename="../ui/window.py" line="277" />
         <source>Auto - follows the mode	Shift+W</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="282" />
+        <location filename="../ui/window.py" line="286" />
         <source>Reset this workspace's layout</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="453" />
-        <location filename="../ui/window.py" line="286" />
+        <location filename="../ui/window.py" line="457" />
+        <location filename="../ui/window.py" line="290" />
         <source>Operate</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="454" />
-        <location filename="../ui/window.py" line="287" />
+        <location filename="../ui/window.py" line="458" />
+        <location filename="../ui/window.py" line="291" />
         <source>Logbook</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="455" />
-        <location filename="../ui/window.py" line="288" />
+        <location filename="../ui/window.py" line="459" />
+        <location filename="../ui/window.py" line="292" />
         <source>Memories</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="296" />
+        <location filename="../ui/window.py" line="300" />
         <source>Keyboard shortcuts</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="299" />
+        <location filename="../ui/window.py" line="303" />
         <source>&amp;Radio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="300" />
+        <location filename="../ui/window.py" line="304" />
         <source>Settings…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="304" />
+        <location filename="../ui/window.py" line="308" />
         <source>Restart the radio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="307" />
+        <location filename="../ui/window.py" line="311" />
         <source>Voice memories…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="311" />
+        <location filename="../ui/window.py" line="315" />
         <source>&amp;Help</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="315" />
+        <location filename="../ui/window.py" line="319" />
         <source>Welcome…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="318" />
+        <location filename="../ui/window.py" line="322" />
         <source>Check for updates…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="322" />
+        <location filename="../ui/window.py" line="326" />
         <source>Save diagnostics…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="325" />
+        <location filename="../ui/window.py" line="329" />
         <source>Send diagnostics…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="328" />
+        <location filename="../ui/window.py" line="332" />
         <source>Open log folder</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="332" />
+        <location filename="../ui/window.py" line="336" />
         <source>About {app}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="392" />
+        <location filename="../ui/window.py" line="396" />
         <source>Second display (Ctrl+D)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="394" />
+        <location filename="../ui/window.py" line="398" />
         <source>Settings (Ctrl+,)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="396" />
+        <location filename="../ui/window.py" line="400" />
         <source>Keyboard shortcuts (?)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="398" />
+        <location filename="../ui/window.py" line="402" />
         <source>Logbook (Ctrl+L)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="410" />
+        <location filename="../ui/window.py" line="414" />
         <source>Second display, Settings, Logbook, Keyboard shortcuts</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="413" />
+        <location filename="../ui/window.py" line="417" />
         <source>Second display	Ctrl+D</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="414" />
+        <location filename="../ui/window.py" line="418" />
         <source>Settings…	Ctrl+,</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="415" />
+        <location filename="../ui/window.py" line="419" />
         <source>Logbook	Ctrl+L</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="416" />
+        <location filename="../ui/window.py" line="420" />
         <source>Keyboard shortcuts	?</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="480" />
+        <location filename="../ui/window.py" line="484" />
         <source>Controls</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="482" />
+        <location filename="../ui/window.py" line="486" />
         <source>The mode, transmit and receive controls, over the right of the panel. Esc closes them when nothing is on the air.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="490" />
+        <location filename="../ui/window.py" line="494" />
         <source>How the window is laid out: follows the mode (Auto), or the one you chose. W steps through them, Shift+W goes back to Auto.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="698" />
+        <location filename="../ui/window.py" line="702" />
         <source>{secs} s periods</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="700" />
+        <location filename="../ui/window.py" line="704" />
         <source>receive only</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1504" />
+        <location filename="../ui/window.py" line="1508" />
         <source>chosen</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1505" />
+        <location filename="../ui/window.py" line="1509" />
         <source>auto</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1506" />
+        <location filename="../ui/window.py" line="1510" />
         <source>Workspace: {name} · {how}</source>
         <translation type="unfinished" />
     </message>
@@ -462,78 +462,78 @@
 </context><context>
     <name>CalibrateDialog</name>
     <message>
-        <location filename="../ui/smeter.py" line="995" />
-        <location filename="../ui/smeter.py" line="989" />
+        <location filename="../ui/smeter.py" line="857" />
+        <location filename="../ui/smeter.py" line="851" />
         <source>Calibrate the S-meter</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1001" />
+        <location filename="../ui/smeter.py" line="863" />
         <source>Put a signal of known level in the receive passband - best, a signal generator through a known attenuator into the antenna socket - and type its level. The meter is set to read it, for this radio on this band at this receiver gain; a later manual gain change is allowed for.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1006" />
+        <location filename="../ui/smeter.py" line="868" />
         <source>Put a signal of known level in the receive passband - best, a signal generator through a known attenuator into the antenna socket - and type its level. The meter is set to read it, for this radio at this receiver gain; a later manual gain change is allowed for.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1019" />
+        <location filename="../ui/smeter.py" line="881" />
         <source>Known level</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1023" />
+        <location filename="../ui/smeter.py" line="885" />
         <source>-73 dBm, S9, S9+20 or 50 uV</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1031" />
+        <location filename="../ui/smeter.py" line="893" />
         <source>Forget this calibration</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1035" />
+        <location filename="../ui/smeter.py" line="897" />
         <source>Cancel</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1037" />
+        <location filename="../ui/smeter.py" line="899" />
         <source>Calibrate</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1057" />
+        <location filename="../ui/smeter.py" line="919" />
         <source>Offset {offset} dB: this signal will read {reading} ({dbm} dBm).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1067" />
+        <location filename="../ui/smeter.py" line="929" />
         <source>Radio: {radio} · {band} · receiver gain {gain} dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1069" />
+        <location filename="../ui/smeter.py" line="931" />
         <source>Radio: {radio} · {band} · receiver gain: AGC (unknown)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1071" />
+        <location filename="../ui/smeter.py" line="933" />
         <source>Radio: {radio} · receiver gain {gain} dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1073" />
+        <location filename="../ui/smeter.py" line="935" />
         <source>Radio: {radio} · receiver gain: AGC (unknown)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1076" />
+        <location filename="../ui/smeter.py" line="938" />
         <source>Measured now: {level} dBFS (3 s average, ±{spread} dB)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1078" />
+        <location filename="../ui/smeter.py" line="940" />
         <source>Measured now: no reading</source>
         <translation type="unfinished" />
     </message>
@@ -2968,249 +2968,169 @@ Tune to an SSTV signal</source>
 </context><context>
     <name>SMeter</name>
     <message>
-        <location filename="../ui/smeter.py" line="153" />
+        <location filename="../ui/smeter.py" line="146" />
         <source>Only S9 takes '+dB' (S9+20).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="159" />
+        <location filename="../ui/smeter.py" line="152" />
         <source>A level in microvolts must be above zero.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="165" />
+        <location filename="../ui/smeter.py" line="158" />
         <source>That level is outside -200..+30 dBm.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="167" />
+        <location filename="../ui/smeter.py" line="160" />
         <source>Type a level as dBm (-73), an S reading (S9, S9+20) or microvolts (50 uV).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="252" />
-        <source>the simulator</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="253" />
-        <source>the Pluto</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="254" />
-        <source>the SoapySDR radio</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="255" />
-        <source>the LibreSDR</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="256" />
-        <source>the RTL-SDR</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="257" />
-        <source>the SDRplay RSP</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="258" />
-        <source>the Hermes-Lite 2</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="261" />
-        <source>{radio} on {band}</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="269" />
-        <source>Right-click the meter › Calibrate…</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="275" />
-        <source>Uncalibrated: calibration is per band, and the dial is between bands.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="279" />
-        <source>Uncalibrated: no calibration for {radio} yet.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
+        <location filename="../ui/smeter.py" line="286" />
         <location filename="../ui/smeter.py" line="284" />
-        <source>Uncalibrated now: the receiver's own AGC is on, so its gain is unknown and no calibration holds. Set Receiver gain control to Manual (Settings › Radio).</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="292" />
-        <source>Calibrated {when} at {gain} dB receiver gain, corrected for {now} dB now.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="295" />
-        <source>Calibrated {when} at {gain} dB receiver gain.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="297" />
-        <source>Calibrated at {gain} dB receiver gain, corrected for {now} dB now.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="300" />
-        <source>Calibrated at {gain} dB receiver gain.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="310" />
-        <source>The dial is between bands; tune into a band to calibrate it.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="314" />
-        <source>The receiver's own AGC is on, so its gain moves with the signal and no offset would hold. Set Receiver gain control to Manual (Settings › Radio) and calibrate again.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="318" />
-        <source>There is no reading to calibrate against.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="320" />
-        <source>The receiver is within 3 dB of full scale and may be clipping; lower its gain or the signal.</source>
-        <translation type="unfinished" />
-    </message>
-    <message>
-        <location filename="../ui/smeter.py" line="439" />
-        <location filename="../ui/smeter.py" line="437" />
         <source>dB over noise</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="441" />
+        <location filename="../ui/smeter.py" line="288" />
         <source>dB vs beacon</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="443" />
+        <location filename="../ui/smeter.py" line="290" />
         <source>no beacon level</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="447" />
+        <location filename="../ui/smeter.py" line="294" />
         <source>{db} dB vs beacon</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="471" />
+        <location filename="../ui/smeter.py" line="318" />
         <source>Signal</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1113" />
+        <location filename="../ui/smeter.py" line="975" />
         <source>S-meter</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1115" />
+        <location filename="../ui/smeter.py" line="977" />
         <source>Style</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1120" />
+        <location filename="../ui/smeter.py" line="982" />
         <source>Units</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1125" />
+        <location filename="../ui/smeter.py" line="987" />
         <source>Over noise</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1126" />
+        <location filename="../ui/smeter.py" line="988" />
         <source>vs beacon</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1127" />
+        <location filename="../ui/smeter.py" line="989" />
         <source>S (beacon)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1131" />
+        <location filename="../ui/smeter.py" line="993" />
         <source>Peak-hold needle (analogue)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1136" />
+        <location filename="../ui/smeter.py" line="1000" />
         <source>Calibration offset for {radio}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1140" />
+        <location filename="../ui/smeter.py" line="1004" />
         <source>not calibrated</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1142" />
+        <location filename="../ui/smeter.py" line="1012" />
         <source>The offset is what is added to the dBFS reading to give dBm, at the receiver gain set now; empty is uncalibrated. Calibrate… measures it from a signal of known level. Until a calibration holds, S-units and dBm show UNCAL and a relative reading instead of an absolute one.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="660" />
-        <location filename="../ui/smeter.py" line="1151" />
+        <location filename="../ui/smeter.py" line="1024" />
+        <source>Stored calibrations</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="1033" />
+        <source>Calibrate to…</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="522" />
+        <location filename="../ui/smeter.py" line="1034" />
         <source>Calibrate…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1183" />
+        <location filename="../ui/smeter.py" line="1043" />
+        <source>No calibrations stored yet.</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="1046" />
+        <source>{key}: {offset:+.1f} dB at {gain:g} dB gain ({when})</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/smeter.py" line="1082" />
         <source>S-meter calibration offset: not a number</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1186" />
+        <location filename="../ui/smeter.py" line="1085" />
         <source>S-meter calibration offset: outside -250..+250 dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="1190" />
+        <location filename="../ui/smeter.py" line="1089" />
         <source>S-meter calibration offset: {reason}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="600" />
+        <location filename="../ui/smeter.py" line="462" />
         <source>Click: next style · click the reading: next unit · right-click: menu.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="604" />
+        <location filename="../ui/smeter.py" line="466" />
         <source>UNCAL: with no calibration no absolute level is shown, so this reads relative to the noise (or dBFS). To calibrate: set Receiver gain control to Manual, feed a signal of known level, then right-click the meter › Calibrate…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="656" />
+        <location filename="../ui/smeter.py" line="518" />
         <source>Peak-hold needle</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="662" />
+        <location filename="../ui/smeter.py" line="524" />
         <source>Forget this calibration</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="690" />
+        <location filename="../ui/smeter.py" line="552" />
         <source>UNCAL</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/smeter.py" line="827" />
+        <location filename="../ui/smeter.py" line="689" />
         <source>S9 = beacon</source>
         <translation type="unfinished" />
     </message>

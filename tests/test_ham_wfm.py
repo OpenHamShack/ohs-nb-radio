@@ -13,7 +13,7 @@ from ohscore.engine import TxRefused
 from ohsradio.radio import Radio
 
 from ham_helpers import close, make_radio, pump
-from listen_helpers import Station, make_listener, tone_snr
+from listen_helpers import HEARD, Station, make_listener, tone_snr
 
 STATION = 97_700_000.0
 SAYS = "WFM is for listening only: nothing is ever transmitted in it"
@@ -24,7 +24,7 @@ def listen(r, audio, seconds=1.5):
     pump(r, 10, until=lambda: r._rx_settled())
     pump(r, 0.3)
     audio.take()
-    pump(r, 30, until=lambda: sum(len(c) for c in audio.chunks) >= seconds * 12_000)
+    pump(r, 30, until=lambda: sum(len(c) for c in audio.chunks) >= seconds * HEARD)
     return audio.take()
 
 
@@ -34,7 +34,9 @@ class HearsABroadcastStation(unittest.TestCase):
         self.addCleanup(close, r)
         r.start()
         a = listen(r, audio)
-        peak, snr = tone_snr(a[1200:], 1000.0)
+        # Played at 48 kHz, as the WFM demodulator made it.
+        self.assertEqual(r.audio.out_rate, 48_000)
+        peak, snr = tone_snr(a[4800:], 1000.0)
         self.assertAlmostEqual(peak, 1000.0, delta=5)
         self.assertGreater(snr, 30.0)
         # The channel is the bank's 240 kS/s one at either rate.
@@ -52,7 +54,7 @@ class HearsABroadcastStation(unittest.TestCase):
         r, audio, _dev = make_listener([Station(STATION + 400_000.0, "wfm")], vfo=STATION, mode="wfm")
         self.addCleanup(close, r)
         r.start()
-        _peak, snr = tone_snr(listen(r, audio)[1200:], 1000.0)
+        _peak, snr = tone_snr(listen(r, audio)[4800:], 1000.0)
         self.assertLess(snr, 0.0)
 
 

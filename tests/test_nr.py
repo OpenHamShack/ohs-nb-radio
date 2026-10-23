@@ -276,12 +276,16 @@ class InTheEngine(unittest.TestCase):
             seq.append(("d", r.st["mode"], audio.copy()))
             return audio, level
         r._demodulate = demodulate
-        play = r.audio.play
+        # What the speaker is given, before it is brought to the rate it
+        # is played at (Engine._to_out: Radio plays at 48 kHz since
+        # 23/10/2026, so the played block is no longer the demodulated
+        # block's length; NB's plays as it is).
+        to_out = r._to_out
 
-        def played(a):
+        def heard(a, up):
             seq.append(("p", None, np.array(a, copy=True)))
-            return play(a)
-        r.audio.play = played
+            return to_out(a, up)
+        r._to_out = heard
         put = r.decode_q.put_nowait
 
         def queued(item):
@@ -301,9 +305,9 @@ class InTheEngine(unittest.TestCase):
                 np.testing.assert_array_equal(a, last[1])
                 decoded += 1
             elif kind == "p" and last is not None and last[0] == nr_mode and len(a) == len(last[1]):
-                # Volume 0.5: NR is in the speaker's path if what was
-                # played is not simply the demodulated audio, halved.
-                if not np.allclose(a, 0.5 * last[1], atol=1e-6):
+                # NR is in the speaker's path if what is heard is not
+                # simply the demodulated audio.
+                if not np.allclose(a, last[1], atol=1e-6):
                     nr_changed += 1
         return decoded, nr_changed
 

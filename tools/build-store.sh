@@ -3,7 +3,12 @@
 # .d360mod carrying its container image, so a controller with no route out
 # can install it (D12).
 #
-#   tools/build-store.sh qo100nb|radio [--allow-dirty]
+#   tools/build-store.sh qo100nb|radio [--allow-dirty] [--image-only]
+#
+#   --image-only  stage and build the image with podman, tagged
+#                 localhost/dock360-shack-<app>:<version>-dev-<commit>, and stop:
+#                 no package, no signing key, nothing installed. For proving an
+#                 image (tools/store-check.sh <app> <that tag>) from a branch.
 #
 # Environment:
 #   SHACK_STORE_OUT   where the package goes (default ~/build/apps/shack-<app>)
@@ -14,17 +19,19 @@
 #   SHACK_MODULES_KEY the OpenHamShack modules signing key, read in place and never copied
 #                     (default ~/.config/openhamshack/keys/ohs-modules.key)
 #   OHSDIGI_WHEELS     the ohs-ohsdigi wheels tools/build-wheels.sh made (default ~/build/ohs-dist/ohsdigi)
-#   SDRPLAY_DIST      Radio only: the SDRplay API installer and SoapySDRPlay3 source that
-#                     tools/vendor/sdrplay.lock names (default ~/build/ohs-dist/sdrplay)
+#   SDRPLAY_DIST      Radio with SHACK_STORE_DROP_SDRPLAY=0 only: the SDRplay API installer
+#                     and SoapySDRPlay3 source that tools/vendor/sdrplay.lock names
+#                     (default ~/build/ohs-dist/sdrplay)
 #   SHACK_STORE_DROP_SDRPLAY
-#                     Radio only. 0 (the default): the image carries SDRplay's API and
-#                     SoapySDRPlay3, as every Radio image has. 1: it carries neither, and
-#                     the manifest asks for the controller's host library sdrplay-api
-#                     instead (RADIO-SDR-PLAN 6.3). Leave it at 0 until the platform
-#                     release with host libraries is on the controllers and sdrplay-api
-#                     is installed there: an image built with 1 on a controller without
-#                     it shows the RSP as needing SDRplay's API, and ohs-box loses its
-#                     RSPdx. The plan's order is platform first, then this image.
+#                     Radio only. 1 (the default since 23/10/2026): the image carries
+#                     neither SDRplay's API nor SoapySDRPlay3; the controller lends the API
+#                     as the host library sdrplay-api (module.yaml host_libraries,
+#                     RADIO-SDR-PLAN 6.3), and an RSP opens through shack_sdr's own
+#                     binding to it - `device` soapy with driver=sdrplay included
+#                     (ohscore/devices/sdrsource.py SoapySdrplayDevice). 0: the image
+#                     carries both as every Radio image did until then, for a controller
+#                     that cannot yet stage the host library; such a package carries
+#                     SDRplay's installer in its build context and is for no public feed.
 #
 # How: the module's tree - store/<app>/ at the top, with ohscore/, the app's
 # package, its pad declarations, LICENSE and the pinned shared libraries
@@ -43,7 +50,15 @@ case "$APP" in
     *) echo "usage: $0 qo100nb|radio [--allow-dirty]" >&2; exit 2 ;;
 esac
 ALLOW_DIRTY=0
-[ "${2:-}" = "--allow-dirty" ] && ALLOW_DIRTY=1
+IMAGE_ONLY=0
+shift
+for a in "$@"; do
+    case "$a" in
+        --allow-dirty) ALLOW_DIRTY=1 ;;
+        --image-only) IMAGE_ONLY=1 ;;
+        *) echo "unknown option $a" >&2; exit 2 ;;
+    esac
+done
 OUT=${SHACK_STORE_OUT:-$HOME/build/apps/shack-$APP}
 STAGE=${SHACK_STAGE:-$HOME/build/m3-nb-radio/stage-$APP}
 DOCK360_SRC=${DOCK360_SRC:-$HOME/build/m3-flex/dock360}
@@ -52,7 +67,7 @@ KEY=${SHACK_MODULES_KEY:-$HOME/.config/openhamshack/keys/ohs-modules.key}
 PACKAGER=${SHACK_PACKAGE_APP:-$HOME/openhamshack-os/tools/package-app.sh}
 OHSDIGI_WHEELS=${OHSDIGI_WHEELS:-$HOME/build/ohs-dist/ohsdigi}
 SDRPLAY_DIST=${SDRPLAY_DIST:-$HOME/build/ohs-dist/sdrplay}
-DROP_SDRPLAY=${SHACK_STORE_DROP_SDRPLAY:-0}
+DROP_SDRPLAY=${SHACK_STORE_DROP_SDRPLAY:-1}
 case "$DROP_SDRPLAY" in 0|1) ;; *) echo "SHACK_STORE_DROP_SDRPLAY is 0 or 1" >&2; exit 2 ;; esac
 
 cd "$ROOT"
@@ -60,7 +75,7 @@ if [ "$ALLOW_DIRTY" = 0 ] && [ -n "$(git status --porcelain)" ]; then
     echo "The tree has uncommitted changes; commit them (or --allow-dirty to package HEAD anyway)." >&2
     exit 1
 fi
-[ -r "$KEY" ] || { echo "No signing key at $KEY" >&2; exit 1; }
+[ "$IMAGE_ONLY" = 1 ] || [ -r "$KEY" ] || { echo "No signing key at $KEY" >&2; exit 1; }
 COMMIT=$(git rev-parse --short=12 HEAD)
 
 rm -rf "$STAGE"
@@ -100,17 +115,13 @@ done
 # the build here, so a Radio image can never quietly lose the RSP.
 if [ "$APP" = radio ] && [ "$DROP_SDRPLAY" = 1 ]; then
     # The switch-over (RADIO-SDR-PLAN 6.3): no SDRplay file in the image, the
-    # service from the controller's host library. host_libraries is read
-    # only by a platform that has the key; an older one refuses the module
-    # outright rather than installing a Radio that cannot see the API.
+    # API and its service from the controller's host library, which the
+    # manifest declares (host_libraries, with faad2 for DAB+).
     echo "build-store.sh: SHACK_STORE_DROP_SDRPLAY=1 - this Radio image carries no SDRplay API" >&2
     sed -i '/^# >>> sdrplay-in-image/,/^# <<< sdrplay-in-image/d' "$STAGE/Containerfile"
     if grep -q -e '--from=sdrplay' -e ' AS sdrplay' "$STAGE/Containerfile"; then
         echo "build-store.sh: the Containerfile still builds or copies SDRplay's files" >&2; exit 1
     fi
-    sed -i 's/^  broker_devices: \[\(.*\)\]$/  broker_devices: [\1]\n  host_libraries: [sdrplay-api]/' "$STAGE/module.yaml"
-    grep -q '^  host_libraries: \[sdrplay-api\]$' "$STAGE/module.yaml" \
-        || { echo "build-store.sh: could not add host_libraries to module.yaml" >&2; exit 1; }
 elif [ "$APP" = radio ]; then
     mkdir -p "$STAGE/sdrplay"
     grep -v '^#' tools/vendor/sdrplay.lock | while read -r want name; do
@@ -127,6 +138,14 @@ git -C "$STAGE" init -q -b main
 git -C "$STAGE" add -A
 git -C "$STAGE" -c user.name="build-store" -c user.email="build@openhamshack.invalid" \
     commit -q -m "shack-$APP store package from openhamshack-nb $COMMIT"
+
+if [ "$IMAGE_ONLY" = 1 ]; then
+    VERSION=$(sed -n 's/^version: *//p' "$STAGE/module.yaml" | head -1)
+    TAG="localhost/dock360-shack-$APP:$VERSION-dev-$COMMIT"
+    podman build -q -t "$TAG" -f "$STAGE/Containerfile" "$STAGE"
+    echo "built $TAG (not packaged or signed): tools/store-check.sh $APP $TAG"
+    exit 0
+fi
 
 "$PACKAGER" "$STAGE" . "$OUT" --key "$KEY" --dock360 "$DOCK360_SRC"
 ls -l "$OUT"

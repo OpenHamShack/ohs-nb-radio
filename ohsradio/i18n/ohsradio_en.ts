@@ -380,7 +380,7 @@ Restarting the radio: {error}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="147" />
+        <location filename="../ui/localview.py" line="158" />
         <source>within {km} km of {locator}</source>
         <translation type="unfinished" />
     </message>
@@ -402,109 +402,109 @@ Restarting the radio: {error}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/mainwindow.py" line="118" />
+        <location filename="../ui/mainwindow.py" line="119" />
         <source>OpenHamShack Radio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/mainwindow.py" line="149" />
+        <location filename="../ui/mainwindow.py" line="150" />
         <source>Check radio…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/mainwindow.py" line="157" />
+        <location filename="../ui/mainwindow.py" line="158" />
         <source>Licence</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/mainwindow.py" line="158" />
+        <location filename="../ui/mainwindow.py" line="159" />
         <source>PTT sequence</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/mainwindow.py" line="241" />
+        <location filename="../ui/mainwindow.py" line="242" />
         <source>{freq} is outside what this radio tunes</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/mainwindow.py" line="284" />
+        <location filename="../ui/mainwindow.py" line="285" />
         <source>Decode here as</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/mainwindow.py" line="294" />
+        <location filename="../ui/mainwindow.py" line="295" />
         <source>{decoder} decoding at {freq} (Decoders view)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/mainwindow.py" line="356" />
+        <location filename="../ui/mainwindow.py" line="357" />
         <source>No {mode} dial is listed for this band</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/mainwindow.py" line="361" />
+        <location filename="../ui/mainwindow.py" line="362" />
         <source>VFO B = A</source>
         <translation type="unfinished" />
     </message>
 </context><context>
     <name>MineDialog</name>
     <message>
-        <location filename="../ui/localview.py" line="188" />
+        <location filename="../ui/localview.py" line="199" />
         <source>Edit frequency</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="188" />
+        <location filename="../ui/localview.py" line="199" />
         <source>Add a frequency</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="199" />
+        <location filename="../ui/localview.py" line="210" />
         <source>repeater</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="201" />
+        <location filename="../ui/localview.py" line="212" />
         <source>IO75TU</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="204" />
+        <location filename="../ui/localview.py" line="215" />
         <source>Name</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="205" />
+        <location filename="../ui/localview.py" line="216" />
         <source>Frequency (MHz)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="206" />
+        <location filename="../ui/localview.py" line="217" />
         <source>Mode</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="207" />
+        <location filename="../ui/localview.py" line="218" />
         <source>Category</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="208" />
+        <location filename="../ui/localview.py" line="219" />
         <source>Locator (optional)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="209" />
+        <location filename="../ui/localview.py" line="220" />
         <source>Detail (optional)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="210" />
+        <location filename="../ui/localview.py" line="221" />
         <source>Notes (optional)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/localview.py" line="226" />
+        <location filename="../ui/localview.py" line="237" />
         <source>Give the frequency in MHz, for example 145.7125</source>
         <translation type="unfinished" />
     </message>

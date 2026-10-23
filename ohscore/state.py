@@ -484,6 +484,11 @@ def add_shared_keys(reg: Registry) -> None:
         ("decoders", "dict", {}, "The decoder sessions (ohscore/decoders.py): available, how many run, the "
                                  "processor share they may use, and which codecs are missing (null until the "
                                  "first look)."),
+        ("rxOwner", "dict", {}, "The decoder session holding the receiver ({} while the operator has it): "
+                                "{by, session, block, freqHz, prior, text}. While it does, set() refuses to "
+                                "tune and every key-up is refused (Engine.hold_receiver)."),
+        ("hostLibs", "dict", {}, "On a controller, the host libraries this app can use (ohscore/hostlibs.py): "
+                                 "{supported, root, libraries, why}; {} elsewhere."),
     ]:
         k(name, type_, default, "status", help=help_)
 

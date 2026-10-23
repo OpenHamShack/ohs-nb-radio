@@ -53,11 +53,12 @@ from __future__ import annotations
 
 import math
 import time
+from collections import deque
 
 import numpy as np
 
 from ohscore import converters as cv
-from ohscore import licences, txguard
+from ohscore import licences, smeter_cal, txguard
 from ohscore.dsp import wfm
 from ohscore.dsp.bank import Channel, Geometry, Source
 from ohscore.dsp.fm import FM_RATE, FmDemod, FmMod
@@ -162,7 +163,18 @@ class Radio(Engine):
     # fading 1 s dashes turned the CW decoder inside out for the next
     # station ("CS3B" read "I*ETV T"; ohs-libs shack_cw.corpus).
     CW_POLARITY = False
+    # Receive audio at 48 kHz (Engine.OUT_RATE): wide FM flat to 15 kHz and
+    # room for stereo; the decoders and transmit stay at 12 kHz.
+    OUT_RATE = 48_000
     REC_STATES = ("band",)
+    # A DAB session takes the receiver (Engine.hold_receiver): Radio's
+    # hardware follows its dial anyway, so it can be centred on a block.
+    # The repeater offset goes back with the dial, because arriving back on
+    # a band from Band III would otherwise reset it to the band's usual one
+    # (_adjust_set).
+    HOLDS_RECEIVER = True
+    HELD_KEYS = Engine.HELD_KEYS + ("rptReverse", "rptShift")
+    HOLD_PRIOR = Engine.HOLD_PRIOR + ("rptOffsetHz",)
 
     def _diag_extra(self, s: dict) -> str:
         info = s.get("licenceInfo") or {}
@@ -195,6 +207,9 @@ class Radio(Engine):
         self.tx_conv: cv.Converter | None = None
         self._presets_for = None
         self._refresh_presets()
+        # 3 s of 10 Hz meter readings, the "current reading" behind
+        # Calibrate… and the API's {"dbm": ...} form (smeter_cal.average_dbfs).
+        self._smeter_hist: deque = deque(maxlen=30)
 
     # ------------------------------------------------------------------ licence and plan
     def _plan(self):
@@ -559,6 +574,18 @@ class Radio(Engine):
             self.seq.delay = s["seqDelayMs"] / 1000.0
 
     def _maybe_recentre(self):
+        held = self.held
+        if held is not None:
+            # A session holds the receiver: its centre exactly, DC on the
+            # block's unused middle carrier, whatever the dial says.
+            want = held["centre"]
+            conv = self._conv_at(want, rx=True)
+            pending = self.pending_centre is not None
+            if (self.pending_centre if pending else self.centre) != want or \
+                    conv != (self.pending_conv if pending else self.rx_conv):
+                self.pending_conv = conv
+                self.pending_centre = want
+            return
         rx = self._rx_dial(self.st)
         fs = self._fs()
         half = USABLE * fs / 2
@@ -628,6 +655,19 @@ class Radio(Engine):
         fn = getattr(self.dev, "set_rx_converter", None)
         if fn is not None:
             fn(conv)
+
+    def _held_retune(self) -> None:
+        if self.running:
+            self._maybe_recentre()
+
+    def _faster_rate(self, least: float) -> float | None:
+        # The HL2 has its own rates, all far below a DAB block; the rest
+        # that run at `sampleRate` (Pluto, LibreSDR, the simulator, SoapySDR
+        # and the RTL-SDR) offer 2.4 MS/s, and the RSP runs at it already.
+        if self._kind() == "hl2":
+            return None
+        rates = [float(r) for r in self.STATE.spec["sampleRate"]["choices"] if float(r) >= least]
+        return min(rates) if rates else None
 
     def _start_status(self) -> dict:
         lo, hi = self.wide_span()
@@ -780,10 +820,19 @@ class Radio(Engine):
             n = X.shape[0] * (self.geo.L // self.geo.decimation_for(AUDIO_RATE))
             return np.zeros(n, np.float32), -200.0
         self.wfm_ch.set_freq(self._off(rx_dial))
-        audio, level = self.wfmdemod(self.wfm_ch.take(X, starts))
+        heard, level = self.wfmdemod(self.wfm_ch.take(X, starts))
+        # Heard at 48 kHz as it was demodulated (never through the 12 kHz
+        # path and back up); the engine's decoders and timing get 12 kHz.
+        self.heard_hi = heard
         # No squelch in wide FM: what is heard is always open.
         self._status(sqlOpen=True)
-        return audio, level
+        return self.wfmdemod.for_decoders(heard), level
+
+    def audio_channels(self) -> int:
+        if self.held is not None:
+            return super().audio_channels()
+        d = self.wfmdemod
+        return d.channels if self.st["mode"] == "wfm" and d is not None else 1
 
     def _rx_audio_gain(self, s: dict) -> float:
         return 0.0 if s["keyed"] else 1.0           # half duplex
@@ -809,8 +858,55 @@ class Radio(Engine):
         return self.pending_centre is None and self.rx_samples >= self.settle_at
 
     def _meter_extra(self, s: dict) -> dict:
-        return {"fwd": s["fwdW"], "swr": s["swr"], "paTemp": s["paTemp"], "seq": s["seqState"],
-                "sql": s["sqlOpen"], "estPep": s["estPep"]}
+        out = {"fwd": s["fwdW"], "swr": s["swr"], "paTemp": s["paTemp"], "seq": s["seqState"],
+               "sql": s["sqlOpen"], "estPep": s["estPep"]}
+        out.update(self._smeter_fields(s))
+        return out
+
+    def _smeter_fields(self, s: dict) -> dict:
+        """The calibrated S-meter fields on every meter item (docs/SERVER-API.md
+        `meter`): `dbm` and `s` (e.g. "S9+12") while a calibration holds,
+        else neither and `why`/`whyText` say why not. The raw `rx` dBFS field
+        is unchanged - this only adds to it, so a client that ignores these
+        four keys sees exactly what it always has."""
+        if self.rx_level > -199:
+            self._smeter_hist.append(self.rx_level)
+        cal = smeter_cal.effective(s.get("sMeterCal") or "", s)
+        if not cal.ok:
+            return {"dbm": None, "s": None, "why": cal.why_code, "whyText": cal.why}
+        dbm = self.rx_level + cal.offset
+        return {"dbm": round(dbm, 1), "s": smeter_cal.s_text(dbm, smeter_cal.s9_dbm(s.get("vfo", 0.0))),
+                "why": None, "whyText": ""}
+
+    # ------------------------------------------------------------ S-meter calibration
+    def smeter_table(self) -> dict:
+        """Every stored calibration, keyed as `smeter_cal.cal_key` makes the
+        key (device[@antenna][|band]): `GET api/smeter/calibrate`."""
+        return smeter_cal.clean_cal(self.st.get("sMeterCal") or "")
+
+    def smeter_average_dbfs(self):
+        """(dBFS, spread) over the last 3 s, or None with no signal yet -
+        the "current reading" behind the API's {"dbm": ...} form."""
+        return smeter_cal.average_dbfs(list(self._smeter_hist))
+
+    def smeter_calibrate(self, known_dbm: float, measured_dbfs: float | None = None) -> dict:
+        """Calibrate this radio (band, antenna) so `measured_dbfs` - the
+        3 s average now, unless the caller measured one of its own (the
+        API's {"dbfs", "dbm"} form) - reads `known_dbm`. Returns the entry
+        stored; raises ValueError with the reason it could not (AGC on,
+        between bands, no reading, near clipping)."""
+        if measured_dbfs is None:
+            avg = self.smeter_average_dbfs()
+            measured_dbfs = avg[0] if avg else None
+        table = smeter_cal.calibrate(self.st.get("sMeterCal") or "", self.st, measured_dbfs, known_dbm,
+                                     time.strftime("%Y-%m-%d"))
+        self.set(sMeterCal=smeter_cal.format_cal(table))
+        return table[smeter_cal.cal_key(self.st)]
+
+    def smeter_forget(self) -> None:
+        """Clear this radio's (band's, antenna's) calibration."""
+        table = smeter_cal.forget(self.st.get("sMeterCal") or "", self.st)
+        self.set(sMeterCal=smeter_cal.format_cal(table))
 
     # -------------------------------------------------------------- operating
     def start_on(self, band: str | None = None, rf: float | None = None, mode: str | None = None) -> None:

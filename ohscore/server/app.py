@@ -46,11 +46,12 @@ from urllib.parse import parse_qs, urlsplit
 
 import numpy as np
 
-from ..engine import TxRefused
+from ..engine import ReceiverHeld, TxRefused
 from ..padactions import PAD_TX_ACTIONS
 from ..i18n.text import _
+from .. import smeter_cal
 from . import shack, ws
-from .audio import FORMAT
+from .audio import CHANNELS, MIC_FORMAT
 from .autotx import AutoTx, Refused
 from .recording import server_recordings
 
@@ -66,7 +67,6 @@ RECLAIM_MAX_S = 30.0
 # real-time silence per wait, so a listener's socket is written and a gone
 # client found (get_audio_rx).
 IDLE_AUDIO_S = 0.5
-IDLE_SILENCE = bytes(int(FORMAT["rate"] * IDLE_AUDIO_S) * 2)
 REMOTE_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 # X-Forwarded-Prefix as the page's <base>: a path, never a host (house rule:
 # no absolute URLs), and nothing that could close the attribute.
@@ -313,13 +313,21 @@ class Server:
                 "device": st.get("device"), "mode": st.get("mode"), "vfo": st.get("vfo"),
                 "txDial": st.get("txDial"), "simulator": bool(st.get("simWhy")),
                 "broker": self.broker.view() if self.broker is not None else None,
-                "audio": {**FORMAT, "listeners": self.audio.listeners()},
+                # What api/audio/rx sends a listener asking nothing (mono),
+                # whether the mode is making stereo now, and the microphone's
+                # format for api/audio/tx.
+                "audio": {**self.audio.rx_format(1), "stereo": self.radio.audio_channels() == 2,
+                          "listeners": self.audio.listeners(), "tx": MIC_FORMAT},
                 "station": self.radio.state().get("station"),
                 "sharedLog": self.shared_log(),
                 # What can be recorded and what is (api/recordings has the rest).
                 "recordings": self.recordings.summary(),
                 # Whether to show a Decoders view: no scan here (api/decoders).
-                "decoders": st.get("decoders") or self.radio.decoders.status()}
+                "decoders": st.get("decoders") or self.radio.decoders.status(),
+                # The decoder session holding the receiver ({}: the operator
+                # has it), and on a controller what host libraries it lends.
+                "rxOwner": st.get("rxOwner") or {},
+                "hostLibs": st.get("hostLibs") or {}}
 
     def shared_log(self) -> dict:
         try:
@@ -710,9 +718,16 @@ class _Handler(BaseHTTPRequestHandler):
                f"@media(prefers-color-scheme:dark)"
                f"{{body{{background:#111;color:#eee}}a{{color:#8bf}}.warn{{color:#f96}}}}</style><h1>{title}</h1><p>"
                + html.escape(_("Use OpenHamShack Remote to operate this app. This page shows how it is."))
-               + f"</p><table>{body}</table>" + self._recordings_html(s)
+               + "</p>" + self._hostlibs_html(s) + f"<table>{body}</table>" + self._recordings_html(s)
                + f"<p>{html.escape(s['version'])}</p></html>")
         self._send(200, doc.encode(), "text/html; charset=utf-8")
+
+    @staticmethod
+    def _hostlibs_html(s: dict) -> str:
+        """A controller too old for host libraries, said where an
+        administrator opening this page will see it first."""
+        why = (s.get("hostLibs") or {}).get("why")
+        return f"<p class=warn>{html.escape(why)}</p>" if why else ""
 
     def _recordings_html(self, s: dict) -> str:
         from .. import sigmf
@@ -808,7 +823,13 @@ class _Handler(BaseHTTPRequestHandler):
         auth = any(spec.get(k, {}).get("auth") for k in changes)
         if auth and not self._need(who, "transmit"):
             return
-        changed = self.srv.radio.set(authorise=auth, **changes)
+        try:
+            changed = self.srv.radio.set(authorise=auth, **changes)
+        except ReceiverHeld as e:
+            # Not a bad request: the receiver is a DAB session's until it
+            # stops (Engine.hold_receiver).
+            self._error(409, str(e), e.code, rxOwner=self.srv.radio.state().get("rxOwner") or {})
+            return
         self._send(200, {"changed": changed})
 
     def post_start(self, who, q):
@@ -916,8 +937,9 @@ class _Handler(BaseHTTPRequestHandler):
     # ---------------------------------------------------------- decoders
     # api/decoders (docs/SERVER-API.md "Decoders"; RADIO-SDR-PLAN §4.4): the
     # engine's decoder sessions (ohscore/decoders.py). Nothing here transmits.
-    REFUSAL_STATUS = {"bad_params": 400, "unknown_decoder": 404, "decoder_unavailable": 409, "outside_span": 409,
-                      "too_many_sessions": 429, "not_running": 503}
+    REFUSAL_STATUS = {"bad_params": 400, "unknown_decoder": 404, "unknown_session": 404,
+                      "decoder_unavailable": 409, "outside_span": 409, "receiver_busy": 409, "on_air": 409,
+                      "rate_too_low": 409, "out_of_range": 409, "too_many_sessions": 429, "not_running": 503}
 
     def get_decoders(self, who, q):
         d = self.srv.radio.decoders
@@ -928,18 +950,46 @@ class _Handler(BaseHTTPRequestHandler):
         from ..decoders import Refused as DecoderRefused
         b = self._body()
         decoder, freq, params = b.get("decoder"), b.get("freqHz"), b.get("params") or {}
+        d = self.srv.radio.decoders
+        # A decoder that takes the receiver (DAB) may name its block in
+        # params instead of giving freqHz (the block's centre).
+        held = isinstance(decoder, str) and d.holds_receiver(decoder)
         if not isinstance(decoder, str) or not isinstance(params, dict) or isinstance(freq, bool) \
-                or not isinstance(freq, (int, float)):
+                or not (isinstance(freq, (int, float)) or (held and freq is None and params.get("block"))):
             self._error(400, _("Give decoder, freqHz and, if any, params"), "bad_params")
             return
+        if held and self.srv.digi.remote is not None:
+            # Armed, the next over would key wherever DAB had taken the
+            # receiver; the operator disarms first, as for any key-up.
+            self._error(409, _("Not while automatic transmit is armed: switch it off first"), "on_air")
+            return
         try:
-            sess = self.srv.radio.decoders.start(decoder, float(freq), params)
+            sess = d.start(decoder, None if freq is None else float(freq), params)
         except DecoderRefused as e:
             more = {"needs": e.needs} if e.needs else {}
             self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
             return
-        log.info("decoder session %s started by %s: %s at %.0f Hz", sess["id"], who.get("user", "?"), decoder, freq)
+        log.info("decoder session %s started by %s: %s at %.0f Hz", sess["id"], who.get("user", "?"), decoder,
+                 sess["freqHz"])
         self._send(201, sess)
+
+    def post_decoder_session_params(self, who, q):
+        """POST api/decoders/sessions/{id} {"params": {...}}: change a
+        running session live (DAB's service)."""
+        from ..decoders import Refused as DecoderRefused
+        b = self._body()
+        params = b.get("params")
+        if not isinstance(params, dict):
+            self._error(400, _("Give params"), "bad_params")
+            return
+        sid = self._session_id()
+        try:
+            sess = self.srv.radio.decoders.configure(sid, params)
+        except DecoderRefused as e:
+            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code)
+            return
+        log.info("decoder session %s set by %s: %s", sid, who.get("user", "?"), params)
+        self._send(200, sess)
 
     def _session_id(self) -> str:
         return urlsplit(self.path).path.rstrip("/").rsplit("/", 1)[-1]
@@ -990,6 +1040,53 @@ class _Handler(BaseHTTPRequestHandler):
             return
         log.info("%s saved the LEILA evidence capture", who["user"])
         self._send(202, {"ok": True})
+
+    def get_smeter_cal(self, who, q):
+        """The stored S-meter calibrations: Radio only (its `band`, and
+        hence per-band calibration, is what makes server-side storage worth
+        having; NB has none, like api/overpower above). `GET
+        api/smeter/calibrate` in docs/SERVER-API.md."""
+        table = getattr(self.srv.radio, "smeter_table", None)
+        if table is None:
+            self._error(404, _("This app has no S-meter calibration."), "not_found")
+            return
+        self._send(200, {"calibrations": table()})
+
+    def post_smeter_cal(self, who, q):
+        """{"dbm": y}: the current (3 s average) reading is y dBm.
+        {"dbfs": x, "dbm": y}: a reading of x dBFS measured elsewhere is
+        y dBm. Either way, refused with a sentence while the receiver's own
+        AGC chooses the gain (smeter_calibrate's ValueError)."""
+        calibrate = getattr(self.srv.radio, "smeter_calibrate", None)
+        if calibrate is None:
+            self._error(404, _("This app has no S-meter calibration."), "not_found")
+            return
+        body = self._body()
+        if "dbm" not in body:
+            self._error(400, _("dbm is required"), "bad_params")
+            return
+        try:
+            dbm = smeter_cal.validate_dbm(body["dbm"])
+            dbfs = smeter_cal.validate_dbfs(body["dbfs"]) if "dbfs" in body else None
+        except ValueError as e:
+            self._error(400, str(e), "bad_params")
+            return
+        try:
+            rec = calibrate(dbm, dbfs)
+        except ValueError as e:
+            self._error(409, str(e), "cannot_calibrate")
+            return
+        log.info("S-meter calibrated by %s: %s", who.get("user", "?"), rec)
+        self._send(200, {"calibration": rec})
+
+    def delete_smeter_cal(self, who, q):
+        """Clear this radio's (band's, antenna's) calibration."""
+        forget = getattr(self.srv.radio, "smeter_forget", None)
+        if forget is None:
+            self._error(404, _("This app has no S-meter calibration."), "not_found")
+            return
+        forget()
+        self._send(200, {"ok": True})
 
     def get_memories(self, who, q):
         self._send(200, {"memories": self.srv.radio.memories()})
@@ -1267,13 +1364,23 @@ class _Handler(BaseHTTPRequestHandler):
 
     def get_audio_rx(self, who, q):
         """Receive audio as raw PCM over a long-lived response, its format
-        in the headers (GUIDE 2: announced up front)."""
+        in the headers (GUIDE 2: announced up front). Mono unless the
+        client asks `?channels=2` (StreamAudio's docstring says why)."""
+        try:
+            channels = int(q.get("channels", ["1"])[0])
+        except ValueError:
+            channels = 0
+        if channels not in CHANNELS:
+            self._error(400, _("channels must be 1 or 2"), "bad_channels")
+            return
         a = self.srv.audio
-        lq = a.listen()
+        fmt = a.rx_format(channels)
+        silence = bytes(int(fmt["rate"] * IDLE_AUDIO_S) * 2 * channels)
+        lq = a.listen(channels)
         try:
             self.send_response(200)
-            self.send_header("Content-Type", f"audio/L16; rate={FORMAT['rate']}; channels=1")
-            self.send_header("X-Audio-Format", json.dumps(FORMAT))
+            self.send_header("Content-Type", f"audio/L16; rate={fmt['rate']}; channels={channels}")
+            self.send_header("X-Audio-Format", json.dumps(fmt))
             self.send_header("Cache-Control", "no-store")
             self.send_header("Connection", "close")
             self.end_headers()
@@ -1288,7 +1395,7 @@ class _Handler(BaseHTTPRequestHandler):
                     # (and its thread) for good - ohs-box showed 20 from one
                     # TV reconnecting every 7 s. Silence also keeps a client
                     # player fed, like the video stream's null packets.
-                    pcm = IDLE_SILENCE
+                    pcm = silence
                 self.wfile.write(pcm)
         except (OSError, ConnectionError):
             pass
@@ -1296,7 +1403,7 @@ class _Handler(BaseHTTPRequestHandler):
             a.unlisten(lq)
 
     def ws_audio_tx(self, who, q):
-        """A remote microphone: binary frames of PCM in FORMAT, used by PTT
+        """A remote microphone: binary frames of PCM in MIC_FORMAT, used by PTT
         in a voice mode while this socket is open. Transmit level, like
         keying."""
         if not ws.handshake(self):
@@ -1305,7 +1412,7 @@ class _Handler(BaseHTTPRequestHandler):
         a = self.srv.audio
         a.mic_writer = who["device"]
         try:
-            sock.send_text(json.dumps({"kind": "hello", "format": FORMAT}))
+            sock.send_text(json.dumps({"kind": "hello", "format": MIC_FORMAT}))
             while True:
                 fr = sock.recv()
                 if fr is None:
@@ -1343,6 +1450,9 @@ ROUTES = {
     ("GET", "/api/cwskim"): ("view", _Handler.get_cwskim),
     ("GET", "/api/overpower"): ("view", _Handler.get_overpower),
     ("POST", "/api/overpower/capture"): ("control", _Handler.post_overpower_capture),
+    ("GET", "/api/smeter/calibrate"): ("view", _Handler.get_smeter_cal),
+    ("POST", "/api/smeter/calibrate"): ("control", _Handler.post_smeter_cal),
+    ("DELETE", "/api/smeter/calibrate"): ("control", _Handler.delete_smeter_cal),
     ("GET", "/api/memories"): ("view", _Handler.get_memories),
     ("POST", "/api/recall"): ("control", _Handler.post_recall),
     ("GET", "/api/log"): ("view", _Handler.get_log),
@@ -1373,6 +1483,7 @@ ROUTES = {
 PREFIX_ROUTES = {
     ("GET", "/api/decoders/sessions/"): ("view", _Handler.get_decoder_session),
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
+    ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),
     ("PUT", "/api/local-frequencies/mine/"): ("control", _Handler.put_local_mine),
     ("DELETE", "/api/local-frequencies/mine/"): ("control", _Handler.delete_local_mine),
 }
