@@ -25,6 +25,9 @@ rig on: the stations fade in over a second or two).
 - **DAB**: one ensemble on Band III's 11D (222.064 MHz), the test
   ensemble of shack_sdr's DAB transmitter model (simdab.py), so a DAB
   session finds stations with no radio.
+- **Broadcast FM**: six fictional stations on Band II from shack_sdr's FM
+  stereo and RDS test transmitter (simfm.py), so wide FM is heard in
+  stereo with RDS, and the band scanner finds something, with no radio.
 - **Our own transmission** comes back, a local signal, at the dial it was
   sent on (half duplex: the engine mutes it, the scope shows it). A
   repeater whose input we transmit on with its tone (or a 1750 Hz
@@ -278,10 +281,14 @@ class HamSim(SimCore):
         # so the stations above never reach it, and a DAB session needs
         # something to find there. Made only when first in view.
         self.dab = None
+        # Band II likewise (simfm.py): made per station, only once in view.
+        self.fm = None
         if self.signals:
             from . import simdab
             if simdab.available():
                 self.dab = simdab.DabEnsemble("11D")
+                from .simfm import FmBand
+                self.fm = FmBand()
         self._init_loop()
 
     # -- set-up -------------------------------------------------------------
@@ -536,6 +543,9 @@ class HamSim(SimCore):
         pick = self.rng.integers(0, len(self.bank), m)
         rot = np.array([1, 1j, -1, -1j], np.complex64)[self.rng.integers(0, 4, m)]
         extra = self.bank[pick] * rot[:, None]
+        fm = self.fm
+        if fm is not None:
+            feeds += fm.feeds(g, self.rx_if, m, background=self.realtime)
         y = self.syn.render(m, feeds, extra)
         b = bandmod.band_at(self.rx_if)
         rate = QRN.get(b.name if b else "", 0.0) * activity(b.name, self.hour()) if b else 0.0

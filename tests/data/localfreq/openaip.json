@@ -1,5 +1,0 @@
-{"page":1,"limit":1000,"totalCount":2,"totalPages":1,"items":[
- {"_id":"oa1","name":"SCOTTISH TMA","type":7,"geometry":{"type":"Polygon","coordinates":[[[-5.5,55.0],[-3.5,55.0],[-3.5,56.5],[-5.5,56.5],[-5.5,55.0]]]},
-  "frequencies":[{"value":"126.300","unit":2,"name":"SCOTTISH CONTROL","primary":true},{"value":"243.000","unit":2,"name":"GUARD"}]},
- {"_id":"oa2","name":"DANGER AREA","type":2,"geometry":{"type":"Polygon","coordinates":[[[-1,50],[0,50],[0,51],[-1,51],[-1,50]]]},"frequencies":[]}
-]}

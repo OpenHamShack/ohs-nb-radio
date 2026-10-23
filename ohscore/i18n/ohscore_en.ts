@@ -188,7 +188,7 @@
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="233" />
+        <location filename="../ui/window.py" line="229" />
         <location filename="../ui/recording.py" line="165" />
         <source>Record receive IQ…</source>
         <translation type="unfinished" />
@@ -209,231 +209,231 @@
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="232" />
+        <location filename="../ui/window.py" line="228" />
         <source>&amp;File</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="237" />
+        <location filename="../ui/window.py" line="233" />
         <source>Open recordings folder</source>
         <translation type="unfinished" />
     </message>
     <message>
         <location filename="../ui/playback.py" line="123" />
-        <location filename="../ui/window.py" line="240" />
+        <location filename="../ui/window.py" line="236" />
         <source>Play IQ recording…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="244" />
+        <location filename="../ui/window.py" line="240" />
         <source>Loop playback</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="248" />
+        <location filename="../ui/window.py" line="244" />
         <source>Export log as ADIF…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="252" />
+        <location filename="../ui/window.py" line="248" />
         <source>Quit</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="256" />
+        <location filename="../ui/window.py" line="252" />
         <source>&amp;View</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="257" />
+        <location filename="../ui/window.py" line="253" />
         <source>Second display</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="261" />
+        <location filename="../ui/window.py" line="257" />
         <source>Light theme</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="267" />
+        <location filename="../ui/window.py" line="263" />
         <source>Full screen</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="274" />
+        <location filename="../ui/window.py" line="270" />
         <source>Workspace</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="277" />
+        <location filename="../ui/window.py" line="273" />
         <source>Auto - follows the mode	Shift+W</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="286" />
+        <location filename="../ui/window.py" line="282" />
         <source>Reset this workspace's layout</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="457" />
-        <location filename="../ui/window.py" line="290" />
+        <location filename="../ui/window.py" line="453" />
+        <location filename="../ui/window.py" line="286" />
         <source>Operate</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="458" />
-        <location filename="../ui/window.py" line="291" />
+        <location filename="../ui/window.py" line="454" />
+        <location filename="../ui/window.py" line="287" />
         <source>Logbook</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="459" />
-        <location filename="../ui/window.py" line="292" />
+        <location filename="../ui/window.py" line="455" />
+        <location filename="../ui/window.py" line="288" />
         <source>Memories</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="300" />
+        <location filename="../ui/window.py" line="296" />
         <source>Keyboard shortcuts</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="303" />
+        <location filename="../ui/window.py" line="299" />
         <source>&amp;Radio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="304" />
+        <location filename="../ui/window.py" line="300" />
         <source>Settings…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="308" />
+        <location filename="../ui/window.py" line="304" />
         <source>Restart the radio</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="311" />
+        <location filename="../ui/window.py" line="307" />
         <source>Voice memories…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="315" />
+        <location filename="../ui/window.py" line="311" />
         <source>&amp;Help</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="319" />
+        <location filename="../ui/window.py" line="315" />
         <source>Welcome…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="322" />
+        <location filename="../ui/window.py" line="318" />
         <source>Check for updates…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="326" />
+        <location filename="../ui/window.py" line="322" />
         <source>Save diagnostics…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="329" />
+        <location filename="../ui/window.py" line="325" />
         <source>Send diagnostics…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="332" />
+        <location filename="../ui/window.py" line="328" />
         <source>Open log folder</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="336" />
+        <location filename="../ui/window.py" line="332" />
         <source>About {app}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="396" />
+        <location filename="../ui/window.py" line="392" />
         <source>Second display (Ctrl+D)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="398" />
+        <location filename="../ui/window.py" line="394" />
         <source>Settings (Ctrl+,)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="400" />
+        <location filename="../ui/window.py" line="396" />
         <source>Keyboard shortcuts (?)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="402" />
+        <location filename="../ui/window.py" line="398" />
         <source>Logbook (Ctrl+L)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="414" />
+        <location filename="../ui/window.py" line="410" />
         <source>Second display, Settings, Logbook, Keyboard shortcuts</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="417" />
+        <location filename="../ui/window.py" line="413" />
         <source>Second display	Ctrl+D</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="418" />
+        <location filename="../ui/window.py" line="414" />
         <source>Settings…	Ctrl+,</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="419" />
+        <location filename="../ui/window.py" line="415" />
         <source>Logbook	Ctrl+L</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="420" />
+        <location filename="../ui/window.py" line="416" />
         <source>Keyboard shortcuts	?</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="484" />
+        <location filename="../ui/window.py" line="480" />
         <source>Controls</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="486" />
+        <location filename="../ui/window.py" line="482" />
         <source>The mode, transmit and receive controls, over the right of the panel. Esc closes them when nothing is on the air.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="494" />
+        <location filename="../ui/window.py" line="490" />
         <source>How the window is laid out: follows the mode (Auto), or the one you chose. W steps through them, Shift+W goes back to Auto.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="702" />
+        <location filename="../ui/window.py" line="698" />
         <source>{secs} s periods</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="704" />
+        <location filename="../ui/window.py" line="700" />
         <source>receive only</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1508" />
+        <location filename="../ui/window.py" line="1504" />
         <source>chosen</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1509" />
+        <location filename="../ui/window.py" line="1505" />
         <source>auto</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/window.py" line="1510" />
+        <location filename="../ui/window.py" line="1506" />
         <source>Workspace: {name} · {how}</source>
         <translation type="unfinished" />
     </message>

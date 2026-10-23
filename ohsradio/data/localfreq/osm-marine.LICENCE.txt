@@ -1,9 +1,0 @@
-Contains information from OpenStreetMap, which is made available here under the
-Open Database License (ODbL).
-
-This file is a derived database of OpenStreetMap data (c) OpenStreetMap
-contributors (https://www.openstreetmap.org/copyright), and is itself made
-available under the Open Database License 1.0:
-https://opendatacommons.org/licenses/odbl/1-0/
-Made by tools/localfreq-build.py from an Overpass API query (the query is in
-that script, ohsradio/localfreq.py overpass_query_area).

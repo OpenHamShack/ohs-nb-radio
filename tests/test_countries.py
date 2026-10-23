@@ -167,46 +167,5 @@ class Qo100(unittest.TestCase):
             self.assertIsNone(countries.locator_position(bad), bad)
 
 
-class Geometry(unittest.TestCase):
-    """The locator and great-circle maths local frequencies measure with
-    (ohsradio/localfreq.py), against squares worked by hand and distances
-    published for well-known pairs."""
-
-    def test_an_extended_square_is_the_tenth_of_a_subsquare(self):
-        # IO91wm is central London; 42 its 5th-of-the-way-east, 3rd-row-up tenth.
-        lat, lon = countries.locator_position("IO91wm")
-        self.assertAlmostEqual(lat, 51.5 + 1 / 48, places=6)
-        self.assertAlmostEqual(lon, -2 + 22 / 12 + 1 / 24, places=6)
-        lat8, lon8 = countries.locator_position("IO91WM42")
-        self.assertAlmostEqual(lat8, 51.5 + 2 / 240 + 1 / 480, places=6)
-        self.assertAlmostEqual(lon8, -2 + 22 / 12 + 4 / 120 + 1 / 240, places=6)
-        for bad in ("IO91wm4", "IO91wmab", "IO91wm4x"):
-            self.assertIsNone(countries.locator_position(bad), bad)
-
-    def test_known_distances_and_bearings(self):
-        # A degree of latitude, a quarter of the equator, and London to
-        # Paris (343.5 km, heading south-east at 148 degrees).
-        km, brg = countries.distance_bearing(0, 0, 1, 0)
-        self.assertAlmostEqual(km, 111.195, places=2)
-        self.assertAlmostEqual(brg, 0.0, places=6)
-        km, brg = countries.distance_bearing(0, 0, 0, 90)
-        self.assertAlmostEqual(km, 10007.5, delta=0.5)
-        self.assertAlmostEqual(brg, 90.0, places=6)
-        km, brg = countries.distance_bearing(51.5074, -0.1278, 48.8566, 2.3522)
-        self.assertAlmostEqual(km, 343.5, delta=1.0)
-        self.assertAlmostEqual(brg, 148.1, delta=0.5)
-        # Westward is 270, not -90.
-        self.assertAlmostEqual(countries.distance_bearing(0, 0, 0, -10)[1], 270.0, places=6)
-
-    def test_locator_to_locator(self):
-        # IO75rl (Ayrshire, 55.479 N 4.542 W) to IO91wm (London): 3.958
-        # degrees of latitude (440 km) and 4.417 of longitude at 53.5 N
-        # (292 km) make about 528 km on a flat map, south-east.
-        a, b = countries.locator_position("IO75rl"), countries.locator_position("IO91wm")
-        km, brg = countries.distance_bearing(*a, *b)
-        self.assertAlmostEqual(km, 528, delta=3)
-        self.assertTrue(130 < brg < 150, brg)
-
-
 if __name__ == "__main__":
     unittest.main()

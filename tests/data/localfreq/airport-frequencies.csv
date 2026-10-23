@@ -1,9 +1,0 @@
-"id","airport_ref","airport_ident","type","description","frequency_mhz"
-10,1,"EGPF","TWR","Glasgow Tower",118.805
-11,1,"EGPF","ATIS","ATIS",129.575
-12,1,"EGPF","CNTR","SCOTTISH CONTROL",126.300
-13,1,"EGPF","OPS","Ops HF",5.680
-14,2,"EGPK","APP","APP",120.550
-15,3,"XXCL","A/G","Closed A/G",122.500
-16,4,"EGLL","TWR","Heathrow Tower",118.500
-17,1,"EGPF","TWR","Glasgow Tower",118.805

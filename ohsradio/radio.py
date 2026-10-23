@@ -774,30 +774,6 @@ class Radio(Engine):
         cw = self.cwskim
         return cw.view() if cw is not None else dict(off_item(), spots=[])
 
-    # ------------------------------------------------------------------ local frequencies
-    @property
-    def localfreq(self):
-        """Local frequencies (ohsradio/localfreq.py): read from the bundled
-        files on first use, never at start (a desktop that never opens the
-        view never reads them), and the operator's list in the data folder."""
-        lf = self.__dict__.get("_localfreq")
-        if lf is None:
-            from . import localfreq
-            lf = self.__dict__["_localfreq"] = localfreq.LocalFrequencies(self.data_dir)
-        return lf
-
-    def local_frequencies(self, radius_km: float | None = None, category: str | None = None) -> dict:
-        """GET api/local-frequencies: from the station's locator, within
-        `radius_km` (default the localRadiusKm setting)."""
-        r = self.st.get("localRadiusKm", 100) if radius_km is None else radius_km
-        return self.localfreq.listing(self.st.get("locator", ""), r, category)
-
-    def local_refresh(self, fetch, openaip_key: str | None = None) -> dict:
-        """Refresh the downloadable sources (an administrator's action)."""
-        key = self.st.get("openAipKey", "") if openaip_key is None else openaip_key
-        return self.localfreq.refresh(fetch, self.st.get("locator", ""), float(self.st.get("localRadiusKm", 100)),
-                                      key)
-
     def _demodulate(self, X, starts, rx_dial: float):
         if self.st["mode"] == "wfm":
             return self._demodulate_wfm(X, starts, rx_dial)

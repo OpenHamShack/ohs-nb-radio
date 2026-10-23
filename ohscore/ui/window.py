@@ -57,7 +57,7 @@ from .prefs import SPLITTER_NAMES, layout_from_sizes, sizes_from_layout
 from .rail import RailDrawer, ReceiveCard
 from .smeter import passband_noise_dbfs
 from .readout import STEPS, Readout
-from .layoutrules import FULL, TIGHT
+from .layoutrules import TIGHT
 from .scope import ScopeView
 from .status import OnAirGlow, PttButton, SimBadge, ToastHost
 from .tuning import DEFAULT_STEP, click_to_dial
@@ -153,10 +153,6 @@ class BaseWindow(QMainWindow):
     EXTRA_VIEWS: list = []
     # Extra views the tab row leaves out in the Tight tier (View menu only).
     TIGHT_MENU_VIEWS: tuple = ()
-    # Views that leave the tab row in Compact as well (still on the View
-    # menu and their shortcut): a seventh tab is wider than a 1280 px
-    # window has room for (Radio's Local view, 23/10/2026).
-    COMPACT_MENU_VIEWS: tuple = ()
     # The least rail that shows the full mode grid's labels whole.
     GRID_RAIL = 320
     # The screen's available (width, height) when a test says what screen
@@ -1640,9 +1636,7 @@ class BaseWindow(QMainWindow):
         # View menu and their shortcut there. Each tab is as wide as the
         # longest label, so a sixth tab cost Radio's 1024 x 600 window its
         # last few pixels in a longer language (en-XA).
-        self.views.options = [o for o in self.view_options
-                              if not ((tight and o[0] in self.TIGHT_MENU_VIEWS)
-                                      or (t != FULL and o[0] in self.COMPACT_MENU_VIEWS))]
+        self.views.options = [o for o in self.view_options if not (tight and o[0] in self.TIGHT_MENU_VIEWS)]
         self.views.update()
         self._fit_views()
         if tight:
@@ -1674,8 +1668,7 @@ class BaseWindow(QMainWindow):
         fm = QFontMetricsF(theme.font(12.5, theme.QFont.Weight.DemiBold))
         n = len(self.views.options)
         need = int(n * (max(fm.horizontalAdvance(lab) for _v, lab in self.views.options) + theme.px(22)) + 6)
-        extra = sum(1 for v, _l in self.views.options if v in {k for k, _lab, _sc in self.EXTRA_VIEWS})
-        self.views.setFixedWidth(need if self.tier == TIGHT else max(need, theme.px(300 + 110 * extra)))
+        self.views.setFixedWidth(need if self.tier == TIGHT else max(need, theme.px(300 + 110 * len(self.EXTRA_VIEWS))))
 
     # The drawer ------------------------------------------------------------
     def _rail_to_drawer(self) -> None:

@@ -126,20 +126,6 @@ env:
       An IQ recording stops by itself after this long, or sooner if the
       recordings limit or the free space would be passed.
 
-  # Local frequencies' Refresh (docs/SERVER-API.md): the openAIP API key,
-  # a module setting so only the administrator sees it. Never in api/set or
-  # api/state, which every viewer reads.
-  - key: OPENAIP_API_KEY
-    label: openAIP API key
-    type: password
-    secret: true
-    required: false
-    help: >
-      Optional. Lets an administrator's Refresh of the local frequencies
-      fetch area and approach control around the station from openAIP
-      (openaip.net: your profile's API clients). openAIP's data is CC BY-NC
-      4.0, for non-commercial use. Empty: the copy Radio came with.
-
 runtime:
   build:
     context: .

@@ -144,13 +144,9 @@ def geo_elevation(lat: float, lon: float, sat_lon: float = QO100_LON) -> float:
 
 
 def locator_position(loc: str) -> tuple[float, float] | None:
-    """The centre of a Maidenhead square (4, 6 or 8 characters), (°N, °E).
-
-    8 characters because the station profile allows them (SERVICES.md 2.1)
-    and local frequencies measure from the station: an extended square is
-    about 1 km across where a subsquare is 5 km by 9."""
+    """The centre of a Maidenhead square (4 or 6 characters), (°N, °E)."""
     loc = (loc or "").strip()
-    if len(loc) not in (4, 6, 8):
+    if len(loc) not in (4, 6):
         return None
     try:
         a, b = loc[0].upper(), loc[1].upper()
@@ -158,34 +154,14 @@ def locator_position(loc: str) -> tuple[float, float] | None:
             return None
         lon = (ord(a) - 65) * 20 - 180 + int(loc[2]) * 2
         lat = (ord(b) - 65) * 10 - 90 + int(loc[3])
-        if len(loc) == 4:
-            return lat + 0.5, lon + 1.0
-        c, d = loc[4].lower(), loc[5].lower()
-        if not ("a" <= c <= "x" and "a" <= d <= "x"):
-            return None
-        lat, lon = lat + (ord(d) - 97) / 24, lon + (ord(c) - 97) / 12
         if len(loc) == 6:
-            return lat + 1 / 48, lon + 1 / 24
-        if not loc[6:8].isdigit():
-            return None
-        return lat + int(loc[7]) / 240 + 1 / 480, lon + int(loc[6]) / 120 + 1 / 240
+            c, d = loc[4].lower(), loc[5].lower()
+            if not ("a" <= c <= "x" and "a" <= d <= "x"):
+                return None
+            return lat + (ord(d) - 97) / 24 + 1 / 48, lon + (ord(c) - 97) / 12 + 1 / 24
+        return lat + 0.5, lon + 1.0
     except (IndexError, ValueError):
         return None
-
-
-EARTH_KM = 6371.0088        # the IUGG mean radius: a sphere is good to 0.5 %, plenty for "how far"
-
-
-def distance_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> tuple[float, float]:
-    """Great-circle distance (km) and initial bearing (degrees from true
-    north, 0-360) from the first point to the second, on a sphere."""
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dl = math.radians(lon2 - lon1)
-    h = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    km = 2 * EARTH_KM * math.asin(min(1.0, math.sqrt(h)))
-    y = math.sin(dl) * math.cos(p2)
-    x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
-    return km, (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
 
 
 # --- the station -------------------------------------------------------------

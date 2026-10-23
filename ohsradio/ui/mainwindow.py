@@ -63,7 +63,6 @@ SHORTCUTS = [
         ("Ctrl + B", QT_TRANSLATE_NOOP("Shortcuts", "Memories")),
         ("Ctrl + K", QT_TRANSLATE_NOOP("Shortcuts", "CW Activity")),
         ("Ctrl + Shift + D", QT_TRANSLATE_NOOP("Shortcuts", "Decoders")),
-        ("Ctrl + Shift + L", QT_TRANSLATE_NOOP("Shortcuts", "Local frequencies")),
         ("Ctrl + D", QT_TRANSLATE_NOOP("Shortcuts", "Second display")),
         ("Ctrl + ,", QT_TRANSLATE_NOOP("Shortcuts", "Settings")),
         ("Ctrl + Shift + R", QT_TRANSLATE_NOOP("Shortcuts", "Record receive IQ / stop")),
@@ -84,14 +83,10 @@ class MainWindow(BaseWindow):
     # cwskimview.py). Ctrl+K, as NB's band skimmer's Band view. Then the
     # decoders running on frequencies of their own (ohscore/ui/
     # decodersview.py, RADIO-SDR-PLAN §4.5), Ctrl+Shift+D. The labels are
-    # translated where the window shows them, under MainWindow. Last, what
-    # there is to listen to near the station (ohsradio/ui/localview.py),
-    # Ctrl+Shift+L; it leaves the tab row below Full (View menu, Ctrl+Shift+L).
+    # translated where the window shows them, under MainWindow.
     EXTRA_VIEWS = [("cwskim", QT_TRANSLATE_NOOP("MainWindow", "CW Activity"), "Ctrl+K"),
-                   ("decoders", QT_TRANSLATE_NOOP("MainWindow", "Decoders"), "Ctrl+Shift+D"),
-                   ("local", QT_TRANSLATE_NOOP("MainWindow", "Local"), "Ctrl+Shift+L")]
-    TIGHT_MENU_VIEWS = ("decoders", "local")
-    COMPACT_MENU_VIEWS = ("local",)
+                   ("decoders", QT_TRANSLATE_NOOP("MainWindow", "Decoders"), "Ctrl+Shift+D")]
+    TIGHT_MENU_VIEWS = ("decoders",)
 
     def watch_view(self) -> str:
         """Watch opens on CW Activity, the band view; Decoders came after it."""
@@ -204,8 +199,6 @@ class MainWindow(BaseWindow):
     def make_extra_view(self, key: str):
         if key == "decoders":
             return self._make_decoders_view()
-        if key == "local":
-            return self._make_local_view()
         from ohscore.ui.cwskimview import CwSkimStore, CwSkimView
         # The store outlives the view (a theme change rebuilds the window):
         # made once, on the first build.
@@ -218,36 +211,6 @@ class MainWindow(BaseWindow):
             old.detach()
         self.cwskim_view = CwSkimView(self.bridge, self.prefs, self.cwskim_store, self.cwskim_tune)
         return self.cwskim_view
-
-    # ------------------------------------------------------------- Local
-    def _make_local_view(self):
-        from .localview import LocalView
-        old = getattr(self, "local_view", None)
-        if old is not None:
-            old.detach()
-        self.local_view = LocalView(self.bridge, self.prefs, self.local_tune)
-        return self.local_view
-
-    def local_tune(self, entry: dict):
-        """Tune to a local frequency: its mode, its dial exactly (an 8.33 kHz
-        channel to the hertz), and its step when the step list has it (the
-        list has no 8.33 kHz step; a grid of 8333 Hz from 0 would not land
-        on the channels, so airband keeps the mode's own). Receive only:
-        the dial is set as any other, and transmit there is the licence's
-        to refuse."""
-        sp = self.bridge.spec("vfo")
-        mode = entry["mode"] if entry["mode"] in self.bridge.radio.STATE.modes else self.bridge.st.get("mode")
-        f = float(entry["freqHz"])
-        if not sp["min"] <= f <= sp["max"]:
-            self.on_toast({"level": "warn", "text": self.tr("{freq} is outside what this radio tunes").format(
-                freq=f"{f / 1e6:.4f} MHz")})
-            return
-        if not self.bridge.set(mode=mode, vfo=f):
-            return
-        step = entry.get("step")
-        if step in self.STEPS:
-            self.step = step
-            self.readout.set_step(step)
 
     # ------------------------------------------------------------- Decoders
     def _make_decoders_view(self):
