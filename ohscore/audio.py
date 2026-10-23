@@ -1,10 +1,17 @@
 """Audio in and out: PortAudio through pyaudio, or a null backend.
 
-The engine's audio is 12 kHz mono float32 everywhere. This module is the only
-place that knows the sound card's rate: it resamples on the engine side of
-the ring buffers (in the RX and TX threads), so the PortAudio callbacks do
-nothing but copy - a callback that computes is a callback that glitches when
-the Pi is busy.
+The engine's audio is float32. Microphone and transmit monitor audio is
+12 kHz mono (RATE), as every transmit path and decoder works. Receive
+playback is at the backend's `out_rate`, which the engine sets before
+start(): RATE for QO-100 NB, 48 kHz for Radio since 23/10/2026, so broadcast
+FM is flat to 15 kHz and a stereo decoder has somewhere to go; a block is
+mono, shape (n,), or stereo, shape (n, 2), L then R. This module is the only
+place that knows the sound card's rate and channel count: it converts on
+the engine side of the ring buffers (in the RX and TX threads), so the
+PortAudio callbacks do nothing but copy - a callback that computes is a
+callback that glitches when the Pi is busy. With the card at the engine's
+rate (48 kHz, the usual case) receive audio is not resampled here at all:
+Radio's engine already produced it at that rate.
 
 Receive playback keeps a small jitter buffer (~120 ms). On underrun the last
 few milliseconds are faded out instead of stopping dead, and playback waits
@@ -175,11 +182,35 @@ class NullTxOut(TxOut):
         return None
 
 
+def as_frames(audio) -> np.ndarray:
+    """A receive block as float32 frames, shape (n, channels)."""
+    a = np.asarray(audio, np.float32)
+    return a.reshape(-1, 1) if a.ndim == 1 else a
+
+
+def mono(audio) -> np.ndarray:
+    """A receive block as one channel: stereo is averaged, which is what a
+    mono FM receiver would have played (L+R)."""
+    a = np.asarray(audio, np.float32)
+    return a if a.ndim == 1 else a.mean(axis=1, dtype=np.float32)
+
+
+def channels_of(audio) -> int:
+    a = np.asarray(audio)
+    return 1 if a.ndim == 1 else int(a.shape[1])
+
+
 class Backend:
-    """Interface the engine uses. All audio arguments/results are 12 kHz."""
+    """Interface the engine uses. Microphone and monitor audio are 12 kHz
+    mono (RATE); play() takes receive audio at `out_rate`, mono (n,) or
+    stereo (n, 2), and set_out_rate() is called before start()."""
 
     name = "none"
     rate = RATE
+    out_rate = RATE
+
+    def set_out_rate(self, rate: int) -> None:
+        self.out_rate = int(rate)
 
     def start(self):
         pass
@@ -477,58 +508,68 @@ class PortAudio(Backend):
         self.notes.append(f"Sound device {want!r} not found; using the system default")
         return None
 
-    def _pick_rate(self, out_idx, in_idx) -> int:
+    def _pick_rate(self, out_idx, in_idx) -> tuple[int, int]:
+        """The card's rate and channel count for the speaker: stereo first,
+        so a stereo broadcast is heard as one, and mono where the card has
+        only one channel (some USB headsets). Before 23/10/2026 the speaker
+        was always opened mono."""
         import pyaudio
-        for r in (48_000, 44_100, 24_000, 96_000):
-            try:
-                ok = self.pa.is_format_supported(r, output_device=out_idx if out_idx is not None else
-                                                 self.pa.get_default_output_device_info()["index"],
-                                                 output_channels=1, output_format=pyaudio.paFloat32)
-                if ok:
-                    return r
-            except (ValueError, OSError):
-                continue
+        for ch in (2, 1):
+            for r in (48_000, 44_100, 24_000, 96_000):
+                try:
+                    ok = self.pa.is_format_supported(r, output_device=out_idx if out_idx is not None else
+                                                     self.pa.get_default_output_device_info()["index"],
+                                                     output_channels=ch, output_format=pyaudio.paFloat32)
+                    if ok:
+                        return r, ch
+                except (ValueError, OSError):
+                    continue
         try:
-            return int(self.pa.get_default_output_device_info()["defaultSampleRate"])
+            return int(self.pa.get_default_output_device_info()["defaultSampleRate"]), 1
         except (OSError, IOError):
-            return 48_000
+            return 48_000, 1
 
     def start(self):
         import pyaudio
         self.pa = pyaudio.PyAudio()
         out_idx = self._find(self.out_name, inputs=False)
         in_idx = self._find(self.in_name, inputs=True)
-        self.rate = self._pick_rate(out_idx, in_idx)
-        r = self.rate
-        self.up = Resampler(r, RATE)          # 12 kHz -> card, RX thread
+        self.rate, self.out_ch = self._pick_rate(out_idx, in_idx)
+        r, ch = self.rate, self.out_ch
+        # Receive audio, out_rate -> card, RX thread: one resampler a
+        # channel, and none when the card runs at the engine's rate.
+        self.up = [Resampler(r, self.out_rate), Resampler(r, self.out_rate)] if r != self.out_rate else None
         self.mon_up = Resampler(r, RATE)      # 12 kHz -> card, TX thread (monitor)
         self.down = Resampler(RATE, r)        # card -> 12 kHz, TX thread
-        self.play_ring = Ring(int(r * 1.0))
+        # The speaker's rings hold interleaved frames: `ch` samples each.
+        self.play_ring = Ring(int(r * 1.0) * ch)
         self.mon_ring = Ring(int(r * 0.5))
         self.mic_ring = Ring(int(r * 1.0))
-        self.fade = np.linspace(1, 0, max(1, int(r * 0.004)), dtype=np.float32)
+        self.fade = np.linspace(1, 0, max(1, int(r * 0.004)), dtype=np.float32)[:, None]
+        self.last_frame = np.zeros(ch, np.float32)
 
         def out_cb(_in, frames, _ti, _st):
             # Copy only: everything heavy happened before the ring.
             need = frames
             if self.priming:
-                if len(self.play_ring) >= int(self.RESUME * r):
+                if len(self.play_ring) >= int(self.RESUME * r) * ch:
                     self.priming = False
-                out = np.zeros(need, np.float32)
+                out = np.zeros((need, ch), np.float32)
             else:
-                out = self.play_ring.read(need)
+                out = self.play_ring.read(need * ch).reshape(-1, ch)
                 if len(out) < need:
                     self.underruns += 1
                     self.priming = True
-                    tail = np.zeros(need - len(out), np.float32)
+                    tail = np.zeros((need - len(out), ch), np.float32)
                     k = min(len(self.fade), len(tail))
-                    tail[:k] = self.last_sample * self.fade[:k]
+                    tail[:k] = self.last_frame * self.fade[:k]
                     out = np.concatenate([out, tail])
             if len(self.mon_ring):
                 m = self.mon_ring.read(need)
-                out[:len(m)] += m
+                out[:len(m)] += m[:, None]
             if len(out):
-                self.last_sample = float(out[-1])
+                self.last_frame = out[-1].copy()
+                self.last_sample = float(out[-1, 0])
             return out.astype(np.float32).tobytes(), pyaudio.paContinue
 
         def in_cb(data, frames, _ti, _st):
@@ -536,7 +577,8 @@ class PortAudio(Backend):
             return None, pyaudio.paContinue
 
         kw = dict(format=pyaudio.paFloat32, channels=1, rate=r, frames_per_buffer=int(r * 0.02))
-        self.streams.append(self.pa.open(output=True, output_device_index=out_idx, stream_callback=out_cb, **kw))
+        self.streams.append(self.pa.open(output=True, output_device_index=out_idx, stream_callback=out_cb,
+                                         **dict(kw, channels=ch)))
         # Not opened here: open_mic() does, with what it needs kept.
         self.in_idx, self.in_kw, self.in_cb = in_idx, kw, in_cb
         if self.out2_name:
@@ -620,13 +662,30 @@ class PortAudio(Backend):
         self.mic_ring.write(chunk)
         self.level = _rms_db(chunk)
 
+    def _to_card(self, audio) -> np.ndarray:
+        """A receive block at out_rate, as frames at the card's rate and
+        channel count. Mono to a stereo card is the same on both sides; a
+        stereo block to a mono card is averaged. Resampled after the
+        channels are settled, so a mono block costs one resampler."""
+        a = as_frames(audio)
+        if self.out_ch == 1 and a.shape[1] > 1:
+            a = mono(a)[:, None]
+        if self.up is not None:
+            a = np.stack([self.up[c](a[:, c]) for c in range(a.shape[1])], axis=1)
+        if a.shape[1] < self.out_ch:
+            a = np.repeat(a, self.out_ch, axis=1)
+        return a
+
     def play(self, audio):
-        y = self.up(audio)
-        self.play_ring.write(y)
-        if len(self.play_ring) > self.MAX * self.rate:
-            self.play_ring.discard(len(self.play_ring) - int(self.TARGET * self.rate))
+        y = self._to_card(audio)
+        ch = self.out_ch
+        self.play_ring.write(y.reshape(-1))
+        if len(self.play_ring) > self.MAX * self.rate * ch:
+            self.play_ring.discard(len(self.play_ring) - int(self.TARGET * self.rate) * ch)
         if hasattr(self, "out2_ring"):
-            self.out2_ring.write(y)
+            # The second output stays mono: it feeds another program's
+            # input (a virtual cable to a decoder), which wants one channel.
+            self.out2_ring.write(mono(y))
 
     def monitor(self, audio):
         self.mon_ring.write(self.mon_up(audio))
@@ -712,7 +771,9 @@ class PortAudio(Backend):
 
     def status(self):
         return {"backend": "portaudio", "rate": self.rate, "notes": list(self.notes), "underruns": self.underruns,
-                "bufferMs": round(1000 * len(self.play_ring) / self.rate, 1) if self.rate else 0}
+                "channels": getattr(self, "out_ch", 1), "outRate": self.out_rate,
+                "bufferMs": round(1000 * len(self.play_ring) / self.rate / getattr(self, "out_ch", 1), 1)
+                if self.rate else 0}
 
 
 class PortAudioTxOut(TxOut):
@@ -800,20 +861,27 @@ class PortAudioTxOut(TxOut):
             pass
 
 
-def make_backend(cfg: dict, realtime: bool = True) -> tuple[Backend, str]:
-    """The configured backend, falling back to null (with the reason) when
-    PortAudio or the card is unavailable: no sound card must never stop the
-    radio."""
+def _null(realtime: bool, out_rate: int) -> NullAudio:
+    a = NullAudio(realtime=realtime)
+    a.set_out_rate(out_rate)
+    return a
+
+
+def make_backend(cfg: dict, realtime: bool = True, out_rate: int = RATE) -> tuple[Backend, str]:
+    """The configured backend, playing receive audio at `out_rate`, falling
+    back to null (with the reason) when PortAudio or the card is
+    unavailable: no sound card must never stop the radio."""
     if cfg.get("audioBackend", "portaudio") == "null":
-        return NullAudio(realtime=realtime), ""
+        return _null(realtime, out_rate), ""
     try:
         b = PortAudio(cfg.get("audioOut", ""), cfg.get("audioIn", ""), cfg.get("audioOut2", ""))
+        b.set_out_rate(out_rate)
         b.start()
         return b, "; ".join(b.notes)
     except ImportError:
-        return NullAudio(realtime=realtime), "No audio: install python3-pyaudio"
+        return _null(realtime, out_rate), "No audio: install python3-pyaudio"
     except Exception as e:  # noqa: BLE001 - any PortAudio failure degrades to silence
         log.warning("audio unavailable: %s", e)
         from . import diag
         diag.notable("audio-failed", str(e))
-        return NullAudio(realtime=realtime), f"No audio ({e}); running without a sound card"
+        return _null(realtime, out_rate), f"No audio ({e}); running without a sound card"

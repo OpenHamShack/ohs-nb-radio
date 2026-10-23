@@ -112,6 +112,7 @@ from .dsp.bank import Analysis, Channel, Geometry, Source, Synthesis
 from .dsp.demod import Demod, NoiseBlanker, passband
 from .dsp.nr import NoiseReduction
 from .dsp.mod import SsbMod
+from .dsp.multirate import Interpolator
 from .dsp.spectrum import Scope, wide_nfft
 from .keyer import Keyer, VOICE_MODES
 from .logbook import Logbook
@@ -306,6 +307,16 @@ class Engine:
     # the HL2's 60 ms.
     DRAIN_SLACK = 0.25
     DRAIN_MAX = 1.0
+    # The rate receive audio is played at: what the sound card, the store's
+    # api/audio/rx and its recordings get (the backend's out_rate). The
+    # demodulators, the decoders, CW, best audio and every transmit path
+    # stay at AUDIO_RATE (12 kHz mono); a mode whose demodulator makes
+    # better audio than that hands it over in `heard_hi` (_rx_block), and
+    # everything else is upsampled here, once, after noise reduction.
+    # Radio plays at 48 kHz (23/10/2026: broadcast FM flat to 15 kHz,
+    # stereo to come); QO-100 NB keeps 12 kHz, which is all an SSB
+    # transponder's audio has and what its clients already take.
+    OUT_RATE = AUDIO_RATE
 
     # Supplied by the app's subclass.
     STATE = None                 # ohscore.state.Registry
@@ -446,6 +457,15 @@ class Engine:
                       data_from_env=bool(data_dir) or bool(self.CONFIG.app.getenv("DATA")))
         self.decoders = Decoders(self)
         self._inj_audio, self._inj_device = audio, device
+        if audio is not None:
+            # Before start(): the store's server announces this backend's
+            # format to a listener who connects while the radio is off.
+            audio.set_out_rate(self.OUT_RATE)
+        # A block of receive audio better than AUDIO_RATE, set by an app's
+        # _demodulate for this block only (Radio's wide FM): at OUT_RATE,
+        # mono (n,) or stereo (n, 2). Cleared before every block.
+        self.heard_hi = None
+        self.out_up = self.speech_up = None
         self.dev = None
         self.audio = None
         self.threads: list[threading.Thread] = []
@@ -853,10 +873,25 @@ class Engine:
             self.play.set_rx_converter(self._play_converter())
         if self._inj_audio is not None:
             self.audio = self._inj_audio
+            self.audio.set_out_rate(self.OUT_RATE)
             self.audio.start()
             note = ""
         else:
-            self.audio, note = audio_mod.make_backend(self.cfg, realtime=realtime)
+            self.audio, note = audio_mod.make_backend(self.cfg, realtime=realtime, out_rate=self.OUT_RATE)
+        # 12 kHz receive audio to OUT_RATE (a whole multiple of it): the
+        # FFT interpolator the Pluto's transmit path uses (dsp/multirate.py),
+        # flat to 5 kHz and 90 dB down past 7. The sound card path's
+        # polyphase Resampler did 12 -> 48 kHz on the desktop before
+        # 23/10/2026 and cost eight times as much here (1.0 % of a 6900HX
+        # core against 0.12); with the card at 48 kHz it now does nothing.
+        # One for the receive thread and one for FreeDV's speech, which
+        # arrives on the decode thread.
+        self.out_up = self.speech_up = None
+        if self.OUT_RATE != AUDIO_RATE:
+            m = self.OUT_RATE // AUDIO_RATE
+            if m * AUDIO_RATE != self.OUT_RATE:
+                raise DeviceError(f"OUT_RATE {self.OUT_RATE} is not a whole multiple of {AUDIO_RATE}")
+            self.out_up, self.speech_up = Interpolator(m), Interpolator(m)
         if note:
             self.toast(note, "warn")
         self.log.info("audio: %s", self.audio.status() if self.audio else "none")
@@ -1333,7 +1368,19 @@ class Engine:
         on the decode thread, hence the lock around the playback resampler."""
         vol = 0.0 if self.st["mute"] else self.st["volume"]
         with self.play_lock:
-            self.audio.play(np.asarray(speech, np.float32) * np.float32(vol))
+            self.audio.play(self._to_out(np.asarray(speech, np.float32), self.speech_up) * np.float32(vol))
+
+    def audio_channels(self) -> int:
+        """How many channels the receive audio has now: 2 while the mode is
+        making stereo (an app's `heard_hi`), else 1. What a recording
+        starting now records (ohscore/server/recording.py)."""
+        return 1
+
+    @staticmethod
+    def _to_out(audio: np.ndarray, up) -> np.ndarray:
+        """12 kHz audio at OUT_RATE, through the interpolator `up` (None:
+        the app plays at 12 kHz)."""
+        return audio if up is None else up(np.asarray(audio, np.complex64)).real.astype(np.float32)
 
     def _emit_event(self, ev: dict):
         ev = dict(ev)
@@ -1527,6 +1574,7 @@ class Engine:
         # An app's own demodulator (HAM's FM) never sets the core
         # demodulator's gain; cleared first, so it cannot carry a stale one.
         self.demod.gain = None
+        self.heard_hi = None
         audio, level = self._demodulate(X, starts, rx_dial)
         self.rx_level = level
         # Noise reduction is for the ear only: the speaker gets `heard`, the
@@ -1537,8 +1585,11 @@ class Engine:
         # hearing your own downlink is how QO-100 is operated.
         vol = 0.0 if s["mute"] else s["volume"] * self._rx_audio_gain(s)
         if not (s["mode"] == "freedv" and self.decoder is not None):
+            # At OUT_RATE: the demodulator's own (wide FM's 48 kHz, never
+            # through 12 kHz and back) or this block brought up to it.
+            hi = self.heard_hi if self.heard_hi is not None else self._to_out(heard, self.out_up)
             with self.play_lock:
-                self.audio.play(heard * np.float32(vol))
+                self.audio.play(hi * np.float32(vol))
         utc = self._audio_utc(now, len(audio))
         if self.decoder is not None:
             try:

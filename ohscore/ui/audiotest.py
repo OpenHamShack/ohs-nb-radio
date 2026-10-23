@@ -120,7 +120,9 @@ class AudioTester:
     def tone(self, name: str, engine_audio=None, seconds: float = 1.2, hz: float = 700.0) -> str:
         if engine_audio is not None and engine_audio.name == "portaudio" and \
                 self._same_device(name, getattr(engine_audio, "out_name", None)):
-            t = np.arange(int(audio_mod.RATE * seconds)) / audio_mod.RATE
+            # At the rate the engine plays receive audio (Backend.out_rate).
+            rate = getattr(engine_audio, "out_rate", audio_mod.RATE)
+            t = np.arange(int(rate * seconds)) / rate
             env = np.minimum(1.0, np.minimum(t, seconds - t) / 0.02)
             x = (0.3 * env * np.sin(2 * np.pi * hz * t)).astype(np.float32)
             try:

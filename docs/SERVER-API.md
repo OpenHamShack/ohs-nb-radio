@@ -56,8 +56,8 @@ the desktop apps.
 | `GET api/events?kinds=…,decoder` | view | the decoder sessions' results, below |
 | `GET api/overpower` | view | QO-100 NB only (404 `not_found` elsewhere): `{"state", "beacon", "marginDb", "capture", "lastCapture", "events": [...]}` - signals over the middle beacon and LEILA sirens of the last 30 minutes, open ones first, each as ENGINE-API `overpower` describes. The same list comes as `overpower` items on `api/events?kinds=…,overpower` (not in the default set) on every change and once a second while anything is active. A `leila` entry is the siren pattern measured on six real sirens; why LEILA marks a station is unknown, so show it as "LEILA?". Tapping an entry only tunes: `POST api/set {"vfo": …}` at Control level, never TX. |
 | `POST api/overpower/capture` | control | save the last 20 s of receive IQ now (the LEILA evidence ring; `leilaCapture` must be on): `202 {"ok": true}`, the file then appears in Recordings as `…-LEILA`; `409 nothing_to_save` with the sentence why not. Receive only. |
-| `GET api/audio/rx` | view | receive audio, raw PCM over a long-lived response: `Content-Type: audio/L16; rate=12000; channels=1`, and `X-Audio-Format: {"encoding": "s16le", "rate": 12000, "channels": 1}` |
-| `GET api/audio/tx` | transmit | WebSocket: binary frames of PCM in the same format are the microphone while it is open (voice modes; keying is still `api/ptt`) |
+| `GET api/audio/rx[?channels=1\|2]` | view | receive audio, raw PCM over a long-lived response, its format in the headers before any audio: `Content-Type: audio/L16; rate=<rate>; channels=<n>` and `X-Audio-Format: {"encoding": "s16le", "rate": <rate>, "channels": <n>}`. The rate is the app's: **48000 for Radio** (since 23/10/2026), 12000 for QO-100 NB. **Mono unless `?channels=2`** (below, "Receive audio format"); `400 bad_channels` for anything but 1 or 2 |
+| `GET api/audio/tx` | transmit | WebSocket: binary frames of PCM are the microphone while it is open (voice modes; keying is still `api/ptt`), always **12 kHz mono s16le** in both apps; the first text frame is `{"kind": "hello", "format": {"encoding": "s16le", "rate": 12000, "channels": 1}}` |
 | `POST api/shack/pad/action` | control (transmit for `power`) | the controller's input host: `{"action", "kind", "step"}` from `<app>/pad-actions.json`; answers the pad faces. `ptt` is refused here: a pad keys through `api/ptt` like any client. |
 | `GET api/shack/busy` | the platform | `{"busy": <on air>, "why"}` for the update gate |
 | `POST api/shack/release` | the platform | the broker asks for the radio back: `409 {"onAir": true}` while keyed (unless `"stop": true`), else `202` and the radio stops |
@@ -139,6 +139,37 @@ fetches the session with `?since=`. `t` is UTC from the samples. Text is
 not yet coalesced: RTTY's results come a character or a few at a time,
 about seven a second at 45.45 Bd.
 
+
+## Receive audio format
+
+`GET api/audio/rx` is 16-bit signed little-endian PCM, interleaved when it
+has two channels, over a response that never ends (silence while the radio
+is stopped, so a gone client is noticed). The format is announced before
+the first byte and never changes within a response: read the headers and
+play what they say.
+
+- **Rate:** the app's (`audio.rate` in `api/status`): Radio 48000, QO-100
+  NB 12000. No query changes it.
+- **Channels:** mono unless the client asks `?channels=2`. Stereo is opt-in
+  because Remote builds installed before 23/10/2026 follow the announced
+  rate but play every stream as one channel. With `?channels=2` the
+  response is stereo for its whole life, whatever the mode: a mono mode is
+  the same audio on both sides, so a mode change never needs a new
+  header. Without it, a stereo mode is sent averaged (L+R)/2, as a mono
+  FM receiver plays it. `audio.stereo` in `api/status` says whether the
+  current mode is making stereo now (wide FM with its pilot, once the
+  stereo decoder is in).
+
+`api/status` `audio`:
+
+```json
+{"encoding": "s16le", "rate": 48000, "channels": 1, "stereo": false, "listeners": 1,
+ "tx": {"encoding": "s16le", "rate": 12000, "channels": 1}}
+```
+
+`rate`/`channels` are what a request with no query gets; `tx` is
+`api/audio/tx`'s microphone format.
+
 ## Recordings
 
 Made and kept on the controller, in `/data/recordings` on the module's data
@@ -149,9 +180,14 @@ same on Icom and Flex; what is this app's own:
 
 - **`kinds`: `["audio", "iq"]`.** Both may run at once, one of each.
 - **Audio** is what `api/audio/rx` sends - demodulated, after the engine's
-  noise reduction when `nr` is on - as **FLAC**, 12 kHz mono 16-bit: lossless
+  noise reduction when `nr` is on - as **FLAC**, 16-bit at the app's audio
+  rate (`sampleRate`: 48000 for Radio, 12000 for QO-100 NB): lossless
   (a recording can be decoded again later), played by every browser,
-  ExoPlayer and AVPlayer, about 30-45 MB an hour. The sidecar `<id>.json`
+  ExoPlayer and AVPlayer; NB's about 30-45 MB an hour, Radio's about four
+  times that. `channels` is 2 when the mode was making stereo as the
+  recording started (wide FM once its stereo decoder is in), else 1, and
+  holds for the whole file: a later mode change is converted to it (mono
+  on both sides, or stereo averaged). The sidecar `<id>.json`
   has `station` (the callsign), `freqHz` (the receive dial), `mode`,
   `radio` (the device), `processing` (`nr`, `nb`, `agc`), and `changes`
   (frequency and mode as they changed, seconds in). The radio stopping
@@ -301,9 +337,10 @@ server, as built on 23/10/2026 (code `ohscore/dsp/wfm.py`,
   and is set like any mode: `POST api/set {"changes": {"mode": "wfm"}}`.
   Mono, 50 us de-emphasis by default; `wfmDeemphasis` (control level,
   `50` or `75`, unit us) is the other. The audio is the ordinary
-  `api/audio/rx` stream, 12 kHz mono, so it is flat to about 5 kHz;
-  stereo, RDS and the full 15 kHz wait for the 48 kHz audio contract
-  (RADIO-SDR-PLAN M3). No squelch in wfm: `sqlOpen` reads true.
+  `api/audio/rx` stream, 48 kHz since 23/10/2026, flat to 15 kHz (it was
+  12 kHz and 5 kHz); stereo (`?channels=2`, and `audio.stereo` in status)
+  and RDS wait for shack_sdr's decoder (RADIO-SDR-PLAN M3). No squelch in
+  wfm: `sqlOpen` reads true.
 - **The passband in state:** `rxFilterLo` and `rxFilterHi`, Hz from the
   receive dial (`rxDial`), the demodulator's real edges in every mode.
   wfm is `-90000`/`90000`: a 180 kHz channel, the bank's filter at those

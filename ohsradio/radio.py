@@ -162,6 +162,9 @@ class Radio(Engine):
     # fading 1 s dashes turned the CW decoder inside out for the next
     # station ("CS3B" read "I*ETV T"; ohs-libs shack_cw.corpus).
     CW_POLARITY = False
+    # Receive audio at 48 kHz (Engine.OUT_RATE): wide FM flat to 15 kHz and
+    # room for stereo; the decoders and transmit stay at 12 kHz.
+    OUT_RATE = 48_000
     REC_STATES = ("band",)
 
     def _diag_extra(self, s: dict) -> str:
@@ -756,10 +759,17 @@ class Radio(Engine):
             n = X.shape[0] * (self.geo.L // self.geo.decimation_for(AUDIO_RATE))
             return np.zeros(n, np.float32), -200.0
         self.wfm_ch.set_freq(self._off(rx_dial))
-        audio, level = self.wfmdemod(self.wfm_ch.take(X, starts))
+        heard, level = self.wfmdemod(self.wfm_ch.take(X, starts))
+        # Heard at 48 kHz as it was demodulated (never through the 12 kHz
+        # path and back up); the engine's decoders and timing get 12 kHz.
+        self.heard_hi = heard
         # No squelch in wide FM: what is heard is always open.
         self._status(sqlOpen=True)
-        return audio, level
+        return self.wfmdemod.for_decoders(heard), level
+
+    def audio_channels(self) -> int:
+        d = self.wfmdemod
+        return d.channels if self.st["mode"] == "wfm" and d is not None else 1
 
     def _rx_audio_gain(self, s: dict) -> float:
         return 0.0 if s["keyed"] else 1.0           # half duplex

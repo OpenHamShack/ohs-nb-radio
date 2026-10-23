@@ -1,4 +1,4 @@
-"""Wide FM for broadcast listening (87.5-108 MHz): mono, at Radio's audio rate.
+"""Wide FM for broadcast listening (87.5-108 MHz): mono for now, at 48 kHz.
 
 Why numpy here and not shack_sdr's Rust (RADIO-SDR-PLAN §0): every
 demodulator Radio runs today - SSB, CW and AM (demod.py), narrowband FM
@@ -7,7 +7,8 @@ one filter bank. WFM is one more of those, so it lives beside them and
 takes its channel from the same bank. M3 moves the bank and the broadcast
 demodulators (this, stereo, RDS) into shack_sdr together, when the audio
 contract becomes 48 kHz stereo; this module is what that port has to
-match.
+match. The 48 kHz half of that contract came first (23/10/2026, Engine
+OUT_RATE): Radio plays at 48 kHz, so this already gives the full 15 kHz.
 
 The path, each step chosen to stay vectorised over a block:
 
@@ -26,14 +27,25 @@ The path, each step chosen to stay vectorised over a block:
   (50 us in Europe, 75 us in the Americas: the `wfmDeemphasis` setting) is
   its impulse response as an FIR, convolved into the decimator's lowpass,
   so one FFT overlap-save pass (multirate.Decimator) does both and takes
-  the composite straight down to 12 kHz. The decimator's stopband starts
-  at 0.58 of the audio rate, 90 dB down, so the pilot, L-R and RDS never
-  fold into the audio. Mono audio is therefore flat to about 5 kHz: 12 kHz
-  mono is the engine's audio contract everywhere (DESIGN.md), and the full
-  15 kHz waits for M3's 48 kHz stereo.
+  the composite straight down to 48 kHz. That lowpass is this module's own
+  (`mono_lowpass`), not multirate's general one: flat to 15 kHz, the mono
+  band, and 90 dB down from 18.5 kHz, so the 19 kHz pilot is gone and
+  nothing from L-R (23-53 kHz) or RDS (57 kHz) folds below 24 kHz.
+  Until 23/10/2026 this went to 12 kHz and was flat to about 5 kHz.
 - **DC:** a 20 Hz high-pass at the audio rate, so a dial a few kHz off
   the station does not put a DC step on every retune; music keeps its
-  bass.
+  bass. A one-pole DC blocker (`DcBlocker`), not the FIR it was at 12 kHz:
+  at 48 kHz a 20 Hz FIR needs 3,500 taps and cost as much as the whole
+  demodulator before it (0.9 % of a 6900HX core against 0.1 %).
+- **The decoders' 12 kHz:** every decoder and the engine's timing take
+  12 kHz mono (Engine docstring), so `for_decoders` brings the heard audio
+  down by 4 with multirate's lowpass (flat to 5 kHz), as it was before.
+- **Stereo plugs in at `stereo`** (shack_sdr's pilot PLL and matrix, when
+  it comes): a callable taking the composite at the channel rate, as
+  `composite()` gives it, and returning (n, 2) float32 L and R at
+  AUDIO_RATE, de-emphasised, at LEVEL for full deviation, with `pilot`
+  saying whether it locked. While it is None, or has no pilot, the mono
+  path here is what is heard; `channels` says which.
 
 No squelch: a broadcast listener wants the station, and the noise
 between stations is how an operator knows the dial is between stations.
@@ -45,14 +57,16 @@ import math
 import numpy as np
 
 from ..i18n.text import _
-from .fir import OlsFilter
-from .fm import highpass
-from .multirate import Decimator, design
+from .fir import kaiser_taps, lowpass
+from .multirate import Decimator
 
 WFM_RATE = 240_000.0        # the least channel rate that holds the 180 kHz channel with room for its skirts
 HALF_WIDTH = 90_000.0       # the channel filter's -6 dB edge, either side of the dial (Carson)
 DEVIATION = 75_000.0        # broadcast peak deviation: the composite's full scale
-AUDIO_RATE = 12_000.0
+AUDIO_RATE = 48_000.0      # what is heard (the engine's OUT_RATE in Radio)
+DECODE_RATE = 12_000.0     # what the decoders get (the engine's AUDIO_RATE)
+MONO_PASS = 15_000.0       # the mono (L+R) band: flat to here
+MONO_STOP = 18_500.0       # stopband from here: below the 19 kHz pilot
 DEEMPHASIS_US = (50.0, 75.0)
 LEVEL = 0.5                 # full deviation comes out at this amplitude, as narrowband FM's does (fm.py)
 
@@ -67,10 +81,17 @@ def deemphasis_taps(tau_us: float, rate: float) -> np.ndarray:
     return h / h.sum()
 
 
+def mono_lowpass(rate: float, atten_db: float = 90.0) -> np.ndarray:
+    """The mono band's lowpass at the channel rate `rate`: flat to
+    MONO_PASS, `atten_db` down from MONO_STOP, unity at DC."""
+    n = kaiser_taps(MONO_STOP - MONO_PASS, rate, atten_db)
+    return lowpass((MONO_PASS + MONO_STOP) / 2, rate, n, atten_db)
+
+
 def audio_taps(m: int, tau_us: float, rate: float) -> np.ndarray:
-    """De-emphasis then the ratio-m decimation lowpass, as one filter at
-    `rate`, padded so the Decimator's frames step by whole output samples."""
-    h = np.convolve(design(m), deemphasis_taps(tau_us, rate))
+    """De-emphasis then the mono lowpass, as one filter at `rate`, padded
+    so the Decimator's frames step by whole output samples (`m` of them)."""
+    h = np.convolve(mono_lowpass(rate), deemphasis_taps(tau_us, rate))
     pad = (-(len(h) - 1)) % m
     return np.concatenate([h, np.zeros(pad)])
 
@@ -82,10 +103,43 @@ def can_receive(channel_rate: float) -> bool:
     return channel_rate >= WFM_RATE - 1e-6 and abs(m - round(m)) < 1e-9
 
 
+class DcBlocker:
+    """y[n] = x[n] - x[n-1] + a y[n-1], its corner at `corner` Hz: a
+    recursion numpy has no loop-free form of, so each run of at most CHUNK
+    samples is solved in closed form, y = a^n (y0 + cumsum(d[k] a^-k)).
+    a^-CHUNK stays near e^10 at 20 Hz and 48 kHz, which float64 carries
+    with digits to spare."""
+
+    CHUNK = 4096
+
+    def __init__(self, corner: float, rate: float):
+        self.a = math.exp(-2 * math.pi * corner / rate)
+        k = np.arange(self.CHUNK + 1, dtype=np.float64)
+        self.up, self.down = self.a ** k, self.a ** -k
+        self.x1 = 0.0
+        self.y1 = 0.0
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        x = np.asarray(x, np.float64)
+        out = np.empty(len(x), np.float32)
+        for i in range(0, len(x), self.CHUNK):
+            c = x[i:i + self.CHUNK]
+            m = len(c)
+            d = np.diff(c, prepend=self.x1)
+            # y[j] = a^(j+1) y1 + sum_{k<=j} a^(j-k) d[k]
+            y = self.up[1:m + 1] * self.y1 + self.up[:m] * np.cumsum(d * self.down[:m])
+            out[i:i + m] = y
+            self.x1, self.y1 = float(c[-1]), float(y[-1])
+        return out
+
+
 class WfmDemod:
-    """Complex channel at `rate` (>= WFM_RATE, a multiple of 12 kHz) in,
-    12 kHz mono audio out (float32, a full-deviation tone at LEVEL), plus
+    """Complex channel at `rate` (>= WFM_RATE, a multiple of 48 kHz) in,
+    48 kHz audio out (float32, a full-deviation tone at LEVEL; mono (n,),
+    or (n, 2) when a stereo decoder is plugged in and has the pilot), plus
     the channel's power in dBFS for the S-meter."""
+
+    stereo = None              # the module docstring's stereo hook
 
     def __init__(self, rate: float, tau_us: float = 50.0):
         if not can_receive(rate):
@@ -96,7 +150,8 @@ class WfmDemod:
         self.m = int(round(rate / AUDIO_RATE))
         self.prev = np.complex64(1.0)
         self.scale = np.float32(rate / (2 * np.pi) / DEVIATION)
-        self.dc = OlsFilter(highpass(20.0, AUDIO_RATE, 40.0).astype(np.complex128))
+        self.dc = DcBlocker(20.0, AUDIO_RATE)
+        self.decode_down = Decimator(int(AUDIO_RATE // DECODE_RATE))
         self.tau_us = None
         self.down: Decimator | None = None
         self.set_deemphasis(tau_us)
@@ -127,6 +182,25 @@ class WfmDemod:
             return np.zeros(0, np.float32), -200.0
         p = float(np.mean(np.abs(x) ** 2))
         mpx = self.composite(x)
+        level = 10 * math.log10(p + 1e-20)
+        st = self.stereo
+        if st is not None:
+            lr = st(mpx)
+            if getattr(st, "pilot", False):
+                return np.asarray(lr, np.float32), level
         y = self.down(mpx.astype(np.complex64)).real
-        y = self.dc(y.astype(np.complex64)).real
-        return (y * np.float32(LEVEL)).astype(np.float32), 10 * math.log10(p + 1e-20)
+        y = self.dc(y)
+        return (y * np.float32(LEVEL)).astype(np.float32), level
+
+    @property
+    def channels(self) -> int:
+        """2 while a stereo decoder hears the pilot, else 1."""
+        st = self.stereo
+        return 2 if st is not None and getattr(st, "pilot", False) else 1
+
+    def for_decoders(self, heard: np.ndarray) -> np.ndarray:
+        """What this block's heard audio gives the decoders: 12 kHz mono."""
+        a = np.asarray(heard, np.float32)
+        if a.ndim == 2:
+            a = a.mean(axis=1, dtype=np.float32)
+        return self.decode_down(a.astype(np.complex64)).real.astype(np.float32)
