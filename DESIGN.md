@@ -82,7 +82,7 @@ measurement already includes.
    (complex64, fs)          ├─► Zoom channel ─► Spectrum ─► Feed "zoom"
                             ├─► BeaconTracker (rxCorr)
                             ├─► TxMonitor (txCorr, own level vs beacon)
-                            └─► VFO channel ─► demod ─► audio 12 kHz ─┬─► OUT_RATE ─► speaker (PortAudio)
+                            └─► VFO channel ─► demod ─► audio 12 kHz ─┬─► speaker (PortAudio)
                                                                       └─► mode decoder(s)
  mic (PortAudio) / mode encoder ─► audio 12 kHz ─► modulator ─► TX IQ ─► device.write()
 ```
@@ -101,13 +101,9 @@ measurement already includes.
 - **One TX thread** exists only while keyed.
 - **Mode decoders that are slow** (jt9 for a 15 s FT8 slot, SSTV image
   assembly) run on their own worker thread and never block the RX thread.
-- The **working audio rate is 12 000 Hz** mono (FT8's native rate; plenty
-  for 2.7 kHz SSB): demodulators, decoders and every transmit path. What is
-  *heard* is at the app's `Engine.OUT_RATE`: 12 kHz for QO-100 NB, 48 kHz
-  for Radio since 23/10/2026 (broadcast FM flat to 15 kHz, stereo where a
-  mode makes it), upsampled once in the engine. The audio layer resamples
-  that to whatever the sound card offers (usually 48 kHz: for Radio, no
-  resampling at all). docs/ENGINE-API.md "Audio rates and channels".
+- The **audio rate is 12 000 Hz** mono everywhere (FT8's native rate; plenty
+  for 2.7 kHz SSB). The audio layer resamples to whatever the sound card
+  offers (usually 48 kHz, an exact 4:1).
 
 ## Devices — `ohscore/devices/` (the `sim` is `ohsnb/devices/sim.py`)
 

@@ -427,12 +427,6 @@ def add_shared_keys(reg: Registry) -> None:
         ("txWarning", "dict", {}, "The transmit card's one standing warning: {key, level, text} of the most "
                                   "important transmit condition now ({} = none). Engine.tx_warn / tx_clear."),
         ("rxDial", "float", 0.0, "Frequency the receiver is demodulating (vfo + RIT)."),
-        # The demodulator's real edges, so a client draws the passband the
-        # radio hears rather than its own guess per mode: wide FM's 180 kHz
-        # is a figure no client could know (RADIO-LISTEN-CONTRACT §1).
-        ("rxFilterLo", "float", 0.0, "The receive passband's lower edge, Hz from the receive dial, as the "
-                                     "demodulator uses it in the current mode (negative below the dial)."),
-        ("rxFilterHi", "float", 0.0, "The receive passband's upper edge, Hz from the receive dial."),
         ("txDial", "float", 0.0, "Frequency our transmission is meant to land on (txVfo or vfo, + XIT)."),
         ("segment", "str", "", "Bandplan segment under the receive dial."),
         ("fs", "float", 0.0, "Device sample rate."),

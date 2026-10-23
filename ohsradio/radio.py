@@ -34,9 +34,6 @@ calls (docs/ham/DESIGN-HAM.md sections 3-6):
 - **FM**: demodulated from its own 24 kS/s channel with noise squelch,
   tone squelch and the CTCSS tone heard; modulated with CTCSS and the
   1750 Hz toneburst (ohscore/dsp/fm.py); AM transmits;
-- **wide FM** (broadcast listening): its own 180 kHz channel of at least
-  240 kS/s (ohscore/dsp/wfm.py), refused on a receiver too slow to hold
-  one (a Hermes-Lite 2 below 384 kS/s), and never transmitted;
 - **half duplex**: receive audio is muted while keyed;
 - **band stacks**: three registers per band, recalled and cycled by
   band(); the log's ADIF says which band from the frequency;
@@ -53,13 +50,13 @@ from __future__ import annotations
 
 import math
 import time
+from collections import deque
 
 import numpy as np
 
 from ohscore import converters as cv
-from ohscore import licences, txguard
-from ohscore.dsp import wfm
-from ohscore.dsp.bank import Channel, Geometry, Source
+from ohscore import licences, smeter_cal, txguard
+from ohscore.dsp.bank import Channel, Source
 from ohscore.dsp.fm import FM_RATE, FmDemod, FmMod
 from ohscore.dsp.mod import AmMod
 from ohscore.engine import AUDIO_RATE, Engine, TxRefused
@@ -162,9 +159,6 @@ class Radio(Engine):
     # fading 1 s dashes turned the CW decoder inside out for the next
     # station ("CS3B" read "I*ETV T"; ohs-libs shack_cw.corpus).
     CW_POLARITY = False
-    # Receive audio at 48 kHz (Engine.OUT_RATE): wide FM flat to 15 kHz and
-    # room for stereo; the decoders and transmit stay at 12 kHz.
-    OUT_RATE = 48_000
     REC_STATES = ("band",)
 
     def _diag_extra(self, s: dict) -> str:
@@ -187,7 +181,6 @@ class Radio(Engine):
         self.seq = None
         self.swr_avg = None
         self.ctcss_heard = 0.0
-        self.wfm_ch = self.wfmdemod = None      # built at start when the rate allows (_start_consumers)
         self.over_count = 0
         self.st["seqState"] = "rx"
         # The converter the receiver works through now (with the centre),
@@ -198,6 +191,9 @@ class Radio(Engine):
         self.tx_conv: cv.Converter | None = None
         self._presets_for = None
         self._refresh_presets()
+        # 3 s of 10 Hz meter readings, the "current reading" behind
+        # Calibrate… and the API's {"dbm": ...} form (smeter_cal.average_dbfs).
+        self._smeter_hist: deque = deque(maxlen=30)
 
     # ------------------------------------------------------------------ licence and plan
     def _plan(self):
@@ -495,10 +491,6 @@ class Radio(Engine):
 
     def _adjust_set(self, clean: dict) -> None:
         merged = {**self.st, **clean}
-        if clean.get("mode") == "wfm" and self.st["mode"] != "wfm":
-            why = self._wfm_why()
-            if why:
-                raise ValueError(why)
         if any(k in clean for k in ("converters", "bandConverters")):
             xvtr.check(merged)
         if "vfo" in clean and self.dev is not None and self.running:
@@ -575,10 +567,7 @@ class Radio(Engine):
         band_based = b is not None and plan_centre(b.lo, b, fs, rr) == plan_centre(b.hi, b, fs, rr) == want
         # Into or out of a converter's band, the device retunes whatever the centre.
         other = conv != (self.pending_conv if pending else self.rx_conv)
-        # Wide FM's channel reaches 90 kHz either side of the dial; it has
-        # to stay inside the span too, not only the dial.
-        edge = wfm.HALF_WIDTH + 10_000.0 if self.st["mode"] == "wfm" else 3_000.0
-        if c is None or other or not (c - half + edge <= rx <= c + half - edge) or (band_based and c != want):
+        if c is None or other or not (c - half + 3_000 <= rx <= c + half - 3_000) or (band_based and c != want):
             self.pending_conv = conv
             self.pending_centre = want
 
@@ -589,17 +578,6 @@ class Radio(Engine):
         self.fm_ch = None
         self.fm_cut = None
         self.fmdemod = FmDemod(g.fs / self.fm_d)
-        # Wide FM's channel, when this receiver's rate can hold one: the
-        # bank's smallest decimation giving at least 240 kS/s, its filter at
-        # the 180 kHz channel's edges. Built once per start, like FM's.
-        wd = g.decimation_for(wfm.WFM_RATE)
-        if wfm.can_receive(g.fs / wd):
-            self.wfm_ch = Channel(g, wd, cutoff=wfm.HALF_WIDTH)
-            self.wfmdemod = wfm.WfmDemod(self.wfm_ch.rate, self.st["wfmDeemphasis"])
-        else:
-            self.wfm_ch = self.wfmdemod = None
-            if self.st["mode"] == "wfm":
-                self.toast(self._wfm_why(), "warn")
         self.fm_mod = FmMod(g.fs / self.fm_d)
         self.am_mod = AmMod()
         self.tx_src24 = Source(g, self.fm_d)
@@ -640,25 +618,7 @@ class Radio(Engine):
         info = dict(info)
         if "am" in info:
             info["am"] = dict(info["am"], encode=True)
-        why = self._wfm_why()
-        if why and "wfm" in info:
-            info["wfm"] = dict(info["wfm"], decode=False, missing=why)
         return info
-
-    def _wfm_why(self) -> str:
-        """'' if the receiver's rate can hold a wide FM channel, else the
-        sentence saying why not: the catalogue's `missing` for wfm, the
-        refusal of a set() to it, and the toast at a start in it. Asked of
-        the open device's rate, or before it opens of the settings'."""
-        fs = self._fs()
-        try:
-            rate = fs / Geometry(fs).decimation_for(wfm.WFM_RATE)
-        except ValueError:
-            rate = 0.0
-        if wfm.can_receive(rate):
-            return ""
-        return _("Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at "
-                 "{rate:g} kS/s").format(least=wfm.WFM_RATE / 1000, device=self._kind(), rate=fs / 1000)
 
     def stop(self) -> None:
         super().stop()
@@ -708,8 +668,6 @@ class Radio(Engine):
             self.fm_ch = Channel(self.geo, self.fm_d, cutoff=min(cut, self.geo.fs / self.fm_d * 0.45))
             self.fm_cut = cut
         self.fmdemod.configure(s["fmDeviation"], s["sqlLevel"], s["ctcssRx"])
-        if self.wfmdemod is not None:
-            self.wfmdemod.set_deemphasis(s["wfmDeemphasis"])
         self._cwskim_enable(bool(s["cwSkim"]) and self.running)
         cw = self.cwskim
         if cw is not None:
@@ -738,8 +696,6 @@ class Radio(Engine):
         return cw.view() if cw is not None else dict(off_item(), spots=[])
 
     def _demodulate(self, X, starts, rx_dial: float):
-        if self.st["mode"] == "wfm":
-            return self._demodulate_wfm(X, starts, rx_dial)
         if self.st["mode"] != "fm":
             return super()._demodulate(X, starts, rx_dial)
         self.fm_ch.set_freq(self._off(rx_dial))
@@ -750,26 +706,6 @@ class Radio(Engine):
             self._emit_event({"mode": "fm", "ctcss": tone})
         self._status(ctcssHeard=tone, sqlOpen=bool(self.fmdemod.open))
         return audio, level
-
-    def _demodulate_wfm(self, X, starts, rx_dial: float):
-        if self.wfmdemod is None:
-            # A receiver too slow for it (refused at set(), but a saved mode
-            # can meet a slower radio at start): silence, and the catalogue
-            # and the start's toast say why.
-            n = X.shape[0] * (self.geo.L // self.geo.decimation_for(AUDIO_RATE))
-            return np.zeros(n, np.float32), -200.0
-        self.wfm_ch.set_freq(self._off(rx_dial))
-        heard, level = self.wfmdemod(self.wfm_ch.take(X, starts))
-        # Heard at 48 kHz as it was demodulated (never through the 12 kHz
-        # path and back up); the engine's decoders and timing get 12 kHz.
-        self.heard_hi = heard
-        # No squelch in wide FM: what is heard is always open.
-        self._status(sqlOpen=True)
-        return self.wfmdemod.for_decoders(heard), level
-
-    def audio_channels(self) -> int:
-        d = self.wfmdemod
-        return d.channels if self.st["mode"] == "wfm" and d is not None else 1
 
     def _rx_audio_gain(self, s: dict) -> float:
         return 0.0 if s["keyed"] else 1.0           # half duplex
@@ -795,8 +731,55 @@ class Radio(Engine):
         return self.pending_centre is None and self.rx_samples >= self.settle_at
 
     def _meter_extra(self, s: dict) -> dict:
-        return {"fwd": s["fwdW"], "swr": s["swr"], "paTemp": s["paTemp"], "seq": s["seqState"],
-                "sql": s["sqlOpen"], "estPep": s["estPep"]}
+        out = {"fwd": s["fwdW"], "swr": s["swr"], "paTemp": s["paTemp"], "seq": s["seqState"],
+               "sql": s["sqlOpen"], "estPep": s["estPep"]}
+        out.update(self._smeter_fields(s))
+        return out
+
+    def _smeter_fields(self, s: dict) -> dict:
+        """The calibrated S-meter fields on every meter item (docs/SERVER-API.md
+        `meter`): `dbm` and `s` (e.g. "S9+12") while a calibration holds,
+        else neither and `why`/`whyText` say why not. The raw `rx` dBFS field
+        is unchanged - this only adds to it, so a client that ignores these
+        four keys sees exactly what it always has."""
+        if self.rx_level > -199:
+            self._smeter_hist.append(self.rx_level)
+        cal = smeter_cal.effective(s.get("sMeterCal") or "", s)
+        if not cal.ok:
+            return {"dbm": None, "s": None, "why": cal.why_code, "whyText": cal.why}
+        dbm = self.rx_level + cal.offset
+        return {"dbm": round(dbm, 1), "s": smeter_cal.s_text(dbm, smeter_cal.s9_dbm(s.get("vfo", 0.0))),
+                "why": None, "whyText": ""}
+
+    # ------------------------------------------------------------ S-meter calibration
+    def smeter_table(self) -> dict:
+        """Every stored calibration, keyed as `smeter_cal.cal_key` makes the
+        key (device[@antenna][|band]): `GET api/smeter/calibrate`."""
+        return smeter_cal.clean_cal(self.st.get("sMeterCal") or "")
+
+    def smeter_average_dbfs(self):
+        """(dBFS, spread) over the last 3 s, or None with no signal yet -
+        the "current reading" behind the API's {"dbm": ...} form."""
+        return smeter_cal.average_dbfs(list(self._smeter_hist))
+
+    def smeter_calibrate(self, known_dbm: float, measured_dbfs: float | None = None) -> dict:
+        """Calibrate this radio (band, antenna) so `measured_dbfs` - the
+        3 s average now, unless the caller measured one of its own (the
+        API's {"dbfs", "dbm"} form) - reads `known_dbm`. Returns the entry
+        stored; raises ValueError with the reason it could not (AGC on,
+        between bands, no reading, near clipping)."""
+        if measured_dbfs is None:
+            avg = self.smeter_average_dbfs()
+            measured_dbfs = avg[0] if avg else None
+        table = smeter_cal.calibrate(self.st.get("sMeterCal") or "", self.st, measured_dbfs, known_dbm,
+                                     time.strftime("%Y-%m-%d"))
+        self.set(sMeterCal=smeter_cal.format_cal(table))
+        return table[smeter_cal.cal_key(self.st)]
+
+    def smeter_forget(self) -> None:
+        """Clear this radio's (band's, antenna's) calibration."""
+        table = smeter_cal.forget(self.st.get("sMeterCal") or "", self.st)
+        self.set(sMeterCal=smeter_cal.format_cal(table))
 
     # -------------------------------------------------------------- operating
     def start_on(self, band: str | None = None, rf: float | None = None, mode: str | None = None) -> None:
@@ -898,10 +881,6 @@ class Radio(Engine):
     # ------------------------------------------------------------------ transmit
     def _occupied(self, mode: str, dial: float, audio=None):
         s = self.st
-        if mode == "wfm":
-            # Never transmitted (Engine._tx_blocked); this is what the
-            # licence chip judges the dial in.
-            return dial - wfm.HALF_WIDTH, dial + wfm.HALF_WIDTH
         if mode == "fm":
             w = s["fmDeviation"] + 3_000.0          # Carson's rule, 3 kHz audio
             return dial - w, dial + w

@@ -28,7 +28,7 @@ VOICE, DIGITAL, PICTURES = "voice", "digital", "pictures"
 # background and sent as an over (Engine.OVER_MODES); its button opens
 # Beacon › KG-STV instead (decision 4), so it is in OVER_BUTTONS too.
 GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (VOICE, ("usb", "lsb", "cw", "am", "fm", "wfm", "freedv")),
+    (VOICE, ("usb", "lsb", "cw", "am", "fm", "freedv")),
     (DIGITAL, ("ft8", "ft4", "q65", "js8", "psk31", "psk63", "psk125", "rtty")),
     (PICTURES, ("sstv", "kgstv", "hsmodem")),
 )
@@ -38,7 +38,7 @@ OVER_BUTTONS = frozenset({"kgstv"})
 # are not translated (docs/I18N.md). Moved here from ohscore/ui/rail.py,
 # which re-exports it; Q65 and JS8 were missing there, so the panel title
 # said "q65".
-MODE_LABELS = {"usb": "USB", "lsb": "LSB", "cw": "CW", "am": "AM", "fm": "FM", "wfm": "WFM", "freedv": "FreeDV",
+MODE_LABELS = {"usb": "USB", "lsb": "LSB", "cw": "CW", "am": "AM", "fm": "FM", "freedv": "FreeDV",
                "ft8": "FT8", "ft4": "FT4", "q65": "Q65", "js8": "JS8", "psk31": "PSK31", "psk63": "PSK63",
                "psk125": "PSK125", "rtty": "RTTY", "sstv": "SSTV", "kgstv": "KG-STV", "hsmodem": "HSmodem",
                "wspr": "WSPR"}

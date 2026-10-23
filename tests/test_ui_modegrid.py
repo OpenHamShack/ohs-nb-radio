@@ -385,7 +385,7 @@ class ModeCardRadio(WindowCase):
         from ohsradio import state
         win, bridge, radio = self.window(mode="usb")
         got = {grp: [c.mode for c in b.cells] for grp, b in win.modegrid.blocks.items()}
-        self.assertEqual(got, {"voice": ["usb", "lsb", "cw", "am", "fm", "wfm", "freedv"],
+        self.assertEqual(got, {"voice": ["usb", "lsb", "cw", "am", "fm", "freedv"],
                                "digital": ["ft8", "ft4", "js8", "psk31", "psk63", "psk125", "rtty"],
                                "pictures": ["sstv"]})
         self.assertEqual(sorted(m for ms in got.values() for m in ms), sorted(state.MODES))
@@ -504,7 +504,7 @@ class PadModeOrder(unittest.TestCase):
         from ohsnb import state as nb
         self.assertEqual(mode_order(nb.MODES), ["usb", "lsb", "cw", "am", "freedv", "ft8", "ft4", "q65", "js8",
                                                 "psk31", "psk63", "psk125", "rtty", "sstv", "hsmodem"])
-        self.assertEqual(mode_order(ham.MODES), ["usb", "lsb", "cw", "am", "fm", "wfm", "freedv", "ft8", "ft4", "js8",
+        self.assertEqual(mode_order(ham.MODES), ["usb", "lsb", "cw", "am", "fm", "freedv", "ft8", "ft4", "js8",
                                                  "psk31", "psk63", "psk125", "rtty", "sstv"])
 
     def test_the_mode_key_cycles_the_radio_through_the_groups(self):

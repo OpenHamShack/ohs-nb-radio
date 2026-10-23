@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from ohscore import converters as cv
 from ohscore.dsp.fm import TONES
-from ohscore.dsp.wfm import DEEMPHASIS_US
 from ohscore.state import Registry, add_shared_keys
 
 from ohsradio.i18n import _
@@ -26,9 +25,7 @@ from . import bands, plans, power, xvtr
 # JS8 joined 10/10/2026, receive only, once ohsdigi decoded it everywhere
 # (ohscore/modes/js8.py): before, it needed JS8Call's js8, which the Radio
 # store image could not carry.
-# Wide FM (wfm) joined 23/10/2026 for broadcast listening, receive only
-# (ohscore/dsp/wfm.py; ohscore/modes_glue.py RX_ONLY_MODES).
-MODES = ["usb", "lsb", "cw", "am", "fm", "wfm", "ft8", "ft4", "js8", "psk31", "psk63", "psk125", "rtty", "freedv",
+MODES = ["usb", "lsb", "cw", "am", "fm", "ft8", "ft4", "js8", "psk31", "psk63", "psk125", "rtty", "freedv",
          "sstv"]
 DIGITAL = {"ft8", "ft4", "js8", "psk31", "psk63", "psk125", "rtty", "freedv", "sstv"}
 TONE_CHOICES = [0.0] + list(TONES)
@@ -101,20 +98,18 @@ with REG.after("rxGain"):
             "nothing. Beacon and satellite segments are refused whatever this says.")
     _k("nearLondon", "bool", False, "setting", auth=True,
        help="The station is within 100 km of Charing Cross, where 431-432 MHz may not be used.")
+    _k("sMeterCal", "str", "", "setting",
+       help="S-meter calibration, per radio, band and antenna input, as one line of JSON "
+            "({\"pluto:ip:192.168.2.1|2m\": {\"offset\": -12.3, \"gain\": 40.0, \"when\": \"2026-10-23\"}, ...}): "
+            "held here, not in a window's own preferences, so the store web page and OpenHamShack Remote read the "
+            "same calibrated S-units as this window. Settings' Radio page writes and reads it with Calibrate…, "
+            "never by hand (ohscore/smeter_cal.py has the math).")
 
 # --- operating controls -------------------------------------------------------
 _o("vfo", default=145_500_000.0, lo=100_000.0, hi=6_000_000_000.0, help="Receive dial (on-air frequency).")
 _o("txVfo", default=145_500_000.0, lo=100_000.0, hi=6_000_000_000.0,
    help="Transmit dial (VFO B) when split is on.")
 _o("mode", default="fm")
-# AM's filter, either side of the carrier: 4 kHz here (8 kHz in all) against
-# the shared 3 kHz. 3 kHz put the filter's -6 dB point on the top of
-# airband voice (±3-4 kHz on an 8.33 kHz channel) and cut a 9 kHz MW or LW
-# broadcast station to telephone quality; 4 kHz still stops short of an
-# 8.33 kHz neighbour's sideband (5.3 kHz away). NB, on QO-100, keeps 3 kHz.
-_o("amWidth", default=4000.0,
-   help="AM filter, either side of the carrier: 4 kHz suits airband voice and broadcast; narrower for a crowded "
-        "amateur band.")
 # Which modes noise reduction applies to is ohscore.dsp.nr.NR_MODES; each
 # app names its own here, so the help never offers a mode the app lacks.
 _o("nr", help="Noise reduction (WDSP's NR2) on what you hear in USB, LSB, CW, AM and FM. Decoders always get the "
@@ -136,12 +131,6 @@ with REG.after("mute"):
     _k("sqlLevel", "float", 0.5, "control", lo=0.0, hi=1.0, help="FM squelch: 0 open, 1 only strong signals.")
     _k("fmDeviation", "enum", 2500.0, "control", choices=[2500.0, 5000.0], unit="Hz",
        help="FM peak deviation: 2.5 kHz for 12.5 kHz channels (UK standard), 5 kHz for 25 kHz.")
-    # 50 us is Europe's (and most of the world's); the Americas and South
-    # Korea use 75 us. A choice rather than following the station country,
-    # because a listener near a border hears the other side's stations.
-    _k("wfmDeemphasis", "enum", 50.0, "control", choices=list(DEEMPHASIS_US), unit="µs",
-       help="Wide FM de-emphasis: 50 µs in Europe and most of the world, 75 µs in the Americas. The wrong one "
-            "sounds dull or harsh.")
 _o("txFilterHi", help="Transmit audio high edge (SSB).")
 
 # --- safety -------------------------------------------------------------------

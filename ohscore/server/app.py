@@ -49,8 +49,9 @@ import numpy as np
 from ..engine import TxRefused
 from ..padactions import PAD_TX_ACTIONS
 from ..i18n.text import _
+from .. import smeter_cal
 from . import shack, ws
-from .audio import CHANNELS, MIC_FORMAT
+from .audio import FORMAT
 from .autotx import AutoTx, Refused
 from .recording import server_recordings
 
@@ -66,6 +67,7 @@ RECLAIM_MAX_S = 30.0
 # real-time silence per wait, so a listener's socket is written and a gone
 # client found (get_audio_rx).
 IDLE_AUDIO_S = 0.5
+IDLE_SILENCE = bytes(int(FORMAT["rate"] * IDLE_AUDIO_S) * 2)
 REMOTE_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 # X-Forwarded-Prefix as the page's <base>: a path, never a host (house rule:
 # no absolute URLs), and nothing that could close the attribute.
@@ -304,11 +306,7 @@ class Server:
                 "device": st.get("device"), "mode": st.get("mode"), "vfo": st.get("vfo"),
                 "txDial": st.get("txDial"), "simulator": bool(st.get("simWhy")),
                 "broker": self.broker.view() if self.broker is not None else None,
-                # What api/audio/rx sends a listener asking nothing (mono),
-                # whether the mode is making stereo now, and the microphone's
-                # format for api/audio/tx.
-                "audio": {**self.audio.rx_format(1), "stereo": self.radio.audio_channels() == 2,
-                          "listeners": self.audio.listeners(), "tx": MIC_FORMAT},
+                "audio": {**FORMAT, "listeners": self.audio.listeners()},
                 "station": self.radio.state().get("station"),
                 "sharedLog": self.shared_log(),
                 # What can be recorded and what is (api/recordings has the rest).
@@ -983,6 +981,53 @@ class _Handler(BaseHTTPRequestHandler):
         log.info("%s saved the LEILA evidence capture", who["user"])
         self._send(202, {"ok": True})
 
+    def get_smeter_cal(self, who, q):
+        """The stored S-meter calibrations: Radio only (its `band`, and
+        hence per-band calibration, is what makes server-side storage worth
+        having; NB has none, like api/overpower above). `GET
+        api/smeter/calibrate` in docs/SERVER-API.md."""
+        table = getattr(self.srv.radio, "smeter_table", None)
+        if table is None:
+            self._error(404, _("This app has no S-meter calibration."), "not_found")
+            return
+        self._send(200, {"calibrations": table()})
+
+    def post_smeter_cal(self, who, q):
+        """{"dbm": y}: the current (3 s average) reading is y dBm.
+        {"dbfs": x, "dbm": y}: a reading of x dBFS measured elsewhere is
+        y dBm. Either way, refused with a sentence while the receiver's own
+        AGC chooses the gain (smeter_calibrate's ValueError)."""
+        calibrate = getattr(self.srv.radio, "smeter_calibrate", None)
+        if calibrate is None:
+            self._error(404, _("This app has no S-meter calibration."), "not_found")
+            return
+        body = self._body()
+        if "dbm" not in body:
+            self._error(400, _("dbm is required"), "bad_params")
+            return
+        try:
+            dbm = smeter_cal.validate_dbm(body["dbm"])
+            dbfs = smeter_cal.validate_dbfs(body["dbfs"]) if "dbfs" in body else None
+        except ValueError as e:
+            self._error(400, str(e), "bad_params")
+            return
+        try:
+            rec = calibrate(dbm, dbfs)
+        except ValueError as e:
+            self._error(409, str(e), "cannot_calibrate")
+            return
+        log.info("S-meter calibrated by %s: %s", who.get("user", "?"), rec)
+        self._send(200, {"calibration": rec})
+
+    def delete_smeter_cal(self, who, q):
+        """Clear this radio's (band's, antenna's) calibration."""
+        forget = getattr(self.srv.radio, "smeter_forget", None)
+        if forget is None:
+            self._error(404, _("This app has no S-meter calibration."), "not_found")
+            return
+        forget()
+        self._send(200, {"ok": True})
+
     def get_memories(self, who, q):
         self._send(200, {"memories": self.srv.radio.memories()})
 
@@ -1159,23 +1204,13 @@ class _Handler(BaseHTTPRequestHandler):
 
     def get_audio_rx(self, who, q):
         """Receive audio as raw PCM over a long-lived response, its format
-        in the headers (GUIDE 2: announced up front). Mono unless the
-        client asks `?channels=2` (StreamAudio's docstring says why)."""
-        try:
-            channels = int(q.get("channels", ["1"])[0])
-        except ValueError:
-            channels = 0
-        if channels not in CHANNELS:
-            self._error(400, _("channels must be 1 or 2"), "bad_channels")
-            return
+        in the headers (GUIDE 2: announced up front)."""
         a = self.srv.audio
-        fmt = a.rx_format(channels)
-        silence = bytes(int(fmt["rate"] * IDLE_AUDIO_S) * 2 * channels)
-        lq = a.listen(channels)
+        lq = a.listen()
         try:
             self.send_response(200)
-            self.send_header("Content-Type", f"audio/L16; rate={fmt['rate']}; channels={channels}")
-            self.send_header("X-Audio-Format", json.dumps(fmt))
+            self.send_header("Content-Type", f"audio/L16; rate={FORMAT['rate']}; channels=1")
+            self.send_header("X-Audio-Format", json.dumps(FORMAT))
             self.send_header("Cache-Control", "no-store")
             self.send_header("Connection", "close")
             self.end_headers()
@@ -1190,7 +1225,7 @@ class _Handler(BaseHTTPRequestHandler):
                     # (and its thread) for good - ohs-box showed 20 from one
                     # TV reconnecting every 7 s. Silence also keeps a client
                     # player fed, like the video stream's null packets.
-                    pcm = silence
+                    pcm = IDLE_SILENCE
                 self.wfile.write(pcm)
         except (OSError, ConnectionError):
             pass
@@ -1198,7 +1233,7 @@ class _Handler(BaseHTTPRequestHandler):
             a.unlisten(lq)
 
     def ws_audio_tx(self, who, q):
-        """A remote microphone: binary frames of PCM in MIC_FORMAT, used by PTT
+        """A remote microphone: binary frames of PCM in FORMAT, used by PTT
         in a voice mode while this socket is open. Transmit level, like
         keying."""
         if not ws.handshake(self):
@@ -1207,7 +1242,7 @@ class _Handler(BaseHTTPRequestHandler):
         a = self.srv.audio
         a.mic_writer = who["device"]
         try:
-            sock.send_text(json.dumps({"kind": "hello", "format": MIC_FORMAT}))
+            sock.send_text(json.dumps({"kind": "hello", "format": FORMAT}))
             while True:
                 fr = sock.recv()
                 if fr is None:
@@ -1245,6 +1280,9 @@ ROUTES = {
     ("GET", "/api/cwskim"): ("view", _Handler.get_cwskim),
     ("GET", "/api/overpower"): ("view", _Handler.get_overpower),
     ("POST", "/api/overpower/capture"): ("control", _Handler.post_overpower_capture),
+    ("GET", "/api/smeter/calibrate"): ("view", _Handler.get_smeter_cal),
+    ("POST", "/api/smeter/calibrate"): ("control", _Handler.post_smeter_cal),
+    ("DELETE", "/api/smeter/calibrate"): ("control", _Handler.delete_smeter_cal),
     ("GET", "/api/memories"): ("view", _Handler.get_memories),
     ("POST", "/api/recall"): ("control", _Handler.post_recall),
     ("GET", "/api/log"): ("view", _Handler.get_log),

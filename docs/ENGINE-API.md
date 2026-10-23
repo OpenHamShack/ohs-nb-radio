@@ -122,47 +122,6 @@ radio.stop()                       # unkeys, closes, saves
 
 Whether a mode can decode/encode here is `state()["modes"][mode]` =
 `{"decode": bool, "encode": bool, "missing": "sentence saying what to install"}`.
-## Audio rates and channels
-
-Two rates, since 23/10/2026:
-
-- **12 kHz mono (`ohscore.engine.AUDIO_RATE`)** is the engine's working
-  audio: what the demodulators produce, what every mode decoder, CW, best
-  audio and the slot timing get, and everything on the transmit side (the
-  microphone through `Backend.read_mic`, the monitor through
-  `Backend.monitor`, the mode encoders, voice memories, `TxOut`). None of
-  this changed.
-- **`Engine.OUT_RATE`** is what receive audio is *played* at: the sound
-  card, the store's `api/audio/rx` and its audio recordings. QO-100 NB
-  keeps 12 kHz; Radio plays at **48 kHz**. The engine sets it on the
-  backend (`Backend.set_out_rate`) before `start()`, and `Backend.play()`
-  then takes float32 at that rate, **mono `(n,)` or stereo `(n, 2)`** (L, R).
-  Every mode's 12 kHz audio is brought up to it once, after noise
-  reduction, by an FFT interpolator (`dsp/multirate.py`); a mode whose
-  demodulator makes better audio hands it over instead (below).
-
-For an app's demodulator: `_demodulate(X, starts, rx_dial)` still returns
-`(audio, level)` with `audio` 12 kHz mono for the decoders. A mode that
-produces better audio than that (Radio's `wfm`) also sets `self.heard_hi`
-to this block's audio at `OUT_RATE`, mono or `(n, 2)`; the engine plays
-that and does not upsample (noise reduction and `_rx_heard` apply only to
-the 12 kHz path). `audio_channels()` says whether the receive audio is
-stereo now (2) or mono (1): a recording made on the store form takes its
-channel count from it when it starts.
-
-The desktop sound card is opened in stereo where the device allows (mono
-otherwise): mono audio is played on both sides, the transmit monitor too,
-and a stereo block on a mono card is averaged. With the card at 48 kHz
-Radio's audio is copied, not resampled; `audioOut2` stays mono. The
-`audio` status adds `channels` (the card's) and `outRate`.
-
-**Wide FM stereo** plugs in at `ohscore.dsp.wfm.WfmDemod.stereo`: a
-callable given the composite (MPX) at the channel rate, as `composite()`
-returns it, returning `(n, 2)` float32 L/R at 48 kHz, de-emphasised, at
-`wfm.LEVEL` for full deviation, with a `pilot` attribute saying whether it
-has locked. While `pilot` is false (or nothing is plugged in) the mono
-path is heard. Radio's `audio_channels()` follows it.
-
 List every mode in the UI; show the sentence instead of controls when it
 cannot run.
 
