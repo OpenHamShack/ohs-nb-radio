@@ -66,7 +66,7 @@ def on_air(dev):
     dev.dab = DabEnsemble("11D", level_db=-30.0)
 
 
-def scanned(r, timeout=120.0):
+def scanned(r, timeout=300.0):
     """Wait for the scan's worker to end (the simulator runs faster than real time)."""
     sc = r.bandscan
     pump(r, timeout, until=lambda: not (sc.thread is not None and sc.thread.is_alive()))
@@ -459,6 +459,7 @@ class OverTheApi(unittest.TestCase):
         self.assertEqual((s, a["code"], a["error"]), (409, "receiver_busy",
                                                      "Not scanning now: A band scan is running already"))
         self.assertEqual(self.req("GET", "/api/fm/stations", level="view")[1]["status"], "scanning")
+        sock.settimeout(300)            # the scan's length, on however loaded a machine
         events = [json.loads(self.frame(f)[1]) for _ in range(2)]
         sock.close()
         self.assertEqual([(e["kind"], e["band"], e["count"]) for e in events], [("stations", "fm", 1),

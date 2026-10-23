@@ -95,7 +95,7 @@ DAB_FIRST_S = 1.2                     # FIC read 0.15-0.2 s in, list complete 0.
 DAB_MORE_S = 1.2
 WINDOW_S = 3600.0                     # the nightly attempt's window after scanHour
 SLACK_S = 2 * 3600.0                  # "a week" is the same night a week later (docstring)
-SETTLE_TIMEOUT_S = 10.0               # wall clock: a receiver that stops delivering fails the scan, never hangs it
+STALL_S = 20.0                        # wall clock with no samples at all: the receiver has stopped (_capture)
 # What a scan keeps and puts back, beyond what any hold does (Radio's
 # HOLD_PRIOR: the dial, mode and repeater offset). Only keys the radio has.
 KEEP = ("rptShift", "rptReverse", "rit", "ritOn", "rxGainMode", "rxGain", "sdrplayLna", "hl2Lna", "soapyAntenna",
@@ -459,13 +459,22 @@ class BandScanner:
     def _capture(self, seconds: float, centre: float) -> np.ndarray:
         n = int(seconds * float(self.radio.geo.fs))
         self._got.clear()
-        self._cap = {"buf": np.empty(n, np.complex64), "n": 0, "centre": float(centre)}
-        cap = self._cap
-        # Wall clock only as a guard: a simulator faster than real time
-        # fills it in a fraction of `seconds`, a real radio in `seconds`.
-        if not self._got.wait(seconds * 4 + SETTLE_TIMEOUT_S) and self.aborted is None:
-            self._cap = None
-            raise RuntimeError(_("The receiver stopped delivering samples"))
+        cap = self._cap = {"buf": np.empty(n, np.complex64), "n": 0, "centre": float(centre)}
+        # A guard, never a schedule: a capture fails only when no samples
+        # have come for STALL_S. Its length in wall time is the radio's
+        # business - a real one takes `seconds`, the simulator less, and a
+        # simulator on a loaded machine (a test suite four wide) far more,
+        # which a fixed allowance once mistook for a dead receiver.
+        last, at = -1, time.monotonic()
+        while not self._got.wait(0.5):
+            if self.aborted is not None:
+                break
+            got = cap["n"]
+            if got != last:
+                last, at = got, time.monotonic()
+            elif time.monotonic() - at > STALL_S:
+                self._cap = None
+                raise RuntimeError(_("The receiver stopped delivering samples"))
         self._cap = None
         if self.aborted is not None:
             raise _Aborted()

@@ -113,7 +113,7 @@ class BroadcastWindow(unittest.TestCase):
         self.assertFalse(view.scan_btn.isEnabled())
         # Listed, and the scan over: the button is back.
         self.assertTrue(self.settle_until(lambda: view.tree.topLevelItemCount() == 2 and view.scan_btn.isEnabled(),
-                                          120), view.status.text())
+                                          300), view.status.text())
         self.assertEqual([row[0] for row in self.rows(view)], ["SIM ONE", "SIMNEWS"])
         self.assertEqual(self.rows(view)[0][3], "91.3\xa0MHz")                 # its alternative
         view.sort.setCurrentIndex(view.sort.findData("freq"))
@@ -132,7 +132,7 @@ class BroadcastWindow(unittest.TestCase):
         view = win.stations_view
         view.band.setCurrentIndex(view.band.findData("dab"))
         view.scan_now()
-        self.assertTrue(self.settle_until(lambda: view.tree.topLevelItemCount() == 2, 120), view.status.text())
+        self.assertTrue(self.settle_until(lambda: view.tree.topLevelItemCount() == 2, 300), view.status.text())
         rows = self.rows(view)
         self.assertEqual([row[:2] for row in rows], [("Shack DAB+ Data", "Shack Test Mux"),
                                                      ("Shack MP2 Tone", "Shack Test Mux")])
