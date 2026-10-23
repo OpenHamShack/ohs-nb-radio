@@ -1272,127 +1272,147 @@
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="275" />
+        <location filename="../ui/decodersview.py" line="120" />
+        <source>TII {main}/{sub} (not in the list), {db} dB</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="123" />
+        <source>{site}, {db} dB</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="125" />
+        <source>{site}, {km} km at {deg}°, {db} dB</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="130" />
+        <source>Transmitters heard:</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/decodersview.py" line="298" />
         <source>Tune</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="276" />
+        <location filename="../ui/decodersview.py" line="299" />
         <source>Put the dial on this signal</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="279" />
+        <location filename="../ui/decodersview.py" line="302" />
         <source>Stop</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="307" />
+        <location filename="../ui/decodersview.py" line="330" />
         <source>Waiting for a picture…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="315" />
+        <location filename="../ui/decodersview.py" line="338" />
         <source>This decoder's recent pictures</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="329" />
+        <location filename="../ui/decodersview.py" line="352" />
         <source>{name} - the mode's decoder, on the dial</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="340" />
+        <location filename="../ui/decodersview.py" line="363" />
         <source>SNR {db} dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="342" />
+        <location filename="../ui/decodersview.py" line="365" />
         <source>{hz} Hz off</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="418" />
+        <location filename="../ui/decodersview.py" line="445" />
         <source>The decoder to start</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="422" />
+        <location filename="../ui/decodersview.py" line="449" />
         <source>MHz (the dial's when empty)</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="423" />
+        <location filename="../ui/decodersview.py" line="450" />
         <source>Where the signal is, MHz: for RTTY the middle of its two tones, for SSTV its 1900 Hz leader. Empty: where the dial puts the mode's signal. Right-click a signal on a scope to start one there.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="431" />
+        <location filename="../ui/decodersview.py" line="458" />
         <source>Add</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="486" />
+        <location filename="../ui/decodersview.py" line="513" />
         <source>Bd</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="486" />
+        <location filename="../ui/decodersview.py" line="513" />
         <source>Hz shift</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="487" />
+        <location filename="../ui/decodersview.py" line="514" />
         <source>Reversed</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="487" />
+        <location filename="../ui/decodersview.py" line="514" />
         <source>AFC</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="487" />
+        <location filename="../ui/decodersview.py" line="514" />
         <source>Join part way</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="493" />
+        <location filename="../ui/decodersview.py" line="520" />
         <source>Any SSTV mode</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="496" />
+        <location filename="../ui/decodersview.py" line="523" />
         <source>The picture mode to listen for</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="501" />
+        <location filename="../ui/decodersview.py" line="528" />
         <source>stations, Hz from it</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="502" />
+        <location filename="../ui/decodersview.py" line="529" />
         <source>More stations in the same session, Hz from its frequency, separated by commas, such as -400,0,350. Empty: the one on its frequency.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="543" />
+        <location filename="../ui/decodersview.py" line="570" />
         <source>The frequency is a number of MHz, such as 14.0835</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="588" />
+        <location filename="../ui/decodersview.py" line="615" />
         <source>No decoders can run on frequencies of their own in this installation.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="591" />
+        <location filename="../ui/decodersview.py" line="618" />
         <source>Each decoder here listens on its own frequency, whatever the dial does, as long as the receiver's span covers it. Up to {n} at once (Settings › Decoders). They only listen.</source>
         <translation type="unfinished" />
     </message>
     <message numerus="yes">
-        <location filename="../ui/decodersview.py" line="594" />
+        <location filename="../ui/decodersview.py" line="621" />
         <source>%n decoder(s) running</source>
         <translation>
             <numerusform>%n decoder running</numerusform>
@@ -1400,7 +1420,7 @@
         </translation>
     </message>
     <message>
-        <location filename="../ui/decodersview.py" line="596" />
+        <location filename="../ui/decodersview.py" line="623" />
         <source>processor share allowed {pct} %</source>
         <translation type="unfinished" />
     </message>

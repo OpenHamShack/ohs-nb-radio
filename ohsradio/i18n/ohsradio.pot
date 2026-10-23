@@ -34,7 +34,7 @@ msgstr ""
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1400
+#: ohsradio/radio.py:1422
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -334,7 +334,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1358
+#: ohsradio/radio.py:1380
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""

@@ -102,7 +102,7 @@ msgstr ""
 msgid "Ask your controller's administrator to install SDRplay's API (Controller › Optional libraries) to use this radio."
 msgstr ""
 
-#: ohscore/decoders.py:1136
+#: ohscore/decoders.py:1150
 #, python-brace-format
 msgid "Ask your controller's administrator to install {codec} (Controller › Optional libraries)."
 msgstr ""
@@ -311,7 +311,7 @@ msgstr ""
 msgid "Each decoder session needs a frequency in hertz"
 msgstr ""
 
-#: ohscore/decoders.py:1126
+#: ohscore/decoders.py:1140
 #, python-brace-format
 msgid "Found: {path}"
 msgstr ""
@@ -431,12 +431,12 @@ msgstr ""
 msgid "Not a WAV file this program can read ({error}): save it as 16-bit PCM WAV"
 msgstr ""
 
-#: ohscore/decoders.py:1139
+#: ohscore/decoders.py:1153
 #, python-brace-format
 msgid "Not found: {codec} is normally included; reinstalling the program puts it back."
 msgstr ""
 
-#: ohscore/decoders.py:1140
+#: ohscore/decoders.py:1154
 #, python-brace-format
 msgid "Not installed. This program never includes {codec}: install it yourself, or put it in the codecs folder."
 msgstr ""
@@ -891,7 +891,7 @@ msgstr ""
 msgid "The voice keyer stopped repeating: {error}"
 msgstr ""
 
-#: ohscore/decoders.py:1131
+#: ohscore/decoders.py:1145
 #, python-brace-format
 msgid "The {codec} in {path} was refused: {reason}."
 msgstr ""
@@ -1305,15 +1305,15 @@ msgstr ""
 msgid "faad2 could not play this station's sound."
 msgstr ""
 
-#: ohscore/decoders.py:1128
+#: ohscore/decoders.py:1142
 msgid "it crashed when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:1128
+#: ohscore/decoders.py:1142
 msgid "it did not answer when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:1129
+#: ohscore/decoders.py:1143
 msgid "it gave a wrong answer when it was tested"
 msgstr ""
 
@@ -1321,7 +1321,7 @@ msgstr ""
 msgid "its decoder did not start (the log says why)"
 msgstr ""
 
-#: ohscore/decoders.py:1130
+#: ohscore/decoders.py:1144
 msgid "its folder does not allow programs to run"
 msgstr ""
 
@@ -1476,7 +1476,7 @@ msgstr ""
 msgid "{decoder} needs the receiver to run at {least:g} kS/s or more, and it runs at {rate:g} kS/s"
 msgstr ""
 
-#: ohscore/decoders.py:1146
+#: ohscore/decoders.py:1160
 #, python-brace-format
 msgid "{decoder} on {freq}"
 msgstr ""
