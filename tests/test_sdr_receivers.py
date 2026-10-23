@@ -394,6 +394,14 @@ class SoapySdrplayWithoutSoapySDRPlay3(unittest.TestCase):
         finally:
             dev.close()
 
+    def test_without_the_api_it_names_sdrplays_api(self):
+        a, b, c = SdrplayWithoutTheApi.no_api(self)
+        with a, b, c, mock.patch.object(host, "STORE", True):
+            dev = self.make({"soapyArgs": self.ARGS}, module=False)
+            with self.assertRaises(DeviceError) as cm:
+                dev.open()
+        self.assertEqual(str(cm.exception), "Update the controller to use SDRplay radios and DAB+")
+
     def test_with_the_module_soapysdr_opens_it_as_before(self):
         from ohscore.devices.soapy import SoapyDevice
         dev = self.make({"soapyArgs": self.ARGS}, module=True)

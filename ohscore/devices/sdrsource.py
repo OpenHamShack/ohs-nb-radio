@@ -118,6 +118,10 @@ class SourceDevice(Device):
     can_tx = False
     tx_refusal = RECEIVE_ONLY
     RATES: tuple[float, ...] = ()
+    # Which shack_sdr source opens it, for the sentences (_sentence): the
+    # same as `kind` except where another device setting reaches the same
+    # receiver (SoapySdrplayDevice, kind "soapy").
+    source = ""
 
     def __init__(self, cfg: dict, fs: float):
         self.cfg = dict(cfg or {})
@@ -158,7 +162,7 @@ class SourceDevice(Device):
                     src.close()
                 except Exception:  # noqa: BLE001 - tidying up a device that never finished opening
                     pass
-            raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
+            raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
 
     def _saved_antenna(self) -> str:
         return str(self.cfg.get("soapyAntenna", "") or "").strip()
@@ -196,7 +200,7 @@ class SourceDevice(Device):
         try:
             self.src.set_antenna(name)
         except self._error as e:
-            raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
+            raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
 
     def set_rx_if(self, hz: float) -> None:
         self.rx_if = float(hz)
@@ -205,7 +209,7 @@ class SourceDevice(Device):
         try:
             self.src.set_centre(hz)
         except self._error as e:
-            raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
+            raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
 
     def set_rx_gain(self, mode: str, db: float) -> None:
         if self.src is None:
@@ -213,16 +217,16 @@ class SourceDevice(Device):
         try:
             self.src.set_gain(self._gain(mode, db))
         except self._error as e:
-            raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
+            raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
 
     def read(self, n: int) -> np.ndarray:
         while len(self.left) < n:
             try:
                 block = self.src.read()
             except self._error as e:
-                raise DeviceError(_sentence(self.kind, e.reason, e.detail)) from e
+                raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
             if block is None:
-                raise DeviceError(_sentence(self.kind, "read-failed", ""))
+                raise DeviceError(_sentence(self.source, "read-failed", ""))
             self.lost += block.dropped
             self.left = np.concatenate([self.left, block.samples])
         out, self.left = self.left[:n], self.left[n:]
@@ -249,7 +253,7 @@ class SourceDevice(Device):
 
 
 class RtlSdrDevice(SourceDevice):
-    kind = "rtlsdr"
+    kind = source = "rtlsdr"
     RATES = (1_200_000.0, 2_400_000.0)
 
     def _make(self):
@@ -260,7 +264,7 @@ class RtlSdrDevice(SourceDevice):
 
 
 class SdrplayDevice(SourceDevice):
-    kind = "sdrplay"
+    kind = source = "sdrplay"
     RATES = (2_400_000.0,)
     GR_RANGE = (20.0, 59.0)
 
