@@ -46,7 +46,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import numpy as np
 
-from ..engine import ReceiverHeld, TxRefused
+from ..engine import ReceiverHeld, SpanPinned, TxRefused
 from ..padactions import PAD_TX_ACTIONS
 from ..i18n.text import _
 from .. import smeter_cal
@@ -349,6 +349,9 @@ class Server:
                 # The decoder session holding the receiver ({}: the operator
                 # has it), and on a controller what host libraries it lends.
                 "rxOwner": st.get("rxOwner") or {},
+                # What the receiver covers, and whether background decoder
+                # sessions pin it (Radio; {} in QO-100 NB).
+                "span": st.get("span") or {},
                 "hostLibs": st.get("hostLibs") or {}}
 
     def shared_log(self) -> dict:
@@ -694,6 +697,12 @@ class _Handler(BaseHTTPRequestHandler):
             if not digital and not self._need(who, need):
                 return
             fn(self, who, query)
+        except SpanPinned as e:
+            # Any route that tunes (api/set, api/recall, ...) out
+            # of the span background decoders pin: not a bad request, and
+            # the client is told what it would stop (SERVER-API "The pinned
+            # span"). Only api/set takes dropSessions.
+            self._error(409, str(e), e.code, sessions=e.sessions, span=self.srv.radio.state().get("span") or {})
         except ValueError as e:
             self._error(400, str(e), "bad_request")
         except (BrokenPipeError, ConnectionResetError):
@@ -833,7 +842,12 @@ class _Handler(BaseHTTPRequestHandler):
 
     def post_set(self, who, q):
         body = self._body()
+        # dropSessions: the operator agreed to stop the background decoder
+        # sessions a tune out of their span would stop (SpanPinned). Beside
+        # "changes", or among the keys of the flat form; never a setting.
+        drop = body.get("dropSessions") is True
         changes = body.get("changes") if isinstance(body.get("changes"), dict) else body
+        changes = {k: v for k, v in changes.items() if k != "dropSessions"}
         owned = sorted(PROFILE_KEYS & set(changes))
         if owned:
             raise ValueError(_("{keys}: set in the station profile on the controller, not here").format(
@@ -846,7 +860,7 @@ class _Handler(BaseHTTPRequestHandler):
         if auth and not self._need(who, "transmit"):
             return
         try:
-            changed = self.srv.radio.set(authorise=auth, **changes)
+            changed = self.srv.radio.set(authorise=auth, drop_sessions=drop, **changes)
         except ReceiverHeld as e:
             # Not a bad request: the receiver is a DAB session's until it
             # stops (Engine.hold_receiver).
@@ -963,6 +977,7 @@ class _Handler(BaseHTTPRequestHandler):
     # engine's decoder sessions (ohscore/decoders.py). Nothing here transmits.
     REFUSAL_STATUS = {"bad_params": 400, "unknown_decoder": 404, "unknown_session": 404,
                       "decoder_unavailable": 409, "outside_span": 409, "receiver_busy": 409, "on_air": 409,
+                      "span_pinned": 409,
                       "rate_too_low": 409, "out_of_range": 409, "too_many_sessions": 429, "not_running": 503}
 
     def get_decoders(self, who, q):
@@ -988,9 +1003,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._error(409, _("Not while automatic transmit is armed: switch it off first"), "on_air")
             return
         try:
-            sess = d.start(decoder, None if freq is None else float(freq), params)
+            sess = d.start(decoder, None if freq is None else float(freq), params,
+                           drop_sessions=b.get("dropSessions") is True)
         except DecoderRefused as e:
             more = {"needs": e.needs} if e.needs else {}
+            if e.sessions is not None:
+                more["sessions"] = e.sessions
             self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
             return
         log.info("decoder session %s started by %s: %s at %.0f Hz", sess["id"], who.get("user", "?"), decoder,

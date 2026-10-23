@@ -37,10 +37,10 @@ the desktop apps.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET /` | view | a status page and the Recordings (record, play, download, delete); nothing fetched from elsewhere, one small script that posts to `api/recordings` |
-| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below) |
+| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `span` (what the receiver covers and whether background decoder sessions pin it: "The pinned span" below; `{}` in QO-100 NB), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below) |
 | `GET api/state` | view | `Radio.state()`: every key |
 | `GET api/spec` | view | the settings registry (type, limits, choices, help, auth, restart) |
-| `POST api/set` | control (transmit for `auth` keys) | `{key: value, …}` or `{"changes": {…}}` through `Radio.set()`, all or nothing; answers `{"changed": {…}}`. The station profile's keys (callsign, locator, country, licence, class, own licence, conditions) are refused: they are set on the controller. So are the device addresses and audio devices (the broker and the API own those). |
+| `POST api/set` | control (transmit for `auth` keys) | `{key: value, …}` or `{"changes": {…}}` through `Radio.set()`, all or nothing; answers `{"changed": {…}}`. A tune out of the span background decoders pin is `409 span_pinned` with the sessions it would stop, unless the body has `"dropSessions": true` ("The pinned span" below); a receiver DAB holds is `409 receiver_busy`. The station profile's keys (callsign, locator, country, licence, class, own licence, conditions) are refused: they are set on the controller. So are the device addresses and audio devices (the broker and the API own those). |
 | `POST api/start`, `api/stop` | control | start or stop the radio (stop releases the broker's claim) |
 | `POST api/ptt` | control to unkey, transmit to key | `{"on": true, "remote": "<client id>"}` keys under that client's lease; `{"on": false}` unkeys. Always `200` with the status: a refused key-up has `onAir` false and `txError` saying why. |
 | `POST api/ptt/heartbeat` | transmit | `{"remote": …}` every 1 s once keyed, and while automatic transmit is armed by that client (keyed or not); `409 not_lease_holder` when that client holds neither |
@@ -89,7 +89,7 @@ session `vfo` while the mode is decoded by shack_sdr.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET api/decoders` | view | `{"decoders": [entry…], "codecs": [codec…], "limits": {"sessions", "cpuMax", "threads"}, "sessions": [session…]}`. Fetch it once when a view opens. The first fetch after a start may take a moment: it is when the codecs are first looked for. |
-| `POST api/decoders/sessions` | control | `{"decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45, "shift": 170, "reverse": false}}`. `201` with the session, or `400 bad_params`, `404 unknown_decoder`, `409 decoder_unavailable` (`needs` names a codec when that is why; a slot mode, which runs only as the mode, says so too), `409 outside_span`, `429 too_many_sessions` (`decodersMax`, default 4), `503 not_running`; for DAB also `409 receiver_busy`, `on_air`, `rate_too_low`, `out_of_range` (below). Sessions are kept in the settings and start again with the radio, except DAB's. |
+| `POST api/decoders/sessions` | control | `{"decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45, "shift": 170, "reverse": false}}`. `201` with the session, or `400 bad_params`, `404 unknown_decoder`, `409 decoder_unavailable` (`needs` names a codec when that is why; a slot mode, which runs only as the mode, says so too), `409 outside_span` (in Radio: it, the other sessions and the dial cannot fit in one span), `409 receiver_busy` (DAB plays), `429 too_many_sessions` (`decodersMax`, default 4), `503 not_running`; for DAB also `409 span_pinned` (background sessions pin the span: `sessions` lists them; send `"dropSessions": true` to stop them and play), `409 receiver_busy`, `on_air`, `rate_too_low`, `out_of_range` (below). Sessions are kept in the settings and start again with the radio, except DAB's. |
 | `DELETE api/decoders/sessions/{id}` | control | stop it: `{"stopped": true}`; `404 unknown_session` (the `vfo` session stops with its mode, never here) |
 | `GET api/decoders/sessions/{id}?since=<rev>` | view | the session, with `results`: its kept results (the last 500 or 30 minutes) newer than `rev`. Fetch it after a gap in `rev`. `404 unknown_session`. |
 | `POST api/decoders/sessions/{id}` | control | `{"params": {"service": "C3A7"}}`: change a running session's parameters live (DAB's station). `200` with the session; `400 bad_params` (a value the decoder refuses, or another DAB block), `404 unknown_session` |
@@ -129,7 +129,8 @@ A session:
 
 `state` is one of `starting`, `running`, `nosignal`, `synced`, `outside`
 (its frequency left the receiver's span: fed nothing, and back by itself
-when the span covers it), `budget` (paused at `decodeCpuMax`), `error` or
+when the span covers it; QO-100 NB only, since Radio pins its span for
+its sessions, below), `budget` (paused at `decodeCpuMax`), `error` or
 `stopped`. `why` is a code and `whyText` the server's sentence for it;
 prefer your own translation of the code (CONTROLLER-CONTRACT §9).
 
@@ -154,6 +155,78 @@ says to ask the administrator. Results on `api/events?kinds=…,decoder`
 fetches the session with `?since=`. `t` is UTC from the samples. Text is
 not yet coalesced: RTTY's results come a character or a few at a time,
 about seven a second at 45.45 Bd.
+
+## The pinned span (Radio)
+
+Radio's receiver covers a span around its centre - the wide scope's,
+`USABLE` (0.46) of half the sample rate either side: 1104 kHz at the
+RSPdx's 2.4 MS/s, 552 kHz at 1.2 MS/s - and the centre follows the dial.
+A decoder session on a frequency of its own (a *background* session: not
+the mode's `vfo`, not DAB) would leave the span the moment the operator
+tuned away, so while one runs the centre is **pinned** (Brian,
+23/10/2026; openhamshack RADIO-SDR-PLAN §8.5). Code `ohsradio/radio.py`
+"the pinned span" and `ohscore/span.py`; tests `tests/test_ham_span_pin.py`.
+
+- **`span`** in `api/status`, `api/state` and its `state` diffs:
+  `{"centreHz", "loHz", "hiHz", "pinned", "by", "sessions"}`. `pinned` is
+  true while background sessions hold it; `by` their ids; `sessions`
+  `[{"id", "decoder", "freqHz", "label"}]` (`label` "RTTY on 14.0933 MHz").
+  `{}` while the radio is stopped, and always in QO-100 NB, which never
+  pins (its receiver stays on the transponder; its sessions go `outside`).
+  A client draws the span on its spectrum and greys out tuning outside it
+  while `pinned`.
+
+  ```json
+  {"centreHz": 145148000.0, "loHz": 144596000.0, "hiHz": 145700000.0, "pinned": true,
+   "by": ["ds_3f2a"], "sessions": [{"id": "ds_3f2a", "decoder": "aprs", "freqHz": 144800000.0,
+                                     "label": "APRS on 144.8000 MHz"}]}
+  ```
+- **Where it is pinned**, when a session starts: the centre it has now, if
+  every session (each its channel's width) and the dial (3 kHz each side;
+  wide FM 100 kHz) fit inside the span and none of them is within 5 kHz
+  of the centre itself (DC, where the receiver's own spike is); otherwise
+  the middle of the sessions and the dial, moved the least that keeps them
+  all off DC, on a whole kHz where it can; otherwise the session is
+  refused `409 outside_span` with the sentence ("7.0500 MHz is too far
+  from the dial (14.0700 MHz): the receiver covers 552 kHz at once, so
+  tune nearer to it first").
+- **Tuning inside it** moves the dial, never the centre: the sessions are
+  not retuned or reset and their results carry on. A dial put on the
+  centre (DC) moves the pin the least that clears it, the sessions still
+  inside; `span` says where.
+- **Tuning outside it** (a `vfo`, `mode`, `rit`, `ritOn`, `rptReverse`,
+  `rptShift` or `rptOffsetHz` that would take the receive dial or its
+  passband out of the span) is refused on every route that tunes -
+  `api/set`, `api/recall` and any other route that tunes - with `409 span_pinned`:
+  `{"error": "Tuning to 7.0500 MHz stops RTTY on 14.0933 MHz: the receiver
+  stays on 13.8990 MHz to 14.4510 MHz while they run", "code":
+  "span_pinned", "sessions": [...], "span": {...}}`. Nothing changes. Ask
+  the operator ("Tuning to 7.0500 MHz stops: RTTY on 14.0933 MHz.
+  Continue?") and send the same `api/set` again with `"dropSessions":
+  true` (beside `changes`, or among the keys of the flat form): the
+  change is validated first, then those sessions stop (and leave
+  `decoderSessions`), and the capture follows the dial again. Other routes
+  take no flag: stop the sessions (`DELETE api/decoders/sessions/{id}`)
+  and try again.
+- **Unpinned** when the last background session stops: the centre follows
+  the dial again from where it is.
+- **Saved sessions** start again with the radio and pin it again; one that
+  no longer fits with the dial is not started (the log says why).
+- **Precedence** with what holds the whole receiver itself (`rxOwner`):
+  - *DAB*: background sessions were there first. `POST
+    api/decoders/sessions` for `dab` is `409 span_pinned` ("Playing DAB
+    takes the receiver to Band III and stops RTTY on 145.6000 MHz", with
+    `sessions`) unless it carries `"dropSessions": true`. While DAB plays,
+    a background session is `409 receiver_busy` ("The receiver is playing
+    DAB from block 11D: stop the DAB station to add a decoder").
+  - *The band scan*: never while a decoder session runs (`POST api/scan`
+    `409 receiver_busy` "Not scanning now: A decoder is running", and the
+    nightly scan skips); a session starting during a scan ends the scan
+    first, which puts the operator's centre back, and is pinned there.
+- **Transmit is not affected.** It goes out on `txDial` through its own
+  local oscillator, never the capture: a repeater's input 600 kHz below a
+  pinned span keys and transmits as ever, and `txBlocked` judges the
+  transmit dial as before.
 
 ## Receive audio format
 
@@ -419,7 +492,9 @@ takes the receiver while it plays. What openhamshack-remote
   about 0.8 s after sync; allow 1.5 s for a block that holds an ensemble).
 - `201` with the session (below). Refused, each with its sentence:
   `409 receiver_busy` (another DAB session holds the receiver, or an IQ
-  recording is playing), `409 on_air` (transmitting, or automatic
+  recording is playing), `409 span_pinned` (background decoder sessions
+  pin the span, `sessions` naming them: send `"dropSessions": true` to
+  stop them and play; "The pinned span" above), `409 on_air` (transmitting, or automatic
   transmit armed), `409 rate_too_low` (the receiver runs below 2.048 MS/s:
   "DAB needs the receiver to run at 2.048 MS/s or more, and the pluto runs
   at 1.2 MS/s: choose 2.4 MS/s in Settings › Radio (the radio restarts)",

@@ -19,18 +19,28 @@ RADIO-SDR-PLAN §8.5 "fixed sessions against a moving span").
   while DAB plays; no band scan while pinned, and a session ends a scan.
 - **Transmit** follows the transmit dial, never the capture: a repeater's
   input outside the pinned span keys and goes out there.
+- **Over the API:** 409 `span_pinned` with the sessions and the span,
+  `dropSessions`, `span` in api/status, DAB's 409.
 """
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
+import http.client
+import json
+import tempfile
 import unittest
 
 from ham_helpers import close, make_radio, pump, speech
-from listen_helpers import make_listener
+from listen_helpers import ListeningSim, make_listener
+from test_server import SECRET
 
 from ohscore import sdr
 from ohscore.decoders import Refused
 from ohscore.engine import SpanPinned
+from ohscore.server import shack
+from ohscore.server.app import Server
+from ohscore.server.audio import StreamAudio
 from ohscore.span import DC_GUARD_HZ, choose_centre, fits
-from ohsradio.radio import USABLE
+from ohsradio import server as ham_server
+from ohsradio.radio import USABLE, Radio
 
 # Seed 2's 20 m RTTY station (ohsradio/devices/sim.py, as test_decoders):
 # its tones centred 1500 Hz above the 14.09175 MHz dial, on the air from
@@ -323,6 +333,69 @@ class TransmitFollowsTheDial(unittest.TestCase):
         r.ptt(False)
         pump(r, 5, until=lambda: not (r.tx_thread and r.tx_thread.is_alive()))
         self.assertEqual((r.centre, r.state()["span"]["pinned"]), (centre, True))
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class OverTheApi(unittest.TestCase):
+    HOME = 145_500_000.0
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cfg = {"device": "sim", "audioBackend": "null", "simRealtime": False, "simSeed": 7, "simHourUtc": 12.0,
+               "simSignals": False, "callsign": "GM4BRI", "licenceClass": "full", "vfo": self.HOME, "mode": "fm"}
+        audio = StreamAudio(realtime=False)
+        self.radio = Radio(cfg, persist=False, data_dir=tmp.name, audio=audio,
+                           device=ListeningSim(dict(cfg), 2_400_000.0, []))
+        self.srv = Server(self.radio, ham_server.info("9.9.9"), audio, secret=SECRET)
+        httpd = self.srv.serve("127.0.0.1", 0)
+        self.port = httpd.server_address[1]
+        self.addCleanup(self.srv.shutdown)
+        self.assertEqual(self.srv.start_radio(), "")
+
+    def req(self, method, path, body=None, level="control"):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
+        c.request(method, path, json.dumps(body) if body is not None else None,
+                  {"Content-Type": "application/json", shack.SHACK_SECRET_HEADER: SECRET,
+                   "X-OpenHamShack-User": "brian", "X-OpenHamShack-Level": level,
+                   "X-OpenHamShack-Device": "dev_TEST", "X-OpenHamShack-Auth": "device"})
+        r = c.getresponse()
+        raw = r.read()
+        c.close()
+        return r.status, json.loads(raw)
+
+    def test_span_pinned_and_drop_sessions(self):
+        s, a = self.req("POST", "/api/decoders/sessions", {"decoder": "rtty", "freqHz": 144_800_000.0})
+        self.assertEqual(s, 201, a)
+        sid = a["id"]
+        s, st = self.req("GET", "/api/status", level="view")
+        span = st["span"]
+        self.assertEqual((span["pinned"], span["by"]), (True, [sid]))
+        self.assertLessEqual(span["loHz"], 144_800_000.0 - 1500)
+        self.assertGreaterEqual(span["hiHz"], self.HOME + 3000)
+        # Inside: the dial moves. Outside: 409 with what it would stop.
+        s, a = self.req("POST", "/api/set", {"changes": {"vfo": 145_000_000.0}})
+        self.assertEqual((s, a["changed"]), (200, {"vfo": 145_000_000.0}))
+        s, a = self.req("POST", "/api/set", {"changes": {"vfo": 432_200_000.0}})
+        self.assertEqual((s, a["code"]), (409, "span_pinned"))
+        self.assertTrue(a["error"].startswith("Tuning to 432.2000 MHz stops RTTY on 144.8000 MHz"))
+        self.assertEqual(a["sessions"], [{"id": sid, "decoder": "rtty", "freqHz": 144_800_000.0,
+                                          "label": "RTTY on 144.8000 MHz"}])
+        self.assertEqual(a["span"], span)
+        # Any route that tunes says the same (a memory).
+        self.radio.save_memory("70cm", 432_200_000.0, "usb")
+        s, a = self.req("POST", "/api/recall", {"name": "70cm"})
+        self.assertEqual((s, a["code"]), (409, "span_pinned"))
+        # DAB says so too, with the sessions.
+        s, a = self.req("POST", "/api/decoders/sessions", {"decoder": "dab", "params": {"block": "11D"}})
+        self.assertEqual((s, a["code"], [x["id"] for x in a["sessions"]]), (409, "span_pinned", [sid]))
+        # Yes: in the flat form too, and never taken for a setting.
+        s, a = self.req("POST", "/api/set", {"vfo": 432_200_000.0, "dropSessions": True})
+        self.assertEqual((s, a["changed"]["vfo"]), (200, 432_200_000.0), a)
+        s, st = self.req("GET", "/api/status", level="view")
+        self.assertEqual((st["span"]["pinned"], st["decoders"]["sessions"]), (False, 0))
+        s, a = self.req("GET", "/api/decoders", level="view")
+        self.assertEqual(a["sessions"], [])
 
 
 if __name__ == "__main__":
