@@ -33,6 +33,12 @@ datas = [
     (str(ROOT / "ohscore" / "data" / "dxcc-short.json"), "ohscore/data"),
 ]
 datas += [(str(p), "licences") for p in sorted((VENDOR / "licences").glob("*"))]
+# Radio's bundled data, each file with its licence notice beside it, read
+# from beside the package: local frequencies (ohsradio/localfreq.py) and
+# the DAB transmitter list (ohsradio/dabtx.py). PyInstaller collects
+# modules, never a package's data files, so each folder is named here.
+datas += [(str(p), f"ohsradio/data/{p.parent.name}") for p in sorted((ROOT / "ohsradio" / "data").glob("*/*"))
+          if p.is_file()]
 # The compiled string catalogs, the shared one and this app's, where
 # ohscore/i18n looks for them (beside each package); the en_XA pseudo-locale
 # is a developer's and never ships.
