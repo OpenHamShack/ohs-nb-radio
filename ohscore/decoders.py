@@ -61,6 +61,30 @@ playing), changed live (configure). The session's `meta` is the
 ensemble's feed (shack_sdr README "DAB"): each `why` in it is worded here
 as `whyText`, the feed's and each service's, and `dls` is the playing
 service's programme text.
+
+**A held session has a host of its own.** One worker thread decodes every
+session on a host, so a decoder that never returns from a block starves
+every session beside it. shack_sdr 0.2.0's DAB search does exactly that on
+some input (a buffer that starts just before a short deep dip, with no
+phase reference to lock to: `ofdm.rs` search() drops nothing and tries
+the same samples again, for ever), and it is data the simulator never
+makes but a real RSP on Band III can: Store Radio 0.1.22-beta.5 on ohs-box
+had its one worker at 100 % of a core while every session after the first
+stayed `starting` with all its input dropped - every later DAB station,
+and once DAB was stopped every fixed session and the mode's own decoder
+too, until Radio restarted. A thread inside a decoder cannot be stopped,
+so what a separate host buys is containment: the DAB session alone goes
+quiet, and stopping it (which closes its host, leaving the stuck thread
+behind, said in the log) lets everything else, and the next DAB station
+on a fresh thread, carry on.
+
+**A session that is fed but decodes nothing says so.** The supervisor
+compares each session's `fed` and `dropped` over STARVED_S: when the host
+dropped nearly all of it the session's `why` is `decoder_behind` (the
+decoder takes some, too slowly), or `decoder_stuck` and state `error`
+when it took none at all - the host's own state would otherwise stay
+`starting` for ever with no word anywhere. Each is logged once when it
+begins and once when it ends, and a stuck one is a toast.
 """
 from __future__ import annotations
 
@@ -93,6 +117,15 @@ RESULTS_S = 30 * 60.0
 # How much of each edge of the bank's span a session's channel may not
 # reach into: the bank's own guard (the wide scope shows USABLE of fs).
 SPAN_USABLE = 0.9
+# The starvation watch (module docstring): over this long, a session that
+# was fed and had at least STARVED_SHARE of it dropped is said to be
+# starved. Longer than the host's two-second ring, so a ring that is still
+# filling (a decoder settling in) never counts, and short enough that the
+# operator hears why within a few seconds of starting a station.
+STARVED_S = 3.0
+STARVED_SHARE = 0.9
+# ...and it is over once less than half of what is fed is dropped.
+RECOVERED_SHARE = 0.5
 
 
 def _why_text(code: str | None) -> str:
@@ -119,6 +152,10 @@ def _why_text(code: str | None) -> str:
         "codec_config": _("faad2 could not play this station's sound."),
         "codec_open": _("faad2 could not play this station's sound."),
         "unsupported_protection": _("This station uses a coding Radio cannot read."),
+        # The starvation watch (module docstring).
+        "decoder_stuck": _("The decoder has stopped responding and everything it is given is thrown away: stop "
+                           "it and start it again (restart the app if that does not help)."),
+        "decoder_behind": _("This computer cannot decode it fast enough: most of the signal is thrown away."),
     }
     return words.get(code, _("Stopped ({code}).").format(code=code))
 
@@ -185,6 +222,12 @@ class _Fixed:
         self.phase = 0.0
         self.channels = 1
         self.dry = 0.0
+        # The host it runs on: the engine's, or a held session's own.
+        self.host = None
+        # The starvation watch: (monotonic t, fed, dropped) once a second
+        # over the last STARVED_S, and the code while it is starved.
+        self.watch: collections.deque = collections.deque()
+        self.starved: str | None = None
 
 
 class Decoders:
@@ -199,6 +242,10 @@ class Decoders:
         self.vfo_results: collections.deque = collections.deque(maxlen=RESULTS_KEPT)
         self._codecs: list[dict] | None = None
         self._codec_scan: threading.Thread | None = None
+        self._ring_s = 2.0
+        self._vfo_watch: collections.deque = collections.deque()
+        self._vfo_starved: str | None = None
+        self._watch_due = 0.0
 
     # ------------------------------------------------------------ lifecycle
     def open(self, realtime: bool = True) -> None:
@@ -211,7 +258,8 @@ class Decoders:
         s = self.engine.st
         n = int(s.get("decodersMax", 4))
         cpu = float(s.get("decodeCpuMax", 0.25))
-        self.host = m.Host(threads=1, cpu_max=cpu, ring_s=2.0 if realtime else 120.0, max_sessions=n + 1)
+        self._ring_s = 2.0 if realtime else 120.0
+        self.host = m.Host(threads=1, cpu_max=cpu, ring_s=self._ring_s, max_sessions=n + 1)
         self._publish_status()
 
     def close(self) -> bool:
@@ -235,9 +283,15 @@ class Decoders:
                 self.engine.release_receiver(f.id)
         # Nothing pins the span once they are gone (Engine.span_changed).
         self.engine.span_changed()
+        self._vfo_watch.clear()
+        self._vfo_starved = None
+        joined = True
+        for f in fixed:
+            if f.held:
+                joined = _close_own_host(f) and joined
         if host is None:
-            return True
-        joined = host.close()
+            return joined
+        joined = host.close() and joined
         if not joined:
             log.warning("a decoder worker did not stop within a second")
         for f in fixed:
@@ -350,7 +404,7 @@ class Decoders:
             except m.DecoderError as e:
                 raise self._refusal(e) from None
             f = _Fixed(sid, decoder, freq, params, entry.get("panel", "text"))
-            f.kind, f.pitch, f.half = kind, pitch, half
+            f.kind, f.pitch, f.half, f.host = kind, pitch, half, host
             self.fixed[sid] = f
             if pin is not None:
                 self.engine.pin_to(pin)
@@ -395,19 +449,27 @@ class Decoders:
         # A placeholder id holds it until the host has made the session.
         token = f"pending-{id(params):x}"
         self.engine.hold_receiver(token, decoder, centre, block, least)
+        # Its own host (module docstring, "A held session has a host of its
+        # own"): one worker, no budget - it is pinned, as the mode's decoder
+        # is, because it is what the operator is listening to.
+        own = m.Host(threads=1, cpu_max=0.0, ring_s=self._ring_s, max_sessions=1)
         try:
-            # Pinned, as the mode's decoder is: it is what the operator is
-            # listening to, so the CPU budget never pauses it.
-            sid = host.start(decoder, params, input="iq", rate=float(self.engine.geo.fs), pinned=True)
+            sid = own.start(decoder, params, input="iq", rate=float(self.engine.geo.fs), pinned=True)
+            # Each host numbers its own sessions; one id may not name two.
+            while sid in self.fixed:
+                own.stop(sid)
+                sid = own.start(decoder, params, input="iq", rate=float(self.engine.geo.fs), pinned=True)
         except m.DecoderError as e:
+            own.close()
             self.engine.release_receiver(token)
             raise self._refusal(e) from None
         except Exception:
+            own.close()
             self.engine.release_receiver(token)
             raise
         self.engine.rename_hold(token, sid)
         f = _Fixed(sid, decoder, centre, params, entry.get("panel", "meta"))
-        f.kind, f.pitch, f.held, f.block = "iq", 0.0, True, block
+        f.kind, f.pitch, f.held, f.block, f.host = "iq", 0.0, True, block, own
         with self.lock:
             self.fixed[sid] = f
         log.info("decoder session %s: %s on %s (%.0f Hz) %s, holding the receiver", sid, decoder, block, centre,
@@ -452,7 +514,7 @@ class Decoders:
         Raises Refused; None-free: answers the session."""
         with self.lock:
             f = self.fixed.get(sid)
-            host = self.host
+        host = f.host if f is not None else None
         if f is None or host is None:
             raise Refused("unknown_session", _("There is no decoder session called {id}").format(id=sid))
         params = dict(params)
@@ -479,12 +541,15 @@ class Decoders:
     def stop(self, sid: str) -> bool:
         with self.lock:
             f = self.fixed.pop(sid, None)
-            host = self.host
         if f is None:
             return False
-        if host is not None:
+        if f.held:
+            # Its own host goes with it: a fresh one for the next station,
+            # even when this one's thread is stuck inside its decoder.
+            _close_own_host(f)
+        elif f.host is not None:
             try:
-                host.stop(sid)
+                f.host.stop(sid)
             except Exception:  # noqa: BLE001 - a session already gone is stopped
                 pass
         if f.held:
@@ -636,9 +701,9 @@ class Decoders:
         receiver is not exactly on it (it is, once settled: Radio puts DC
         there). Nothing is fed until the retune has reached the samples,
         and the index still counts them, so the session's times stay true."""
-        host = self.host
         f = self._held()
-        if host is None or f is None:
+        host = f.host if f is not None else None
+        if host is None:
             return
         n = len(raw)
         if not settled:
@@ -673,9 +738,9 @@ class Decoders:
         at `rate`, mono (n,) or stereo (n, 2) as it was made; silence for the
         block once it has given none for DRY_S; None for a block to pass
         over without playing (its sound is in the next one)."""
-        host = self.host
         f = self._held()
-        if host is None or f is None:
+        host = f.host if f is not None else None
+        if host is None:
             return None
         try:
             runs = host.audio(f.id, max_s=1.0, rate=int(rate))
@@ -709,19 +774,28 @@ class Decoders:
 
     def tick(self) -> None:
         """The supervisor, ten times a second: every result out of the host,
-        to the mode decoder, the `decoders` feed and the kept lists."""
-        host = self.host
-        if host is None:
-            return
-        try:
-            items = host.poll(2000)
-        except Exception:  # noqa: BLE001 - closed between the read above and now
-            return
-        if not items:
+        to the mode decoder, the `decoders` feed and the kept lists; and
+        once a second, the starvation watch."""
+        if self.host is None:
             return
         with self.lock:
             vfo = self.vfo
             fixed = dict(self.fixed)
+        now = time.monotonic()
+        if now >= self._watch_due:
+            self._watch_due = now + 1.0
+            self._watch(now, vfo, fixed)
+        items = []
+        # The engine's host, and each held session's own.
+        for host in [self.host, *(f.host for f in fixed.values() if f.held)]:
+            if host is None:
+                continue
+            try:
+                items += host.poll(2000)
+            except Exception:  # noqa: BLE001 - closed between the read above and now
+                continue
+        if not items:
+            return
         for it in items:
             sid = it.get("session")
             if it.get("type") == "state" and it.get("why"):
@@ -745,6 +819,51 @@ class Decoders:
         for f in fixed.values():
             while f.results and f.results[0].get("t", cutoff) < cutoff:
                 f.results.popleft()
+
+    def _watch(self, now: float, vfo, fixed: dict) -> None:
+        """The starvation watch (module docstring), once a second from tick:
+        each session's fed and dropped, and whether it is starved now."""
+        for f in fixed.values():
+            if f.host is None:
+                continue
+            f.starved = self._watch_one(now, f.host, f.id, f.decoder, f.watch, f.starved)
+        if vfo is not None and self.host is not None:
+            self._vfo_starved = self._watch_one(now, self.host, vfo[0], getattr(vfo[1], "decoder", "mode"),
+                                                self._vfo_watch, self._vfo_starved)
+        else:
+            self._vfo_watch.clear()
+            self._vfo_starved = None
+
+    def _watch_one(self, now: float, host, sid: str, decoder: str, watch: collections.deque,
+                   was: str | None) -> str | None:
+        try:
+            stats = host.status(sid).get("stats") or {}
+        except Exception:  # noqa: BLE001 - gone since: nothing to watch
+            return was
+        watch.append((now, int(stats.get("fed") or 0), int(stats.get("dropped") or 0)))
+        while len(watch) > 1 and now - watch[1][0] >= STARVED_S:
+            watch.popleft()
+        cpu = stats.get("cpu")
+        code = starvation(list(watch), was, float(cpu) if cpu is not None else None)
+        if code == was:
+            return code
+        if code is not None:
+            t0, fed0, drop0 = watch[0]
+            _t1, fed1, drop1 = watch[-1]
+            log.warning("decoder session %s (%s): %d of the %d samples fed in the last %.0f s were dropped, %s",
+                        sid, decoder, drop1 - drop0, fed1 - fed0, now - t0,
+                        "and its decoder took none: its thread is stuck inside the decoder"
+                        if code == "decoder_stuck" else "its decoder cannot keep up")
+            if code == "decoder_stuck":
+                try:
+                    self.engine.toast(_("The {decoder} decoder has stopped responding: stop it and start it "
+                                        "again").format(decoder=decoder.upper()), "error")
+                except Exception:  # noqa: BLE001 - an engine without toasts (a test's stand-in)
+                    pass
+        else:
+            log.warning("decoder session %s (%s) is decoding what it is fed again", sid, decoder)
+        self._publish_status()
+        return code
 
     # ------------------------------------------------------------ helpers
     def _covers(self, freq: float, entry: dict) -> bool:
@@ -775,8 +894,8 @@ class Decoders:
             return Refused("unknown_session", _("There is no decoder session called {id}").format(id=detail or ""))
         return Refused(code, _("The decoder would not start ({code})").format(code=code))
 
-    def _status_of(self, sid: str) -> dict:
-        host = self.host
+    def _status_of(self, sid: str, host=None) -> dict:
+        host = host if host is not None else self.host
         if host is None:
             return {}
         try:
@@ -785,10 +904,11 @@ class Decoders:
             return {}
 
     def _view(self, f: _Fixed) -> dict:
-        st = self._status_of(f.id)
+        st = self._status_of(f.id, f.host)
         stats = st.get("stats") or {}
         state = "outside" if f.outside else st.get("state", "stopped")
         why = "outside_span" if f.outside else st.get("why")
+        state, why = _starved_view(state, why, f.starved)
         view = {"id": f.id, "decoder": f.decoder, "freqHz": f.freq, "params": dict(f.params), "state": state,
                 "why": why, "whyText": _why_text(why), "since": _iso(st.get("since")), "rev": st.get("rev", 0),
                 "stats": _stats(stats), "panel": f.panel}
@@ -801,9 +921,10 @@ class Decoders:
         sid, dec = vfo
         st = self._status_of(sid)
         s = self.engine.st
+        state, why = _starved_view(st.get("state", "stopped"), st.get("why"), self._vfo_starved)
         return {"id": VFO, "decoder": getattr(dec, "decoder", ""), "freqHz": s.get("rxDial"),
-                "params": dict(getattr(dec, "params", {})), "state": st.get("state", "stopped"),
-                "why": st.get("why"), "whyText": _why_text(st.get("why")), "since": _iso(st.get("since")),
+                "params": dict(getattr(dec, "params", {})), "state": state,
+                "why": why, "whyText": _why_text(why), "since": _iso(st.get("since")),
                 "rev": st.get("rev", 0), "stats": _stats(st.get("stats") or {}), "panel": "text", "mode": True}
 
     def _save(self) -> None:
@@ -869,6 +990,65 @@ def _worded_meta(fields: dict) -> dict:
     return out
 
 
+def starvation(watch: list[tuple[float, int, int]], was: str | None, cpu: float | None = None) -> str | None:
+    """Whether a session is starved, from its (t, fed, dropped) samples over
+    the last STARVED_S (oldest first), its decoder's `cpu` now (the host's
+    two-second share) and what it was before: None, or "decoder_stuck"
+    (the decoder took nothing, as a worker that never comes back out of a
+    block) or "decoder_behind" (most of it dropped: the decoder takes some,
+    too slowly).
+
+    The host drops whole blocks from the front of a full ring, so a decoder
+    that takes nothing loses exactly what it is fed once the ring is full -
+    ohs-box's "dropped climbs by exactly 2.4 MS/s". Where the blocks are not
+    all one length (a channel of the bank) the two differ by a block now and
+    then, so most of it dropped with no decoding time charged at all is
+    stuck too: the host charges a session's time only when a block comes
+    back out of its decoder. Until a full window has passed the answer stays
+    what it was."""
+    if len(watch) < 2 or watch[-1][0] - watch[0][0] < STARVED_S - 0.5:
+        return was
+    fed = watch[-1][1] - watch[0][1]
+    dropped = watch[-1][2] - watch[0][2]
+    if fed <= 0:
+        # Fed nothing (outside, paused, between blocks): nothing to judge.
+        return was
+    if dropped >= fed or (dropped >= STARVED_SHARE * fed and cpu is not None and cpu <= 0):
+        return "decoder_stuck"
+    if dropped >= STARVED_SHARE * fed:
+        return "decoder_behind"
+    if was is not None and dropped >= RECOVERED_SHARE * fed:
+        return "decoder_behind"
+    return None
+
+
+def _starved_view(state: str, why: str | None, starved: str | None) -> tuple[str, str | None]:
+    """A session's state and why as a client sees them: the host's, unless
+    the starvation watch says it decodes nothing of what it is fed. A stuck
+    decoder never leaves the host's `starting`, which is the silence this
+    replaces with `error`."""
+    if starved is None or state in ("outside", "budget", "stopped"):
+        return state, why
+    return ("error" if starved == "decoder_stuck" else state), starved
+
+
+def _close_own_host(f: "_Fixed") -> bool:
+    """Close a held session's own host (stop, Decoders.close). False when
+    its worker did not come back: a thread stuck inside a decoder cannot be
+    stopped, and is left behind, which is said once here."""
+    host, f.host = f.host, None
+    if host is None:
+        return True
+    try:
+        joined = host.close()
+    except Exception:  # noqa: BLE001 - closing what is already closed
+        return True
+    if not joined:
+        log.warning("decoder session %s (%s): its decoder thread did not stop and is left running; "
+                    "restart Radio to end it", f.id, f.decoder)
+    return joined
+
+
 def _usb(iq: np.ndarray) -> np.ndarray:
     """Channel IQ to USB audio (the real part: the channel is centred on the
     carrier, so the signal sits at its offset above it)."""
@@ -877,7 +1057,7 @@ def _usb(iq: np.ndarray) -> np.ndarray:
 
 def _stats(st: dict) -> dict:
     out = {"snrDb": st.get("snrDb"), "offsetHz": st.get("offsetHz"), "cpu": st.get("cpu"),
-           "dropped": st.get("dropped", 0)}
+           "fed": st.get("fed", 0), "dropped": st.get("dropped", 0)}
     for k in ("baud", "sync", "chars", "wpm", "frames", "fibsOk", "fibsBad", "audioFrames", "audioErrors",
               "superframes", "aus", "auErrors"):
         if k in st:

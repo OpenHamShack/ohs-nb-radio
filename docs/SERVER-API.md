@@ -124,7 +124,7 @@ A session:
 ```json
 {"id": "ds_3f2a", "decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45, "shift": 170},
  "state": "synced", "why": null, "whyText": "", "since": "2026-10-22T10:00:00Z", "rev": 812,
- "stats": {"snrDb": 14.2, "offsetHz": -12.5, "cpu": 0.004, "dropped": 0}, "panel": "text"}
+ "stats": {"snrDb": 14.2, "offsetHz": -12.5, "cpu": 0.004, "fed": 1440000, "dropped": 0}, "panel": "text"}
 ```
 
 `state` is one of `starting`, `running`, `nosignal`, `synced`, `outside`
@@ -133,6 +133,18 @@ when the span covers it; QO-100 NB only, since Radio pins its span for
 its sessions, below), `budget` (paused at `decodeCpuMax`), `error` or
 `stopped`. `why` is a code and `whyText` the server's sentence for it;
 prefer your own translation of the code (CONTROLLER-CONTRACT §9).
+
+`stats.fed` and `stats.dropped` count the samples given to the session
+and thrown away unread (its decoder fell more than two seconds behind).
+A session fed for three seconds with nearly all of it dropped says why
+(23/10/2026; before then it stayed `starting` and said nothing):
+`decoder_stuck`, with `state` `error`, when its decoder has taken none of
+it - the decoder is caught inside a block and will not come back (shack_sdr
+0.2.0's DAB search can do this on a real receiver); stop the session and
+start it again, and restart the app if that does not help -
+and `decoder_behind` (the state unchanged) when it takes some but cannot
+keep up. Each clears by itself when less than half is dropped. The server
+logs each once, and a stuck one is also a `toast`.
 
 A codec:
 
