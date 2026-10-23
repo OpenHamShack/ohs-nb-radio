@@ -42,7 +42,7 @@ class ModeGroups(unittest.TestCase):
         self.assertEqual(nbg[mg.DIGITAL], ["ft8", "ft4", "q65", "js8", "psk31", "psk63", "psk125", "rtty"])
         self.assertEqual(nbg[mg.PICTURES], ["sstv", "kgstv", "hsmodem"])
         hamg = dict(mg.groups(ham.MODES))
-        self.assertEqual(hamg[mg.VOICE], ["usb", "lsb", "cw", "am", "fm", "freedv"])
+        self.assertEqual(hamg[mg.VOICE], ["usb", "lsb", "cw", "am", "fm", "wfm", "freedv"])
         self.assertNotIn("q65", hamg[mg.DIGITAL])
         self.assertEqual(hamg[mg.PICTURES], ["sstv"])
         # KG-STV is a button only where asked for, never a mode by default.

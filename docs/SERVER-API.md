@@ -57,8 +57,8 @@ the desktop apps.
 | `GET api/overpower` | view | QO-100 NB only (404 `not_found` elsewhere): `{"state", "beacon", "marginDb", "capture", "lastCapture", "events": [...]}` - signals over the middle beacon and LEILA sirens of the last 30 minutes, open ones first, each as ENGINE-API `overpower` describes. The same list comes as `overpower` items on `api/events?kinds=…,overpower` (not in the default set) on every change and once a second while anything is active. A `leila` entry is the siren pattern measured on six real sirens; why LEILA marks a station is unknown, so show it as "LEILA?". Tapping an entry only tunes: `POST api/set {"vfo": …}` at Control level, never TX. |
 | `GET`/`POST`/`DELETE api/smeter/calibrate` | view / control / control | Radio only (404 `not_found` elsewhere, like `api/overpower` above): the S-meter calibration table, below. |
 | `POST api/overpower/capture` | control | save the last 20 s of receive IQ now (the LEILA evidence ring; `leilaCapture` must be on): `202 {"ok": true}`, the file then appears in Recordings as `…-LEILA`; `409 nothing_to_save` with the sentence why not. Receive only. |
-| `GET api/audio/rx` | view | receive audio, raw PCM over a long-lived response: `Content-Type: audio/L16; rate=12000; channels=1`, and `X-Audio-Format: {"encoding": "s16le", "rate": 12000, "channels": 1}` |
-| `GET api/audio/tx` | transmit | WebSocket: binary frames of PCM in the same format are the microphone while it is open (voice modes; keying is still `api/ptt`) |
+| `GET api/audio/rx[?channels=1\|2]` | view | receive audio, raw PCM over a long-lived response, its format in the headers before any audio: `Content-Type: audio/L16; rate=<rate>; channels=<n>` and `X-Audio-Format: {"encoding": "s16le", "rate": <rate>, "channels": <n>}`. The rate is the app's: **48000 for Radio** (since 23/10/2026), 12000 for QO-100 NB. **Mono unless `?channels=2`** (below, "Receive audio format"); `400 bad_channels` for anything but 1 or 2 |
+| `GET api/audio/tx` | transmit | WebSocket: binary frames of PCM are the microphone while it is open (voice modes; keying is still `api/ptt`), always **12 kHz mono s16le** in both apps; the first text frame is `{"kind": "hello", "format": {"encoding": "s16le", "rate": 12000, "channels": 1}}` |
 | `POST api/shack/pad/action` | control (transmit for `power`) | the controller's input host: `{"action", "kind", "step"}` from `<app>/pad-actions.json`; answers the pad faces. `ptt` is refused here: a pad keys through `api/ptt` like any client. |
 | `GET api/shack/busy` | the platform | `{"busy": <on air>, "why"}` for the update gate |
 | `POST api/shack/release` | the platform | the broker asks for the radio back: `409 {"onAir": true}` while keyed (unless `"stop": true`), else `202` and the radio stops |
@@ -140,6 +140,36 @@ fetches the session with `?since=`. `t` is UTC from the samples. Text is
 not yet coalesced: RTTY's results come a character or a few at a time,
 about seven a second at 45.45 Bd.
 
+## Receive audio format
+
+`GET api/audio/rx` is 16-bit signed little-endian PCM, interleaved when it
+has two channels, over a response that never ends (silence while the radio
+is stopped, so a gone client is noticed). The format is announced before
+the first byte and never changes within a response: read the headers and
+play what they say.
+
+- **Rate:** the app's (`audio.rate` in `api/status`): Radio 48000, QO-100
+  NB 12000. No query changes it.
+- **Channels:** mono unless the client asks `?channels=2`. Stereo is opt-in
+  because Remote builds installed before 23/10/2026 follow the announced
+  rate but play every stream as one channel. With `?channels=2` the
+  response is stereo for its whole life, whatever the mode: a mono mode is
+  the same audio on both sides, so a mode change never needs a new
+  header. Without it, a stereo mode is sent averaged (L+R)/2, as a mono
+  FM receiver plays it. `audio.stereo` in `api/status` says whether the
+  current mode is making stereo now (wide FM with its pilot, once the
+  stereo decoder is in).
+
+`api/status` `audio`:
+
+```json
+{"encoding": "s16le", "rate": 48000, "channels": 1, "stereo": false, "listeners": 1,
+ "tx": {"encoding": "s16le", "rate": 12000, "channels": 1}}
+```
+
+`rate`/`channels` are what a request with no query gets; `tx` is
+`api/audio/tx`'s microphone format.
+
 ## S-meter calibration
 
 Radio only (QO-100 NB has no bands, and is outside this: its calibration
@@ -181,9 +211,14 @@ same on Icom and Flex; what is this app's own:
 
 - **`kinds`: `["audio", "iq"]`.** Both may run at once, one of each.
 - **Audio** is what `api/audio/rx` sends - demodulated, after the engine's
-  noise reduction when `nr` is on - as **FLAC**, 12 kHz mono 16-bit: lossless
+  noise reduction when `nr` is on - as **FLAC**, 16-bit at the app's audio
+  rate (`sampleRate`: 48000 for Radio, 12000 for QO-100 NB): lossless
   (a recording can be decoded again later), played by every browser,
-  ExoPlayer and AVPlayer, about 30-45 MB an hour. The sidecar `<id>.json`
+  ExoPlayer and AVPlayer; NB's about 30-45 MB an hour, Radio's about four
+  times that. `channels` is 2 when the mode was making stereo as the
+  recording started (wide FM once its stereo decoder is in), else 1, and
+  holds for the whole file: a later mode change is converted to it (mono
+  on both sides, or stereo averaged). The sidecar `<id>.json`
   has `station` (the callsign), `freqHz` (the receive dial), `mode`,
   `radio` (the device), `processing` (`nr`, `nb`, `agc`), and `changes`
   (frequency and mode as they changed, seconds in). The radio stopping
@@ -321,6 +356,59 @@ end. Code `ohscore/server/autotx.py`, tests `tests/test_server_autotx.py`.
   no Transmit header (a controller older than 5.5) the level alone decides.
 
 Tested only into the simulator: nothing in this server has keyed a radio.
+
+## Wide FM and listening outside the amateur bands (Radio)
+
+What openhamshack-remote `docs/RADIO-LISTEN-CONTRACT.md` §1-2 asked of the
+server, as built on 23/10/2026 (code `ohscore/dsp/wfm.py`,
+`ohsradio/radio.py`; tests `tests/test_ham_wfm.py`,
+`tests/test_ham_listen.py`, `tests/test_core_wfm.py`).
+
+- **`mode: "wfm"`** is in `api/spec`'s `mode` choices and `state.modes`,
+  and is set like any mode: `POST api/set {"changes": {"mode": "wfm"}}`.
+  Mono, 50 us de-emphasis by default; `wfmDeemphasis` (control level,
+  `50` or `75`, unit us) is the other. The audio is the ordinary
+  `api/audio/rx` stream, 48 kHz since 23/10/2026, flat to 15 kHz (it was
+  12 kHz and 5 kHz); stereo (`?channels=2`, and `audio.stereo` in status)
+  and RDS wait for shack_sdr's decoder (RADIO-SDR-PLAN M3). No squelch in
+  wfm: `sqlOpen` reads true.
+- **The passband in state:** `rxFilterLo` and `rxFilterHi`, Hz from the
+  receive dial (`rxDial`), the demodulator's real edges in every mode.
+  wfm is `-90000`/`90000`: a 180 kHz channel, the bank's filter at those
+  edges. In the other modes they are what a client computed before from
+  `filterLo`/`filterHi`, `cwPitch`/`cwWidth` and `amWidth` (FM is
+  ±6250), so drawing from these keys alone is right everywhere.
+- **A receiver too slow for it** (under 240 kS/s; a Hermes-Lite 2 at its
+  default 192 kS/s or at 48) refuses it: `api/set` answers `400` with the
+  sentence, for example "Wide FM needs the receiver to run at 240 kS/s or
+  more, and the hl2 runs at 48 kS/s", and `state.modes.wfm` is
+  `{"decode": false, "encode": false, "missing": "<that sentence>"}`. The
+  RSPdx (2.4 MS/s), RTL-SDR and Pluto (1.2 or 2.4) all take it.
+- **Never transmitted.** In wfm `txBlocked` is "WFM is for listening only:
+  nothing is ever transmitted in it", whatever the dial, the licence or the
+  radio, and every key-up is refused with it (`api/ptt` answers `onAir`
+  false with it in `txError`; `send`, Tune and voice memories alike).
+  `state.modes.wfm.encode` is false.
+- **The listening areas** (contract §2) all receive on an RSPdx: a dial
+  anywhere from the lowest to the highest channel of each is taken, the
+  passband lies inside the receiver's span there, and a station there is
+  heard in the area's mode (tested on an RSPdx-shaped simulator for LW, MW,
+  both CB plans, broadcast FM, airband, marine VHF, DAB Band III's dial,
+  LPD433 and PMR446). On the RSPdx itself transmit is refused as on any
+  receiver ("This radio can only receive"; wfm's own sentence in wfm). On a
+  radio that transmits, outside the amateur bands, the licence refuses
+  with its usual sentence ("118.0056-118.011 MHz is not an amateur band").
+  **LPD433 is the exception:** 433.075-434.775 MHz is inside 70 cm, so a
+  licensed amateur may transmit FM there under the licence and band plan
+  like anywhere else on 70 cm; Remote should not tag that area "RX" as if
+  transmit were impossible.
+- **Dials are whole Hz and are never rounded.** `api/set` keeps
+  `118008333` (an 8.33 kHz channel) to the hertz in `vfo` and `rxDial`,
+  and the engine's channel is cut there exactly (a carrier 1 kHz above it
+  is heard at 1000.0 Hz). Only the radio's centre (DC) moves in 1 kHz
+  steps, which no client sees.
+- **AM is ±4 kHz by default in Radio** (`amWidth` 4000, 1000-5000), wide
+  enough for airband voice and AM broadcast; it was ±3 kHz. NB keeps 3000.
 
 ## What it is not (yet)
 

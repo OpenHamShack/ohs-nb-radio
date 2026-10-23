@@ -12,7 +12,7 @@ from ..modegroups import is_slot
 
 DEFAULT_STEP = {"usb": 50, "lsb": 50, "am": 500, "cw": 10, "ft8": 500, "ft4": 500, "psk31": 10, "psk63": 10,
                 "psk125": 10, "rtty": 10, "freedv": 100, "sstv": 100,
-                "fm": 12500, "wspr": 10}
+                "fm": 12500, "wfm": 100_000, "wspr": 10}
 
 
 def snap(f: float, step: float) -> float:
@@ -34,4 +34,9 @@ def click_to_dial(mode: str, f: float, st: dict, text_offset: float = 1000.0) ->
         # FM channels: 12.5 kHz in the UK on 2 m and 70 cm (a 6.25 kHz grid
         # catches the odd offset simplex and DV channels too).
         return snap(f, 6250)
+    if mode == "wfm":
+        # Broadcast FM sits on a 100 kHz raster, with a few stations on the
+        # 50 kHz between; 50 catches both, and a click on a 180 kHz-wide
+        # station is never more than 25 kHz out.
+        return snap(f, 50_000)
     return snap(f, 100)

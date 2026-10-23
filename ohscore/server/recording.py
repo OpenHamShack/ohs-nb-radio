@@ -5,9 +5,14 @@ The rules - one of each kind at a time, the disk-use limit and the
 free-space floor, the API's shape - are ohs-libs' shack_rec, which Icom and
 Flex share (its README is the contract). What is NB and Radio's own:
 
-- **Audio** is StreamAudio's blocks (12 kHz mono s16le), the ones
-  api/audio/rx sends: demodulated, after the engine's noise reduction when
-  it is on. Encoded as FLAC (shack_rec.flac says why).
+- **Audio** is StreamAudio's blocks (s16le at the engine's OUT_RATE: 48
+  kHz for Radio, 12 kHz for QO-100 NB), the ones api/audio/rx sends:
+  demodulated, after the engine's noise reduction when it is on. Encoded
+  as FLAC (shack_rec.flac says why). Stereo when the mode is making stereo
+  as the recording starts (Radio's wide FM, once its stereo decoder is
+  in), mono otherwise, and that channel count holds for the whole file: a
+  FLAC stream's channel count is in its header, so a later mode change is
+  converted to it (StreamAudio.play), never a second format in one file.
 - **IQ** is the engine's own SigMF recorder (ohscore/sigmf.py, which the
   desktop app has used since 05/10): the device's stream before the
   engine touches it, ci16, playable again through the "file" device and
@@ -31,7 +36,6 @@ from pathlib import Path
 
 from .. import shacklibs, sigmf
 from ..i18n.text import _
-from .audio import FORMAT
 
 log = logging.getLogger("ohscore.server")
 
@@ -116,8 +120,9 @@ class ServerRecordings:
         meta = {**self._facts(), "appName": self.info.name, "version": self.info.version,
                 "station": s.get("callsign") or None, "radio": s.get("device"),
                 "processing": {"nr": s.get("nr"), "nb": s.get("nb"), "agc": s.get("agc")}}
-        r = self.rec.start_audio(FORMAT["rate"], FORMAT["channels"], meta)
-        r.on_close(self.audio.tap(r.push))
+        fmt = self.audio.rx_format(self.radio.audio_channels())
+        r = self.rec.start_audio(fmt["rate"], fmt["channels"], meta)
+        r.on_close(self.audio.tap(r.push, fmt["channels"]))
         t = threading.Thread(target=self._note_loop, args=(r,), name="server-rec-note", daemon=True)
         t.start()
 

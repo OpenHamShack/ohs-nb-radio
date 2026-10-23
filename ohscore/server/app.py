@@ -51,7 +51,7 @@ from ..padactions import PAD_TX_ACTIONS
 from ..i18n.text import _
 from .. import smeter_cal
 from . import shack, ws
-from .audio import FORMAT
+from .audio import CHANNELS, MIC_FORMAT
 from .autotx import AutoTx, Refused
 from .recording import server_recordings
 
@@ -67,7 +67,6 @@ RECLAIM_MAX_S = 30.0
 # real-time silence per wait, so a listener's socket is written and a gone
 # client found (get_audio_rx).
 IDLE_AUDIO_S = 0.5
-IDLE_SILENCE = bytes(int(FORMAT["rate"] * IDLE_AUDIO_S) * 2)
 REMOTE_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 # X-Forwarded-Prefix as the page's <base>: a path, never a host (house rule:
 # no absolute URLs), and nothing that could close the attribute.
@@ -306,7 +305,11 @@ class Server:
                 "device": st.get("device"), "mode": st.get("mode"), "vfo": st.get("vfo"),
                 "txDial": st.get("txDial"), "simulator": bool(st.get("simWhy")),
                 "broker": self.broker.view() if self.broker is not None else None,
-                "audio": {**FORMAT, "listeners": self.audio.listeners()},
+                # What api/audio/rx sends a listener asking nothing (mono),
+                # whether the mode is making stereo now, and the microphone's
+                # format for api/audio/tx.
+                "audio": {**self.audio.rx_format(1), "stereo": self.radio.audio_channels() == 2,
+                          "listeners": self.audio.listeners(), "tx": MIC_FORMAT},
                 "station": self.radio.state().get("station"),
                 "sharedLog": self.shared_log(),
                 # What can be recorded and what is (api/recordings has the rest).
@@ -1204,13 +1207,23 @@ class _Handler(BaseHTTPRequestHandler):
 
     def get_audio_rx(self, who, q):
         """Receive audio as raw PCM over a long-lived response, its format
-        in the headers (GUIDE 2: announced up front)."""
+        in the headers (GUIDE 2: announced up front). Mono unless the
+        client asks `?channels=2` (StreamAudio's docstring says why)."""
+        try:
+            channels = int(q.get("channels", ["1"])[0])
+        except ValueError:
+            channels = 0
+        if channels not in CHANNELS:
+            self._error(400, _("channels must be 1 or 2"), "bad_channels")
+            return
         a = self.srv.audio
-        lq = a.listen()
+        fmt = a.rx_format(channels)
+        silence = bytes(int(fmt["rate"] * IDLE_AUDIO_S) * 2 * channels)
+        lq = a.listen(channels)
         try:
             self.send_response(200)
-            self.send_header("Content-Type", f"audio/L16; rate={FORMAT['rate']}; channels=1")
-            self.send_header("X-Audio-Format", json.dumps(FORMAT))
+            self.send_header("Content-Type", f"audio/L16; rate={fmt['rate']}; channels={channels}")
+            self.send_header("X-Audio-Format", json.dumps(fmt))
             self.send_header("Cache-Control", "no-store")
             self.send_header("Connection", "close")
             self.end_headers()
@@ -1225,7 +1238,7 @@ class _Handler(BaseHTTPRequestHandler):
                     # (and its thread) for good - ohs-box showed 20 from one
                     # TV reconnecting every 7 s. Silence also keeps a client
                     # player fed, like the video stream's null packets.
-                    pcm = IDLE_SILENCE
+                    pcm = silence
                 self.wfile.write(pcm)
         except (OSError, ConnectionError):
             pass
@@ -1233,7 +1246,7 @@ class _Handler(BaseHTTPRequestHandler):
             a.unlisten(lq)
 
     def ws_audio_tx(self, who, q):
-        """A remote microphone: binary frames of PCM in FORMAT, used by PTT
+        """A remote microphone: binary frames of PCM in MIC_FORMAT, used by PTT
         in a voice mode while this socket is open. Transmit level, like
         keying."""
         if not ws.handshake(self):
@@ -1242,7 +1255,7 @@ class _Handler(BaseHTTPRequestHandler):
         a = self.srv.audio
         a.mic_writer = who["device"]
         try:
-            sock.send_text(json.dumps({"kind": "hello", "format": FORMAT}))
+            sock.send_text(json.dumps({"kind": "hello", "format": MIC_FORMAT}))
             while True:
                 fr = sock.recv()
                 if fr is None:
