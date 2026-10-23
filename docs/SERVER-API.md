@@ -67,6 +67,9 @@ the desktop apps.
 | `POST api/recordings/stop {"kind"?}` | control | stop that kind, or both; the status with `stopped` |
 | `GET api/recordings/file?id=&part=data\|meta[&download=1]` | view | one file of a recording; `Range: bytes=…` answers `206` |
 | `POST api/recordings/delete {"id"}` | control | delete a recording (`409 recording_active` while it records) |
+| `GET api/local-frequencies?radiusKm=&category=` | view | Radio only: what there is to listen to near the station (below, "Local frequencies") |
+| `POST api/local-frequencies/mine`, `PUT`/`DELETE api/local-frequencies/mine/{id}` | control | Radio only: the operator's own list ("my frequencies") |
+| `POST api/local-frequencies/refresh` | control **and** the administrator flag | Radio only: download newer data (below) |
 
 ## Decoders
 
@@ -341,6 +344,131 @@ server, as built on 23/10/2026 (code `ohscore/dsp/wfm.py`,
   steps, which no client sees.
 - **AM is ±4 kHz by default in Radio** (`amWidth` 4000, 1000-5000), wide
   enough for airband voice and AM broadcast; it was ±3 kHz. NB keeps 3000.
+
+## Local frequencies (Radio)
+
+What there is to listen to near the station (Brian, 23/10/2026): from the
+station profile's locator, every listening frequency within a radius,
+nearest first, for Remote and the desktop to list and tune. Code
+`ohsradio/localfreq.py`, data `ohsradio/data/localfreq/`, built by
+`tools/localfreq-build.py`; tests `tests/test_ham_localfreq.py` and
+`tests/test_ham_server_localfreq.py`. NB answers `404 not_found`. Nothing
+here transmits or touches the radio: a client tunes with the ordinary
+`POST api/set {"changes": {"vfo": freqHz, "mode": mode}}` and its own step.
+
+**`GET api/local-frequencies?radiusKm=&category=`** (view). `radiusKm` 1 to
+2000 (default the `localRadiusKm` setting, 100, itself settable through
+`api/set` at control); `category` one of `airband`, `enroute`, `marine`,
+`pmr`, `cb`, `lpd`, `beacon`, `mine` (default all). `400 bad_radius` /
+`400 bad_category` otherwise.
+
+```json
+{"locator": "IO75TU", "radiusKm": 100, "generatedAt": "2026-10-23T12:00:00Z",
+ "attributions": [{"source": "OurAirports", "text": "Airfield frequencies from OurAirports (public domain)",
+                   "licence": "Public domain", "url": "https://ourairports.com/data/"}, ...],
+ "entries": [{"id": "ourairports:EGPF:118800000", "category": "airband", "name": "Glasgow Airport",
+              "sub": "TWR Glasgow Tower", "freqHz": 118800000, "mode": "am", "step": 8333,
+              "distanceKm": 4.1, "bearingDeg": 299, "source": "ourairports"},
+             {"id": "itu-marine:16:156800000", "category": "marine", "name": "Marine Ch 16",
+              "sub": "distress, safety and calling", "freqHz": 156800000, "mode": "fm", "step": 25000,
+              "source": "itu-marine"},
+             {"id": "mine:m3f2a9c1d", "category": "mine", "name": "GB3GA", "sub": "", "freqHz": 145712500,
+              "mode": "fm", "source": "mine", "userCategory": "repeater", "notes": "CTCSS 103.5",
+              "locator": "IO75TU", "distanceKm": 0.0, "bearingDeg": 0}],
+ "ncdxf": {"now": {"14100000": {"call": "4U1UN", "location": "United Nations, New York"}, "18110000": {...}, ...},
+           "at": "2026-10-23T12:00:00Z", "nextChangeS": 10.0, "slotSeconds": 10, "cycleSeconds": 180,
+           "frequencies": [14100000, 18110000, 21150000, 24930000, 28200000],
+           "schedule": [{"slot": 0, "call": "4U1UN", "location": "United Nations, New York"}, ...],
+           "credit": "NCDXF/IARU International Beacon Project"}}
+```
+
+- **Order:** by category in the order above; inside one, the entries
+  with a position nearest first, then those without one (the channel
+  tables) in table order. `distanceKm`/`bearingDeg` (from true north) are
+  present only for an entry with a position. An airspace (openAIP) is 0 km
+  when the station is inside it, else the distance to its nearest corner.
+- **`mode`** is Radio's own mode name (`am`, `fm`, `cw`, `usb`...);
+  **`step`** (Hz, optional) the channel raster: 8333 for an 8.33 kHz
+  airband channel (its `freqHz` is the real carrier, 118008333, never the
+  channel's name 118.010), 25000 marine and LPD, 12500 PMR446, 10000 CB,
+  10 the beacons.
+- **`source`:** `ourairports`, `openaip`, `itu-marine`, `hmcg`,
+  `osm-marine`, `channels`, `ncdxf`, `mine`. `attributions` names only
+  the sources with an entry in this answer; a client shows every `text`
+  wherever it shows the list (the licences require it).
+- **The beacons:** five `beacon` entries, one per NCDXF/IARU frequency,
+  their `sub` naming the beacon on it now; `ncdxf.now` is the same per
+  band (keys are `freqHz` as strings), computed from UTC when asked.
+  Each beacon sends 10 s per band, moving up a band each slot, so
+  `nextChangeS` says when to ask again. A beacon may be off the air; the
+  schedule says only whose turn it is.
+- **No locator** in the station profile: positioned sources are left
+  out, the tables and "mine" are listed, and `why` says so.
+- **"Mine"** entries are listed whatever the radius.
+
+**My frequencies** (control): the operator's own list, in the data folder
+(`/data/local-frequencies-mine.json`), not the settings, at most 500.
+
+| Field | Rule |
+|---|---|
+| `name` | 1-60 characters, required |
+| `freqHz` | whole Hz, 10 kHz to 10 GHz, required |
+| `mode` | one of Radio's modes (`api/spec` `mode` choices), required |
+| `category` | 1-30 letters, digits, spaces, `-`, `_` (e.g. `repeater`); default `other`; listed as `userCategory` |
+| `locator` | optional Maidenhead, 4, 6 or 8 characters (gives it a distance) |
+| `sub`, `notes` | optional, 60 and 300 characters |
+
+No other field is accepted (`400 bad_field` naming it), so nothing about
+a person can be stored; line breaks and control characters are refused.
+`POST api/local-frequencies/mine` answers `201` with the entry and its
+`id`; `PUT …/mine/{id}` takes only what changes and answers `200` with the
+entry; `DELETE …/mine/{id}` answers `{"deleted": id}`; an unknown id is
+`404 unknown_entry`. A refusal is `400 {"error", "code": "bad_field",
+"field"}`.
+
+**`POST api/local-frequencies/refresh`**: an administrator's action.
+Radio's levels stop at Transmit, so "admin" is the controller's
+administrator flag (`X-OpenHamShack-Admin: 1`, CONTROLLER-CONTRACT 5.3) on
+a Control-level request; anyone else gets `403 not_admin`. It downloads,
+synchronously (allow a minute: OurAirports is 14 MB of CSV):
+
+- OurAirports' two CSVs (worldwide), replacing the bundled copy;
+- OpenStreetMap marine VHF tags from Overpass within `localRadiusKm` of
+  the station, added to the bundled GB/IE extract;
+- openAIP airspaces with frequencies within the radius, if the module
+  setting `OPENAIP_API_KEY` is set (sent only as the
+  `x-openaip-api-key` header), added to the bundled copy.
+
+Each lands in `/data/localfreq/` and succeeds or fails alone; a failed or
+unreadable one leaves the bundled copy in use. Never run at start-up, never
+needed: a controller with no route out lists the bundled data. `409
+refresh_running` while one runs. The answer:
+
+```json
+{"refreshedAt": "2026-10-23T12:00:00Z",
+ "results": [{"source": "ourairports", "ok": true, "entries": 27407, "why": "", "fetched": "2026-10-23"},
+             {"source": "osm-marine", "ok": true, "entries": 41, "why": "", "fetched": "2026-10-23"},
+             {"source": "openaip", "ok": false, "entries": 0, "why": "No openAIP API key is set"}],
+ "sources": [{"source": "ourairports", "entries": 27407, "fetched": "2026-10-23", "coverage": "worldwide",
+              "attribution": {...}, "refreshable": true}, ...]}
+```
+
+**The data and its licences**, each file with its own notice
+(`<name>.LICENCE.txt`) beside it:
+
+| File | From | Licence, attribution | Bundled coverage |
+|---|---|---|---|
+| `ourairports.json.gz` | OurAirports `airports.csv`, `airport-frequencies.csv` | public domain | worldwide: airfields (not closed) with a 118-137 or 225-400 MHz frequency; CNTR/ACC/CTR/FIR under `enroute` |
+| `openaip.json` | openAIP API | CC BY-NC 4.0, "Contains data from openAIP (www.openaip.net), CC BY-NC 4.0" | empty in a release built without a key; filled around the station by Refresh |
+| `osm-marine.json` | OpenStreetMap via Overpass (`vhf`, `contact:vhf`, `seamark:radio_station:channel` and the other tags in `OSM_VHF_KEYS`) | ODbL 1.0 (a derived database), "Contains information from OpenStreetMap, which is made available here under the Open Database License (ODbL)" | GB, IE, IM, JE, GG |
+| `hmcg.json` | MCA Advice Note 1033 (4 April 2025), Table 5 | OGL v3.0, "Contains public sector information licensed under the Open Government Licence v3.0" | UK: the MSI aerials (positions approximate, to about 5 km) and Ch 67 |
+| `itu-marine.json` | ITU RR Appendix 18 (plus the UK's M and M2) | facts | the channel plan |
+| `channels.json` | CEPT ERC Rec 70-03, Ofcom IR 2030 | facts | PMR446 16, CB CEPT 40 FM, CB UK 27/81 40, LPD433 69 |
+| `ncdxf.json` | NCDXF/IARU International Beacon Project | credited | 18 beacons, 5 frequencies |
+
+Not used, by Brian's choice: RepeaterBook, UKRepeater/ETCC, G3USF's list,
+NATS AIP, VATSIM. No repeater list is shipped; repeaters are the
+operator's own entries.
 
 ## What it is not (yet)
 
