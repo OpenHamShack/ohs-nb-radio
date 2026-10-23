@@ -222,6 +222,10 @@ class _Fixed:
         self.phase = 0.0
         self.channels = 1
         self.dry = 0.0
+        # Its channel of the bank: the decimation (None: 12 kHz) and the
+        # filter's edge (None: the bank's default for the rate).
+        self.d: int | None = None
+        self.cutoff: float | None = None
         # The host it runs on: the engine's, or a held session's own.
         self.host = None
         # The starvation watch: (monotonic t, fed, dropped) once a second
@@ -399,12 +403,15 @@ class Decoders:
             if pin is None and not self._covers(freq, entry):
                 raise Refused("outside_span", _("{freq} is outside what the receiver covers now")
                               .format(freq=_mhz(freq)))
+            d, cutoff = self._channel_for(entry)
+            rate = self.engine.geo.fs / d
             try:
-                sid = host.start(decoder, params, input=kind, rate=AUDIO_RATE)
+                sid = host.start(decoder, params, input=kind, rate=rate)
             except m.DecoderError as e:
                 raise self._refusal(e) from None
             f = _Fixed(sid, decoder, freq, params, entry.get("panel", "text"))
             f.kind, f.pitch, f.half, f.host = kind, pitch, half, host
+            f.d, f.cutoff = d, cutoff
             self.fixed[sid] = f
             if pin is not None:
                 self.engine.pin_to(pin)
@@ -413,6 +420,34 @@ class Decoders:
             self._save()
         self._publish_status()
         return self._view(f)
+
+    def _channel_for(self, entry: dict) -> tuple[int, float | None]:
+        """The bank's decimation and channel filter edge for an unheld
+        session of `entry`: 12 kHz for the narrow decoders, as always; for
+        one that needs wider IQ (wide FM: 240 kS/s, 144 at least) the
+        bank's smallest decimation that gives its rate, the filter at the
+        edges of its channel - the cut Radio's own wide FM mode makes
+        (ohsradio/radio.py). Raises Refused rate_too_low when the receiver
+        is too slow even for the least it takes.
+
+        Before 23/10/2026 every unheld session started at 12 kHz, so `wfm`
+        - fixed, available, in the catalogue - was refused on every
+        receiver ("The receiver's samples do not suit this decoder (rate)").
+        It is not a held session as DAB is: its 180 kHz channel is one the
+        bank already cuts, so it can sit beside the dial and the other
+        sessions in a pinned span instead of taking the receiver away."""
+        want = float(entry.get("rateHz") or AUDIO_RATE)
+        geo = self.engine.geo
+        if want <= AUDIO_RATE:
+            return geo.decimation_for(AUDIO_RATE), None
+        d = geo.decimation_for(want)
+        least = float(entry.get("minRateHz") or want)
+        if geo.fs / d < least - 1e-6:
+            raise Refused("rate_too_low", _("{decoder} needs the receiver to run at {least:g} kS/s or more, and it "
+                                            "runs at {rate:g} kS/s").format(decoder=entry["id"].upper(),
+                                                                           least=least / 1e3, rate=geo.fs / 1e3))
+        edge = float(entry.get("bandwidthHz") or 0.0) / 2
+        return d, (edge if 0 < edge < geo.fs / d / 2 else None)
 
     def _start_held(self, m, entry: dict, freq_hz, params: dict, drop_sessions: bool = False) -> dict:
         """A session that takes the receiver (module docstring, "Held
@@ -673,7 +708,7 @@ class Decoders:
             if f.held:
                 continue
             off = self.engine._off(f.freq - f.pitch)
-            inside = abs(off) + 1500.0 <= SPAN_USABLE * geo.fs / 2
+            inside = abs(off) + max(1500.0, f.half) <= SPAN_USABLE * geo.fs / 2
             if inside == f.outside:
                 f.outside = not inside
                 try:
@@ -683,7 +718,7 @@ class Decoders:
             if f.outside:
                 continue
             if f.ch is None or f.ch.g is not geo:
-                f.ch = Channel(geo, geo.decimation_for(AUDIO_RATE), freq=off)
+                f.ch = Channel(geo, f.d or geo.decimation_for(AUDIO_RATE), freq=off, cutoff=f.cutoff)
             f.ch.set_freq(off)
             iq = f.ch.take(X, starts)
             if not len(iq):
@@ -913,8 +948,10 @@ class Decoders:
                 "why": why, "whyText": _why_text(why), "since": _iso(st.get("since")), "rev": st.get("rev", 0),
                 "stats": _stats(stats), "panel": f.panel}
         if f.held:
-            view.update(holdsReceiver=True, block=f.block,
-                        meta=_worded_meta(st["meta"]) if isinstance(st.get("meta"), dict) else None)
+            view.update(holdsReceiver=True, block=f.block)
+        if f.held or f.panel == "meta":
+            # The decoder's last feed (DAB's ensemble, wide FM's RDS).
+            view["meta"] = _worded_meta(st["meta"]) if isinstance(st.get("meta"), dict) else None
         return view
 
     def _vfo_view(self, vfo) -> dict:

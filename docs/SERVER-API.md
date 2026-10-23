@@ -79,8 +79,11 @@ the desktop apps.
 
 Decoders running beside the mode's, each on a frequency of its own,
 whatever the dial does (ENGINE-API `decoders`, RADIO-SDR-PLAN §4.4 in the
-openhamshack repo). Two so far: DAB (Radio, below: it takes the whole
-receiver) and RTTY (45.45, 50, 75 Bd; 170, 425,
+openhamshack repo). DAB (Radio, below: it takes the whole receiver), wide
+FM (`wfm`: a 240 kS/s channel of its own, `panel` `meta`, its RDS as the
+session's `meta`; refused on every receiver before 23/10/2026, and now
+`409 rate_too_low` only below 144 kS/s), CW through shack_cw, and RTTY
+(45.45, 50, 75 Bd; 170, 425,
 450, 850 Hz; normal or reversed), shack_sdr's Rust decoder, the same one
 the RTTY mode now uses. Nothing here transmits. The mode decoder itself is
 unchanged: its decodes still come as `events`, and it is listed as the

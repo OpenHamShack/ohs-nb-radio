@@ -62,6 +62,7 @@ EMPTY_BLOCK = "12B"                 # what ohs-box was asked for; nothing on it 
 HOME = 145_500_000.0
 RTTY_HZ = 145_300_000.0             # both inside the span around HOME (+-1.08 MHz at 2.4 MS/s)
 CW_HZ = 145_700_000.0
+WFM_HZ = 144_800_000.0             # a broadcast-shaped station on the test air, 700 kHz below the dial
 TEXT = "CQ TEST DE GM4BRI"
 # An RSP's own DC residue at the centre of every capture, about -45 dBFS:
 # what Radio's DC blocker (dcBlock auto, on for device soapy) takes out
@@ -112,6 +113,22 @@ class Rtty:
         base = np.interp(s, i, self.z.real, period=len(self.z)) + 1j * np.interp(s, i, self.z.imag,
                                                                                  period=len(self.z))
         return (base * np.exp(2j * np.pi * (self.hz - centre) * t)).astype(np.complex64)
+
+
+class Wfm:
+    """shack_sdr's wide FM test transmitter (stereo, RDS "TEST FM ") on
+    `hz`, made at the receiver's own rate once, two seconds looped."""
+
+    def __init__(self, hz, level_db=-30.0):
+        from shack_sdr import _native
+        self.hz = hz
+        z = np.frombuffer(_native.testsig_wfm(seconds=2.0, rate=FS), np.complex64)
+        self.z = (z * np.float32(10 ** (level_db / 20) / (np.sqrt(np.mean(np.abs(z) ** 2)) + 1e-12)))
+
+    def iq(self, k, n, centre):
+        t = (k + np.arange(n)) / FS
+        return (self.z[(k + np.arange(n)) % len(self.z)] * np.exp(2j * np.pi * (self.hz - centre) * t)) \
+            .astype(np.complex64)
 
 
 MORSE = {"C": "-.-.", "Q": "--.-", "T": "-", "E": ".", "S": "...", "D": "-..", "G": "--.", "M": "--",
@@ -205,6 +222,8 @@ class RspStandIn:
             time.sleep(due - now)
         z = (self.rng.standard_normal(2 * n).astype(np.float32) * np.float32(1e-3)).view(np.complex64)
         for st in self.AIR:
+            if abs(st.hz - self.centre) > self.rate / 2:
+                continue                # outside what the receiver hears (and it would alias in)
             y = st.iq(self.k, n, self.centre)
             if y is not None:
                 z = z + y
@@ -255,7 +274,7 @@ def text_of(view):
 @unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
 class ThroughTheRsp(unittest.TestCase):
     def setUp(self):
-        RspStandIn.AIR = [Dab(DAB_BLOCK), Rtty(RTTY_HZ, TEXT), Cw(CW_HZ, TEXT)]
+        RspStandIn.AIR = [Dab(DAB_BLOCK), Rtty(RTTY_HZ, TEXT), Cw(CW_HZ, TEXT), Wfm(WFM_HZ)]
         RspStandIn.DIP = False
 
     def test_a_dab_station_plays_at_2_4_ms_with_nothing_dropped(self):
@@ -291,6 +310,20 @@ class ThroughTheRsp(unittest.TestCase):
             self.assertIsNone(view["why"], view)
             self.assertGreater(view["stats"]["fed"], 0, view)
             self.assertEqual(view["stats"]["dropped"], 0, view)
+
+
+    def test_a_wide_fm_session_reads_its_rds_at_2_4_ms(self):
+        # Refused on every receiver before 23/10/2026: every unheld session
+        # was started at 12 kHz. Its channel is now 240 kS/s from the bank.
+        r, _audio = rsp_radio(self)
+        sess = r.decoders.start("wfm", WFM_HZ)
+        self.assertEqual(sess["panel"], "meta")
+        self.assertTrue(wait(r, lambda: ((r.decoders.session(sess["id"])["meta"] or {}).get("ps") or "").strip()
+                             == "TEST FM"), r.decoders.session(sess["id"]))
+        view = r.decoders.session(sess["id"])
+        self.assertIsNone(view["why"], view)
+        self.assertEqual(view["stats"]["dropped"], 0, view)
+        self.assertEqual(r.decoders.host.status(sess["id"])["rate"], 240_000.0)
 
 
 @unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
