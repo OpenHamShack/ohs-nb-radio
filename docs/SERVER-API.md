@@ -82,12 +82,15 @@ whatever the dial does (ENGINE-API `decoders`, RADIO-SDR-PLAN §4.4 in the
 openhamshack repo). DAB (Radio, below: it takes the whole receiver), wide
 FM (`wfm`: a 240 kS/s channel of its own, `panel` `meta`, its RDS as the
 session's `meta`; refused on every receiver before 23/10/2026, and now
-`409 rate_too_low` only below 144 kS/s), CW through shack_cw, and RTTY
+`409 rate_too_low` only below 144 kS/s), CW through shack_cw, RTTY
 (45.45, 50, 75 Bd; 170, 425,
-450, 850 Hz; normal or reversed), shack_sdr's Rust decoder, the same one
-the RTTY mode now uses. Nothing here transmits. The mode decoder itself is
-unchanged: its decodes still come as `events`, and it is listed as the
-session `vfo` while the mode is decoded by shack_sdr.
+450, 850 Hz; normal or reversed), and since 23/10/2026 PSK31/63/125
+(`psk`, several stations in one session) and SSTV (`sstv`, fourteen
+modes, pictures as files): shack_sdr's Rust decoders, the same ones the
+RTTY, PSK and SSTV modes now use (below, "PSK" and "SSTV"). Nothing here
+transmits. The mode decoder itself is unchanged: its decodes still come
+as `events`, and it is listed as the session `vfo` while the mode is
+decoded by shack_sdr.
 
 | Method, path | Level | Does |
 |---|---|---|
@@ -97,10 +100,11 @@ session `vfo` while the mode is decoded by shack_sdr.
 | `GET api/decoders/sessions/{id}?since=<rev>` | view | the session, with `results`: its kept results (the last 500 or 30 minutes) newer than `rev`. Fetch it after a gap in `rev`. `404 unknown_session`. |
 | `POST api/decoders/sessions/{id}` | control | `{"params": {"service": "C3A7"}}`: change a running session's parameters live (DAB's station). `200` with the session; `400 bad_params` (a value the decoder refuses, or another DAB block), `404 unknown_session` |
 | `POST api/decoders/codecs/rescan` | control | look for codecs again without a restart: `{"codecs": [...]}`; also looks at the controller's host libraries again (`hostLibs`) |
+| `GET api/decoders/files` | view | the pictures decoders saved (SSTV's, whether a session's or the mode's), newest first: `{"files": [{"name", "session", "decoder", "t", "size"}...]}`. `t` is UTC seconds, `size` bytes; `session` and `decoder` are `""` for a picture saved before 23/10/2026. Answers with the radio stopped too. |
+| `GET api/decoders/files/{name}[?download=1]` | view | one of them, `Content-Type: image/png`; `download=1` adds `Content-Disposition: attachment`. `404 no_file` for a name not in the list (a path or a dotted name included). |
 
 A DAB session's sound replaces the demodulator's (below). Not yet:
-`listen` for other sessions (M3) and `api/decoders/files` (a picture a
-decoder saved, M2).
+`listen` for other sessions (M3).
 
 An entry (the catalogue):
 
@@ -170,6 +174,106 @@ says to ask the administrator. Results on `api/events?kinds=…,decoder`
 fetches the session with `?since=`. `t` is UTC from the samples. Text is
 not yet coalesced: RTTY's results come a character or a few at a time,
 about seven a second at 45.45 Bd.
+
+A session whose decoder sends `meta` (wide FM, PSK, SSTV; DAB below)
+carries the latest as `meta` in the session, and each new one comes as a
+`meta` result.
+
+### PSK
+
+`psk` decodes PSK31, PSK63 and PSK125 (BPSK, Varicode; no QPSK), several
+stations in one session. Its frequency is a centre; `params.channels`
+lists the stations as offsets in Hz from it, comma-separated, up to 16
+(`"-400,0,350"`; default `"0"`, the one on its frequency). Other params:
+`baud` 31.25, 62.5 or 125 (31.25), `afc` (true) and `afcRangeHz` 0-100
+(15, each side of each channel), `squelch` 0-20 dB (3; 0 is off). All
+change live through `POST api/decoders/sessions/{id}` - a waterfall tap
+sends the list with one more offset - and a channel kept in the new list
+keeps its lock; a list of more than 16 is `400 bad_params`. A channel the
+session's band cannot hold makes the session `error` with why
+`channel_outside`.
+
+```json
+{"kind": "decoder", "session": "ds_7c10", "rev": 41, "t": 1792663200.25, "type": "text", "text": "C", "offsetHz": -399.2, "snrDb": -9.8}
+{"kind": "decoder", "session": "ds_7c10", "rev": 42, "t": 1792663201.0, "type": "meta",
+ "fields": {"channels": [{"offsetHz": -400.0, "freqHz": -399.2, "sync": true, "snrDb": -9.6, "imdDb": -28.4},
+                         {"offsetHz": 350.0, "freqHz": 350.0, "sync": false, "snrDb": null, "imdDb": null}], "whyText": ""}}
+```
+
+One `text` result per character, `t` its first symbol's time. Its
+`offsetHz` is the frequency it was heard on, from the session's centre:
+route it to the nearest of the session's channels, one line per channel.
+`snrDb` is in 2.5 kHz (add 19 dB at 31.25 Bd for the symbol's own
+bandwidth). Characters come about a second after they were sent at
+PSK31. `meta` comes once a second while a channel hears a signal: per
+channel its `offsetHz` (as given), `freqHz` (where it is tracking, same
+reference), `sync`, `snrDb` and `imdDb` (null until the tones stand 20 dB
+over the noise). `stats` adds `chars` and `channels`.
+
+**The PSK modes** (`psk31`, `psk63`, `psk125` in `api/set mode`) are the
+same decoder as the session `vfo`. Their `events` keep their shape -
+`{"mode": "psk31", "text", "center", "df", "snr"}`, `center` and `df` the
+audio frequency (Hz above the dial) the station is on, `snr` in the
+symbol's bandwidth as before - and add `channel`, the audio frequency of
+the channel it belongs to. The mode's own channel is at 1000 Hz;
+**`pskChannels`** (control, `POST api/set`, not kept over a restart) adds
+up to 15 more, audio frequencies 200-2900 Hz above the dial
+(`{"pskChannels": [1450, 1720]}`; `[]` for none). Show a character whose
+`channel` is not 1000 on that station's own line. The `vfo` session's
+`params.channels` are offsets from its `audioCentreHz` (1500), not from
+the dial. PSK125 transmits as PSK31 and PSK63 do.
+
+### SSTV
+
+`sstv` receives pictures in fourteen modes - `martin1`, `martin2`,
+`scottie1`, `scottie2`, `scottiedx`, `robot36`, `robot72`, `pd50`, `pd90`,
+`pd120`, `pd160`, `pd180`, `pd240`, `pd290` - from a VIS header, or from a
+run of line syncs when the header was missed (joined part way). Its
+frequency is the picture's **1900 Hz leader**: an SSB dial plus 1900.
+Params: `mode` ("" for any, the default, or one of the ids), `syncStart`
+(true: start from line syncs), `afcRangeHz` 0-150 (150). `panel` is
+`image`.
+
+```json
+{"kind": "decoder", "session": "ds_51e0", "rev": 1, "t": 1792663200.5, "type": "image", "event": "start", "width": 320, "height": 240, "format": "rgb"}
+{"kind": "decoder", "session": "ds_51e0", "rev": 3, "t": 1792663200.5, "type": "image", "event": "lines", "from": 0, "rgb": "<base64>"}
+{"kind": "decoder", "session": "ds_51e0", "rev": 168, "t": 1792663236.9, "type": "image", "event": "done", "file": "ds_51e0_sstv_20261023-101500Z_robot36.png"}
+{"kind": "decoder", "session": "ds_51e0", "rev": 167, "t": 1792663236.9, "type": "meta",
+ "fields": {"state": "done", "mode": "robot36", "vis": 8, "partial": false, "width": 320, "height": 240, "rows": 240,
+            "started": 1792663200.5, "slantPpm": 1.8, "snrDb": 32.9, "offsetHz": -0.1, "syncs": 239, "missed": 0,
+            "corrected": true, "file": "ds_51e0_sstv_20261023-101500Z_robot36.png", "whyText": ""}}
+```
+
+The picture is progressive: `lines` carries rows from row `from` (0 at
+the top), `rgb` base64 of `width` x 3 bytes a row, several rows a result,
+as they are read. A row may come again - when the picture ends the
+decoder straightens it and resends the rows that moved - and is simply
+painted again. `done` names the PNG in `api/decoders/files`
+(`file`; never a path), which is the finished picture to show and keep.
+`meta`, every sixteen rows and at the end, says `state` (`receiving`,
+`done`, or `lost` for a picture that stopped before its end), the `mode`,
+`partial` (joined part way: it starts wherever it was joined), the
+sender's sound card (`slantPpm`), `snrDb` in 2.5 kHz and `offsetHz`. A
+header for a mode not decoded is `{"state": "unsupported", "mode", "vis"}`
+and one too weak to read `{"state": "bad_vis"}`; no picture follows
+either. `stats` adds `images`, `partials`, `lines`, `visHeard`, `visBad`.
+
+**The SSTV mode** is the same decoder as the session `vfo`, fed the
+dial's audio; its `events` keep their shape -
+`{"mode": "sstv", "state": "start", "name", "fmt", "width", "height"}`
+(`partial: true` when joined part way), `{"state": "line", "name",
+"line", "of", "row"}` (`line` from 1, `row` base64 RGB) and `{"state":
+"done", "name", "path"}` - with two changes: `fmt` is the id above
+(`martin1`, where it was `martinm1`), and `done` adds **`file`**, the
+name to fetch from `api/decoders/files/{file}`, which is what a client
+should keep rather than only what it painted. A header the decoder
+cannot read is `{"mode": "sstv", "state": "unsupported" | "bad_vis",
+"fmt"}`. Sending SSTV is unchanged: Robot 36, Martin M1, Scottie S1 and
+PD120 (`sstvMode` `robot36`, `martinm1`, `scottie_s1`, `pd120`).
+
+Pictures are kept in the app's data folder (`sstv/`); past
+`decoderFilesKeep` (a setting, default 100) the oldest the decoders saved
+are deleted after each new one.
 
 ## The pinned span (Radio)
 
