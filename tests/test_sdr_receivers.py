@@ -262,10 +262,12 @@ class FakeSdrplaySource:
 
     ANTENNAS = ("Antenna A", "Antenna B", "Antenna C")
 
-    def __init__(self, centre, rate, gain, *, serial=None, lna_state=4, antenna=None):
+    def __init__(self, centre, rate, gain, *, serial=None, lna_state=4, antenna=None,
+                 gain_model="reduction", agc_setpoint=-60):
         self.centre, self.rate, self.gain = centre, rate, gain
         self.serial, self.lna_state = serial, lna_state
         self.antenna = antenna
+        self.gain_model, self.agc_setpoint = gain_model, agc_setpoint
         self.opened = False
         self.switches: list[str] = []
 
@@ -656,6 +658,31 @@ class SoapySdrplayGainThroughTheApi(unittest.TestCase):
         self.ARGS = "driver=sdrplay,rfgain_sel=4,agc_setpoint=-40"
         self.open(rxGainMode="slow_attack")
         self.assertEqual(self.log()[0]["setpoint"], -40)
+
+    def test_the_device_asks_the_source_for_soapysdrplay3s_gain_model(self):
+        # SoapySdrplayDevice used to get SoapySDRPlay3's sense by
+        # subclassing SdrplaySource and overriding its private
+        # _set_gain_fields; shack_sdr now offers that sense as a public
+        # constructor option, so the source it opens is the library's own
+        # class, unmodified, asked for that option - never a stand-in with
+        # an extra method of its own.
+        from shack_sdr.sources import SdrplaySource
+
+        from ohscore.devices.sdrsource import SOAPY_AGC_SETPOINT
+        dev = self.open(rxGainMode="manual", rxGain=40.0)
+        self.assertIs(type(dev.src), SdrplaySource)
+        self.assertEqual(dev.src.gain_model, "soapysdrplay3")
+        self.assertEqual(dev.src.agc_setpoint, SOAPY_AGC_SETPOINT)
+
+    def test_overload_and_api_counters_are_in_status(self):
+        # Parity with SoapySDRPlay3 (ohs-libs shack_sdr README "SDRplay:
+        # parity with SoapySDRPlay3") also brought overload acknowledgement
+        # and api-side drop counting; the stub API never raises either, so
+        # this only checks the fields reach deviceStatus, not that they
+        # move.
+        dev = self.open(rxGainMode="manual", rxGain=40.0)
+        st = dev.status()
+        self.assertEqual((st["overloads"], st["apiGaps"], st["apiLost"]), (0, 0, 0))
 
     def test_the_engine_reports_the_gain_it_was_asked_for(self):
         r = make_radio(device="soapy", soapyArgs=self.ARGS, soapyAntenna="Antenna A", sampleRate=2_400_000,
