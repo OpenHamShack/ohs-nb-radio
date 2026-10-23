@@ -409,6 +409,25 @@ class OverTheApi(unittest.TestCase):
         self.assertEqual(a["hostLibs"], {})        # not the store form: nothing to say
 
 
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class NotInQo100Nb(unittest.TestCase):
+    def test_nb_lists_dab_as_not_for_its_receiver_and_refuses_it(self):
+        import helpers
+        from ohscore.audio import NullAudio
+        from ohsnb.radio import Radio as NbRadio
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        r = NbRadio(helpers.sim_cfg(), persist=False, data_dir=tmp.name, audio=NullAudio(realtime=False))
+        said = "This app's receiver stays on its own frequencies and cannot play DAB"
+        (dab,) = [e for e in r.decoders.catalogue() if e["id"] == "dab"]
+        self.assertEqual((dab["available"], dab["why"], dab["whyText"]), (False, "receiver_fixed", said))
+        self.addCleanup(r.stop)
+        r.start()
+        with self.assertRaises(Refused) as cm:
+            r.decoders.start("dab", CENTRE, {})
+        self.assertEqual((cm.exception.code, str(cm.exception)), ("decoder_unavailable", said))
+
+
 class HostLibraries(unittest.TestCase):
     """ohscore/hostlibs.py: a controller with host libraries, and one too
     old to have them (SHACK_HOSTLIBS unset in the store form)."""

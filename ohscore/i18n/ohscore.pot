@@ -5,7 +5,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language: en\n"
 
-#: ohscore/decoders.py:338
+#: ohscore/decoders.py:343
 #: ohscore/engine.py:1800
 #, python-brace-format
 msgid "A DAB station on block {block} already has the receiver: stop it first"
@@ -46,12 +46,12 @@ msgstr ""
 msgid "A reply needs the decode's slot"
 msgstr ""
 
-#: ohscore/decoders.py:415
+#: ohscore/decoders.py:420
 #, python-brace-format
 msgid "A session stays on its block: stop it and start one on {block}"
 msgstr ""
 
-#: ohscore/decoders.py:107
+#: ohscore/decoders.py:108
 msgid "A signal, but not DAB, or too weak to lock to."
 msgstr ""
 
@@ -90,7 +90,7 @@ msgstr ""
 msgid "Ask your controller's administrator to install SDRplay's API (Controller › Optional libraries) to use this radio."
 msgstr ""
 
-#: ohscore/decoders.py:762
+#: ohscore/decoders.py:767
 #, python-brace-format
 msgid "Ask your controller's administrator to install {codec} (Controller › Optional libraries)."
 msgstr ""
@@ -194,7 +194,7 @@ msgstr ""
 msgid "Best guess {shift:+d} Hz: press Auto-tune again to try it."
 msgstr ""
 
-#: ohscore/decoders.py:392
+#: ohscore/decoders.py:397
 #, python-brace-format
 msgid "Block {block} is centred on {centre}, not {freq}"
 msgstr ""
@@ -228,7 +228,7 @@ msgstr ""
 msgid "Could not save settings: {error}"
 msgstr ""
 
-#: ohscore/decoders.py:108
+#: ohscore/decoders.py:109
 msgid "DAB heard, but too weak to read the station list."
 msgstr ""
 
@@ -270,7 +270,7 @@ msgstr ""
 msgid "Each decoder session needs a frequency in hertz"
 msgstr ""
 
-#: ohscore/decoders.py:752
+#: ohscore/decoders.py:757
 #, python-brace-format
 msgid "Found: {path}"
 msgstr ""
@@ -287,7 +287,7 @@ msgstr ""
 msgid "Give params"
 msgstr ""
 
-#: ohscore/decoders.py:396
+#: ohscore/decoders.py:401
 msgid "Give the block's centre frequency (freqHz) or its name (params.block)"
 msgstr ""
 
@@ -346,20 +346,20 @@ msgstr ""
 msgid "Mode"
 msgstr ""
 
-#: ohscore/decoders.py:125
+#: ohscore/decoders.py:126
 msgid "Needs faad2: ask your controller's administrator to install it (Controller › Optional libraries) to hear DAB+ stations."
 msgstr ""
 
-#: ohscore/decoders.py:127
+#: ohscore/decoders.py:128
 msgid "Needs faad2: install it to hear DAB+ stations. Radio never includes it: see Help › Codecs."
 msgstr ""
 
-#: ohscore/decoders.py:258
+#: ohscore/decoders.py:263
 #, python-brace-format
 msgid "Needs {codec} for part of what it decodes."
 msgstr ""
 
-#: ohscore/decoders.py:106
+#: ohscore/decoders.py:107
 msgid "No DAB signal on this block."
 msgstr ""
 
@@ -368,7 +368,7 @@ msgstr ""
 msgid "No memory called {name}"
 msgstr ""
 
-#: ohscore/decoders.py:690
+#: ohscore/decoders.py:695
 msgid "No more decoders can run at once"
 msgstr ""
 
@@ -390,12 +390,12 @@ msgstr ""
 msgid "Not a WAV file this program can read ({error}): save it as 16-bit PCM WAV"
 msgstr ""
 
-#: ohscore/decoders.py:765
+#: ohscore/decoders.py:770
 #, python-brace-format
 msgid "Not found: {codec} is normally included; reinstalling the program puts it back."
 msgstr ""
 
-#: ohscore/decoders.py:766
+#: ohscore/decoders.py:771
 #, python-brace-format
 msgid "Not installed. This program never includes {codec}: install it yourself, or put it in the codecs folder."
 msgstr ""
@@ -588,9 +588,9 @@ msgstr ""
 msgid "Size"
 msgstr ""
 
-#: ohscore/decoders.py:696
-#: ohscore/decoders.py:298
-#: ohscore/decoders.py:335
+#: ohscore/decoders.py:701
+#: ohscore/decoders.py:303
+#: ohscore/decoders.py:340
 #: ohscore/engine.py:1796
 msgid "Start the radio before adding a decoder"
 msgstr ""
@@ -624,7 +624,7 @@ msgstr ""
 msgid "Stop recording before playing a recording"
 msgstr ""
 
-#: ohscore/decoders.py:115
+#: ohscore/decoders.py:116
 #, python-brace-format
 msgid "Stopped ({code})."
 msgstr ""
@@ -696,7 +696,7 @@ msgstr ""
 msgid "The controller's services did not answer ({why})"
 msgstr ""
 
-#: ohscore/decoders.py:687
+#: ohscore/decoders.py:692
 #, python-brace-format
 msgid "The decoder does not take those settings ({detail})"
 msgstr ""
@@ -706,7 +706,7 @@ msgstr ""
 msgid "The decoder failed and was stopped; the log has the details."
 msgstr ""
 
-#: ohscore/decoders.py:702
+#: ohscore/decoders.py:707
 #, python-brace-format
 msgid "The decoder would not start ({code})"
 msgstr ""
@@ -721,9 +721,9 @@ msgstr ""
 msgid "The filter is fixed in {mode}"
 msgstr ""
 
-#: ohscore/decoders.py:294
-#: ohscore/decoders.py:383
-#: ohscore/decoders.py:380
+#: ohscore/decoders.py:299
+#: ohscore/decoders.py:388
+#: ohscore/decoders.py:385
 msgid "The frequency must be a number of hertz"
 msgstr ""
 
@@ -771,7 +771,7 @@ msgstr ""
 msgid "The receiver is playing DAB from block {block}: stop the DAB station to tune or change mode"
 msgstr ""
 
-#: ohscore/decoders.py:698
+#: ohscore/decoders.py:703
 #, python-brace-format
 msgid "The receiver's samples do not suit this decoder ({detail})"
 msgstr ""
@@ -811,7 +811,7 @@ msgstr ""
 msgid "The voice keyer stopped repeating: {error}"
 msgstr ""
 
-#: ohscore/decoders.py:757
+#: ohscore/decoders.py:762
 #, python-brace-format
 msgid "The {codec} in {path} was refused: {reason}."
 msgstr ""
@@ -866,8 +866,8 @@ msgstr ""
 msgid "The {radio} would not take a setting."
 msgstr ""
 
-#: ohscore/decoders.py:301
-#: ohscore/decoders.py:342
+#: ohscore/decoders.py:306
+#: ohscore/decoders.py:347
 #, python-brace-format
 msgid "There are already {n} decoders running, the most Settings › Decoders allows"
 msgstr ""
@@ -876,7 +876,7 @@ msgstr ""
 msgid "There are no memories to step through"
 msgstr ""
 
-#: ohscore/decoders.py:390
+#: ohscore/decoders.py:395
 #, python-brace-format
 msgid "There is no DAB block called {block}"
 msgstr ""
@@ -885,14 +885,14 @@ msgstr ""
 msgid "There is no call in that message to answer"
 msgstr ""
 
-#: ohscore/decoders.py:284
-#: ohscore/decoders.py:692
+#: ohscore/decoders.py:289
+#: ohscore/decoders.py:697
 #, python-brace-format
 msgid "There is no decoder called {name}"
 msgstr ""
 
-#: ohscore/decoders.py:409
-#: ohscore/decoders.py:701
+#: ohscore/decoders.py:414
+#: ohscore/decoders.py:706
 #: ohscore/server/app.py:993
 #: ohscore/server/app.py:1001
 #, python-brace-format
@@ -944,6 +944,7 @@ msgstr ""
 msgid "This app has no over-power watch."
 msgstr ""
 
+#: ohscore/decoders.py:104
 #: ohscore/engine.py:1794
 msgid "This app's receiver stays on its own frequencies and cannot play DAB"
 msgstr ""
@@ -969,11 +970,11 @@ msgstr ""
 msgid "This radio can only receive"
 msgstr ""
 
-#: ohscore/decoders.py:109
+#: ohscore/decoders.py:110
 msgid "This station is not on this block."
 msgstr ""
 
-#: ohscore/decoders.py:113
+#: ohscore/decoders.py:114
 msgid "This station uses a coding Radio cannot read."
 msgstr ""
 
@@ -1134,20 +1135,20 @@ msgstr ""
 msgid "decoderSessions must be a list of at most 16 sessions"
 msgstr ""
 
-#: ohscore/decoders.py:111
 #: ohscore/decoders.py:112
+#: ohscore/decoders.py:113
 msgid "faad2 could not play this station's sound."
 msgstr ""
 
-#: ohscore/decoders.py:754
+#: ohscore/decoders.py:759
 msgid "it crashed when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:754
+#: ohscore/decoders.py:759
 msgid "it did not answer when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:755
+#: ohscore/decoders.py:760
 msgid "it gave a wrong answer when it was tested"
 msgstr ""
 
@@ -1155,7 +1156,7 @@ msgstr ""
 msgid "its decoder did not start (the log says why)"
 msgstr ""
 
-#: ohscore/decoders.py:756
+#: ohscore/decoders.py:761
 msgid "its folder does not allow programs to run"
 msgstr ""
 
@@ -1314,12 +1315,12 @@ msgstr ""
 msgid "{file}: samples of type {type} cannot be played (complex ones can: {types})"
 msgstr ""
 
-#: ohscore/decoders.py:399
+#: ohscore/decoders.py:404
 #, python-brace-format
 msgid "{freq} is not the centre of a DAB block (5A-13F)"
 msgstr ""
 
-#: ohscore/decoders.py:304
+#: ohscore/decoders.py:309
 #, python-brace-format
 msgid "{freq} is outside what the receiver covers now"
 msgstr ""

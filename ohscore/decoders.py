@@ -101,6 +101,7 @@ def _why_text(code: str | None) -> str:
         "not_installed": _("The library that decodes this is not installed."),
         "mode_only": _("This decoder runs only as the radio's mode, not on a frequency of its own."),
         "radio_stopped": _("The radio is not running."),
+        "receiver_fixed": _("This app's receiver stays on its own frequencies and cannot play DAB"),
         # DAB (shack_sdr README "DAB": the feed's and a service's codes,
         # worded as the README suggests).
         "no_signal": _("No DAB signal on this block."),
@@ -248,8 +249,12 @@ class Decoders:
         if m is None:
             return []
         out = []
+        lends = bool(getattr(self.engine, "HOLDS_RECEIVER", False))
         for e in m.catalogue():
             e = dict(e)
+            if not lends and _takes_receiver(e):
+                # QO-100 NB: its receiver never leaves the transponder.
+                e.update(available=False, why="receiver_fixed")
             e["whyText"] = _why_text(e.get("why")) if e.get("why") else ""
             # Partly available (DAB without faad2: old DAB plays, DAB+ does
             # not): the sentence for what is missing, beside the codes.
@@ -266,7 +271,7 @@ class Decoders:
         if m is None:
             return False
         entry = next((e for e in m.catalogue() if e["id"] == decoder), None)
-        return entry is not None and float(entry.get("minRateHz") or entry.get("rateHz") or 0.0) >= RECEIVER_RATE
+        return entry is not None and _takes_receiver(entry)
 
     def limits(self) -> dict:
         s = self.engine.st
@@ -765,6 +770,11 @@ def codec_sentence(st: dict) -> str:
         return _("Not found: {codec} is normally included; reinstalling the program puts it back.").format(codec=cid)
     return _("Not installed. This program never includes {codec}: install it yourself, or put it in the codecs folder.") \
         .format(codec=cid)
+
+
+def _takes_receiver(entry: dict) -> bool:
+    """Whether a catalogue entry's decoder needs the whole receiver."""
+    return float(entry.get("minRateHz") or entry.get("rateHz") or 0.0) >= RECEIVER_RATE
 
 
 def _worded_meta(fields: dict) -> dict:
