@@ -49,6 +49,7 @@ import numpy as np
 from ..engine import ReceiverHeld, TxRefused
 from ..padactions import PAD_TX_ACTIONS
 from ..i18n.text import _
+from .. import smeter_cal
 from . import shack, ws
 from .audio import CHANNELS, MIC_FORMAT
 from .autotx import AutoTx, Refused
@@ -1029,6 +1030,53 @@ class _Handler(BaseHTTPRequestHandler):
         log.info("%s saved the LEILA evidence capture", who["user"])
         self._send(202, {"ok": True})
 
+    def get_smeter_cal(self, who, q):
+        """The stored S-meter calibrations: Radio only (its `band`, and
+        hence per-band calibration, is what makes server-side storage worth
+        having; NB has none, like api/overpower above). `GET
+        api/smeter/calibrate` in docs/SERVER-API.md."""
+        table = getattr(self.srv.radio, "smeter_table", None)
+        if table is None:
+            self._error(404, _("This app has no S-meter calibration."), "not_found")
+            return
+        self._send(200, {"calibrations": table()})
+
+    def post_smeter_cal(self, who, q):
+        """{"dbm": y}: the current (3 s average) reading is y dBm.
+        {"dbfs": x, "dbm": y}: a reading of x dBFS measured elsewhere is
+        y dBm. Either way, refused with a sentence while the receiver's own
+        AGC chooses the gain (smeter_calibrate's ValueError)."""
+        calibrate = getattr(self.srv.radio, "smeter_calibrate", None)
+        if calibrate is None:
+            self._error(404, _("This app has no S-meter calibration."), "not_found")
+            return
+        body = self._body()
+        if "dbm" not in body:
+            self._error(400, _("dbm is required"), "bad_params")
+            return
+        try:
+            dbm = smeter_cal.validate_dbm(body["dbm"])
+            dbfs = smeter_cal.validate_dbfs(body["dbfs"]) if "dbfs" in body else None
+        except ValueError as e:
+            self._error(400, str(e), "bad_params")
+            return
+        try:
+            rec = calibrate(dbm, dbfs)
+        except ValueError as e:
+            self._error(409, str(e), "cannot_calibrate")
+            return
+        log.info("S-meter calibrated by %s: %s", who.get("user", "?"), rec)
+        self._send(200, {"calibration": rec})
+
+    def delete_smeter_cal(self, who, q):
+        """Clear this radio's (band's, antenna's) calibration."""
+        forget = getattr(self.srv.radio, "smeter_forget", None)
+        if forget is None:
+            self._error(404, _("This app has no S-meter calibration."), "not_found")
+            return
+        forget()
+        self._send(200, {"ok": True})
+
     def get_memories(self, who, q):
         self._send(200, {"memories": self.srv.radio.memories()})
 
@@ -1291,6 +1339,9 @@ ROUTES = {
     ("GET", "/api/cwskim"): ("view", _Handler.get_cwskim),
     ("GET", "/api/overpower"): ("view", _Handler.get_overpower),
     ("POST", "/api/overpower/capture"): ("control", _Handler.post_overpower_capture),
+    ("GET", "/api/smeter/calibrate"): ("view", _Handler.get_smeter_cal),
+    ("POST", "/api/smeter/calibrate"): ("control", _Handler.post_smeter_cal),
+    ("DELETE", "/api/smeter/calibrate"): ("control", _Handler.delete_smeter_cal),
     ("GET", "/api/memories"): ("view", _Handler.get_memories),
     ("POST", "/api/recall"): ("control", _Handler.post_recall),
     ("GET", "/api/log"): ("view", _Handler.get_log),
