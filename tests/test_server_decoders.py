@@ -2,7 +2,7 @@
 RADIO-SDR-PLAN §4.4): Radio's store form on its band simulator, faster
 than real time, with a fixed RTTY session copying the simulated 20 m RTTY
 station. Levels (view reads, control starts and stops), every error code,
-recovery by `rev`, `outside`, the session limit, the codecs and their
+recovery by `rev`, the pinned span, the session limit, the codecs and their
 rescan, the `decoder` events on api/events, and decoders in api/status."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import json
@@ -108,16 +108,15 @@ class DecodersApi(test_server.ServerTest):
         self.assertEqual(self.req("GET", f"/api/decoders/sessions/{sid}?since=x", level="view")[0], 400)
         self.assertEqual(self.req("GET", "/api/decoders/sessions/ds_nope", level="view")[1]["code"], "unknown_session")
 
-    def test_a_session_the_span_leaves_is_outside(self):
+    def test_a_tune_out_of_the_span_is_refused_and_the_session_stays_in_it(self):
+        # Radio pins its span for background sessions (SERVER-API "The
+        # pinned span"; test_ham_span_pin): a session never goes outside.
         s, sess = self.start()
-        self.assertEqual(self.req("POST", "/api/set", {"vfo": 7_050_000.0}, level="control")[0], 200)
-        state = None
-        end = time.monotonic() + 30
-        while time.monotonic() < end and state != "outside":
-            self.radio.heartbeat()
-            state = self.req("GET", f"/api/decoders/sessions/{sess['id']}", level="view")[1]["state"]
-            time.sleep(0.1)
-        self.assertEqual(state, "outside")
+        s, a = self.req("POST", "/api/set", {"vfo": 7_050_000.0}, level="control")
+        self.assertEqual((s, a["code"], [x["id"] for x in a["sessions"]]), (409, "span_pinned", [sess["id"]]))
+        self.radio.heartbeat()
+        self.assertNotEqual(self.req("GET", f"/api/decoders/sessions/{sess['id']}", level="view")[1]["state"],
+                            "outside")
 
     def test_codecs_are_looked_for_again_on_request(self):
         self.assertEqual(self.req("POST", "/api/decoders/codecs/rescan", level="view")[0], 403)

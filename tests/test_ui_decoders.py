@@ -115,7 +115,7 @@ class DecodersWindow(unittest.TestCase):
         view = win.decoders_view
         view.freq.setText("7.050")
         view.add()
-        self.assertIn("outside what the receiver covers", view.status.text())
+        self.assertIn("is too far from the dial", view.status.text())
         self.assertEqual(view.cards, {})
 
     def test_decode_here_as_starts_a_session_where_the_mouse_is(self):
