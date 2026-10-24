@@ -34,7 +34,7 @@ msgstr ""
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1422
+#: ohsradio/radio.py:1435
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -51,29 +51,29 @@ msgstr ""
 msgid "Bands & power, {band}: not a number"
 msgstr ""
 
-#: ohsradio/bcastgain.py:234
+#: ohsradio/bcastgain.py:333
 #, python-brace-format
 msgid "Broadcast gain {db:g} (this radio does not report overload, so it stays there). Your own gain, {op:g}, is back when the station stops."
 msgstr ""
 
-#: ohsradio/bcastgain.py:246
+#: ohsradio/bcastgain.py:344
 #, python-brace-format
 msgid "Broadcast gain {db:g}, chosen for this station. Your own gain, {op:g}, is back when it stops."
 msgstr ""
 
-#: ohsradio/bcastgain.py:242
+#: ohsradio/bcastgain.py:340
 #, python-brace-format
-msgid "Broadcast gain {db:g}: the radio is still overloaded at the least gain this policy may set"
+msgid "Broadcast gain {db:g}: adjusting to this station"
 msgstr ""
 
-#: ohsradio/bcastgain.py:244
+#: ohsradio/bcastgain.py:337
 #, python-brace-format
-msgid "Broadcast gain {db:g}: the radio reports overload, so the gain is coming down"
+msgid "Broadcast gain {db:g}: reception still has errors, and no gain this policy may set is better"
 msgstr ""
 
-#: ohsradio/bcastgain.py:240
+#: ohsradio/bcastgain.py:342
 #, python-brace-format
-msgid "Broadcast gain {db:g}: watching for overload"
+msgid "Broadcast gain {db:g}: watching reception"
 msgstr ""
 
 #: ohsradio/plutofix.py:473
@@ -177,12 +177,12 @@ msgstr ""
 msgid "Not scanning now: {why}"
 msgstr ""
 
-#: ohsradio/radio.py:1111
+#: ohsradio/radio.py:1124
 #, python-brace-format
 msgid "Notch filter not changed: {error}"
 msgstr ""
 
-#: ohsradio/radio.py:985
+#: ohsradio/radio.py:998
 #, python-brace-format
 msgid "Radio is scanning {label} for its station list: it is yours again the moment you use it"
 msgstr ""
@@ -338,7 +338,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1380
+#: ohsradio/radio.py:1393
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -379,7 +379,7 @@ msgstr ""
 msgid "Waiting for the radio to restart…"
 msgstr ""
 
-#: ohsradio/radio.py:1024
+#: ohsradio/radio.py:1037
 #, python-brace-format
 msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""

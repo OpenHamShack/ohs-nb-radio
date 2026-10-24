@@ -774,14 +774,24 @@ of its own (ohsradio/bcastgain.py has the reasoning):
   `wfm`, the radio stopping - the device gets the operator's exact gain
   back.
 - It starts at a broadcast default for the device's `gainModel` (`db`:
-  30; `sdrplay`: 30, gRdB 49; `soapysdrplay3`: 43, gRdB 59 at LNA state
-  4), or the operator's own where that is already less gain; steps down
-  every 0.5 s while the device reports overload (`deviceStatus`
-  `overloaded`, or `overloads` rising: SDRplay RSPs) until clear for 5 s;
-  and creeps back up one step after 30 s clear, never past where it
-  started and never into a gain that overloaded in the last 5 minutes.
-  A radio that reports no overload (RTL-SDR, Pluto, SoapySDR, the
-  simulator) holds the default.
+  30; `sdrplay`: 30, gRdB 49; `soapysdrplay3`: 45, gRdB 59 at LNA state
+  6, where every Band III block of a sweep on ohs-box was clean), or the
+  operator's own where that is already less gain.
+- **DAB steers by its FIB errors** (the session's `fibsOk`/`fibsBad`, a
+  second at a time). Clean FIBs move nothing, whatever the overload flag
+  says (an RSP's flickers on clean blocks). Errors with overload reported:
+  one step less gain; errors without: one step more, as far as the
+  operator's own gain. A step that makes the errors worse is undone and
+  never tried again for that station (`floorDb` on the weak side), so it
+  backs off only until the errors stop and never past the weak-signal
+  cliff.
+- **Wide FM, and DAB before it has FIBs,** have only the device's overload
+  report (`deviceStatus` `overloads` rising, SDRplay RSPs): one step less
+  after overload in three 1 s windows running, and one step back after
+  30 s clear, never past the start and never into a gain that overloaded
+  in the last 5 minutes. A radio that reports no overload (RTL-SDR,
+  Pluto, SoapySDR, the simulator) holds the default there; for DAB its
+  FIB errors still steer it (trying less gain first).
 - Nothing changes under the radio's own AGC (`rxGainMode` not `manual`),
   on a Hermes-Lite 2 (its gain is `hl2Lna`), or while a recording plays.
   The band scan and background `wfm` decoder sessions keep the operator's
@@ -791,16 +801,21 @@ of its own (ohsradio/bcastgain.py has the reasoning):
 `broadcastGain` in `api/state` and `api/status`, for a client to show:
 
 ```json
-{"auto": true, "db": 46.0, "operatorDb": 40.0, "gainModel": "soapysdrplay3", "adaptive": true,
- "state": "settled", "overloaded": false, "backoffs": 3, "atLimit": false,
- "text": "Broadcast gain 46, chosen for this station. Your own gain, 40, is back when it stops."}
+{"auto": true, "db": 45.0, "operatorDb": 40.0, "gainModel": "soapysdrplay3", "adaptive": true,
+ "state": "settled", "signal": "fibs", "fibBad": 0.0, "overloaded": false, "backoffs": 0,
+ "atLimit": false, "floorDb": null,
+ "text": "Broadcast gain 45, chosen for this station. Your own gain, 40, is back when it stops."}
 ```
 
 `db` is in `rxGain`'s own units and sense (`gainModel`, "S-meter
 calibration" above: under `soapysdrplay3` a higher figure is less gain).
-`state`: `settling` (watching for overload, the first 5 s), `backing_off`,
-`limit` (still overloaded at the least gain it may set: `atLimit`),
-`settled`, or `fixed` (`adaptive` false: no overload report). While a
+`state`: `settling` (the first 5 s), `adjusting` (errors or overload in
+the last 5 s), `limit` (still errors, and no gain it may set is better:
+`atLimit`), `settled`, or `fixed` (`adaptive` false and no FIBs to steer
+by). `signal` is what it steers by now: `fibs` (with `fibBad`, the share
+of FIBs failing in the last window) or `overload` (`fibBad` null).
+`floorDb` is the gain found to be on the weak side, never set again for
+this station, or null. While a
 station plays and the operator's gain stands it is `{"auto": false, "db":
 null, "why": "agc" | "no_rx_gain" | "playback", "text": ...}`; `{}` while
 none plays. There is no per-session override: set `rxGainMode` to an AGC

@@ -25,19 +25,36 @@ from Radio's supervisor tick):
   The default (`DEFAULT`, per gain model) is a gain a strong local
   multiplex does not overload on the radios measured; where the operator
   already runs less gain than that, theirs is kept - they had a reason.
-- **It backs off while the device reports overload** (`deviceStatus`
-  `overloaded`, or its `overloads` count rising: the SDRplay API's power
-  overload events, shack_sdr's SdrplaySource), one step every `STEP_S`
-  until it has been clear for `HOLD_S` - then it is settled.
-- **It creeps back up, slowly,** one step after `CREEP_S` clear since the
-  last change, toward the start gain, never into a gain that overloaded
-  in the last `MEMORY_S` (that one step is the margin: a gain that
-  overloaded once stays one step out of reach while the memory lasts).
-  Without the creep a fading or briefly keyed neighbour would leave a
-  weak multiplex at the floor for the rest of the session.
+- **For DAB it steers by the decoder's FIB errors, with overload only
+  saying which way.** Every `WINDOW_S` it takes the share of FIBs that
+  failed their CRC (the session's `fibsOk`/`fibsBad`). Clean (at most
+  `CLEAN_FRAC`): nothing moves, whatever the overload flag says. Errors
+  with overload reported in the window: one step less gain. Errors with
+  none: the weak-signal side, one step more gain. Any step that leaves
+  the errors worse than before it is undone, and the gain it tried is
+  barred for the session (`floor` on the weak side, the overload memory
+  on the strong side) - so it backs off only until the errors stop, and
+  never walks off the weak-signal cliff.
+
+  Why not overload alone (the first version, 046a59f): Brian's sweep on
+  ohs-box (24/10/2026; RSPdx, Antenna A, eight Band III blocks, 3 s
+  settle and 8 s measure a step) found the SDRplay overload flag
+  flickering true at rxGain 45 on 11C, 11D, 12A and 12B while their FIBs
+  were 100 % clean. Backing off on it would have walked the gain to 50
+  (LNA state 11), where the weak blocks fall apart: 11C to 3.2 dB SNR with
+  27 % of FIBs clean, 11D 3.6 dB with 70 %. At 45 (LNA state 6) all eight
+  were clean (15-41 dB); at 40 (LNA state 1) the local 11B, 8 km away,
+  was 88 % clean and overloaded; at 35 and below (LNA state 0) overload
+  grew and blocks lost sync.
+- **Wide FM, and DAB before it has FIBs to count,** has only the overload
+  report, so it is debounced: one step less after overload in
+  `DEBOUNCE` windows running, never into the weak-side `floor`; and one
+  step back after `CREEP_S` clear, toward the start, never into a gain
+  that overloaded in the last `MEMORY_S` (that step is the margin).
 - **A radio that reports no overload** (an RTL-SDR, a Pluto, a SoapySDR
-  radio, the simulator) gets the default and stays there: there is
-  nothing to steer by. Estimating clipping from the samples was
+  radio, the simulator) holds the default for wide FM: there is nothing
+  to steer by. For DAB its FIB errors still steer it, trying less gain
+  first since nothing says which side the errors are on. Estimating clipping from the samples was
   considered and left out - each driver scales its samples differently,
   and a wrong full scale would back a weak station off for nothing.
 - **Nothing for** a receiver whose gain control is the device's own AGC
@@ -63,29 +80,35 @@ calibration uses, ohscore/smeter_cal.py `gain_split`):
   above is one LNA state (sdrsource.soapy_gain_split_rf), up to
   `rfgrRange`'s top. Below 39 the steps are 3 dB of gRdB; above, one LNA
   state each (about 3 dB in Band II/III on an RSPdx, more on the older
-  models' coarser tables). Default 43: gRdB 59 at LNA state 4 - the
-  state ohs-box's own `rfgain_sel=4` chose for 2 m, and three states
-  (about 9 dB) below the rxGain 40 that overloaded on 11B.
+  models' coarser tables). Default 45: gRdB 59 at LNA state 6, where the
+  ohs-box sweep (above) had every Band III block clean - between the
+  local multiplex's overload at 40 and the weak blocks' cliff at 50.
 """
 from __future__ import annotations
 
 from ohsradio.i18n import _
 
-# Seconds (module docstring): a step down at most this often while the
-# device reports overload - long enough for the change to reach the
-# device on the receive thread and the device to report again (the
-# SDRplay API acknowledges and re-detects within a few blocks), short
-# enough that a badly overloaded start clears in a couple of seconds.
-STEP_S = 0.5
-# Clear this long after the last overload: settled.
+# Seconds (module docstring). One window of FIB counts or overload reports:
+# DAB sends about 125 FIBs a second (mode I: 12 every 96 ms), so a second
+# holds enough to tell 1 % from clean.
+WINDOW_S = 1.0
+# After a change, this long before counting again: the gain reaches the
+# device on the receive thread, and the decoder's FIBs in flight were
+# taken at the old gain.
+SETTLE_S = 1.0
+MIN_FIBS = 50              # fewer in a window (no sync yet): overload only
+CLEAN_FRAC = 0.005         # a window this clean is clean
+WORSE_FRAC = 0.01          # a step that adds this much to the errors is undone
+DEBOUNCE = 3               # overload-only: windows running before a step down
+# Clear this long after the last overload or error: settled.
 HOLD_S = 5.0
-# Clear this long since the last change before one step back up.
+# Overload-only: clear this long since the last change before one step back up.
 CREEP_S = 30.0
-# A gain that overloaded stays out of reach this long.
+# A gain that overloaded with errors stays out of reach this long.
 MEMORY_S = 300.0
 
 DB_STEP = 3.0
-DEFAULT = {"db": 30.0, "sdrplay": 30.0, "soapysdrplay3": 43.0}
+DEFAULT = {"db": 30.0, "sdrplay": 30.0, "soapysdrplay3": 45.0}
 SDRPLAY_RANGE = (20.0, 59.0)          # rxGain over which `sdrplay`'s gRdB moves (79 - 59 .. 79 - 20)
 SOAPY_IF_TOP = 39.0                   # soapysdrplay3: rxGain at which gRdB reaches 59 and the LNA steps begin
 
@@ -165,14 +188,24 @@ class Policy:
         self.ladder = Ladder(model, rfgr_range)
         self.operator = float(operator_db)
         self.cap = self.ladder.start(operator_db)
+        # The weak side may climb back as far as the operator's own gain
+        # where that is more than the start: they chose it.
+        op = self.ladder.clamp(operator_db)
+        self.top = op if self.ladder.gainier(op, self.cap) else self.cap
         self.gain = self.cap
         self.adaptive = bool(adaptive)
         self.changed_at = self.began_at = now
-        self.over_at: float | None = None
-        self.bad: dict[float, float] = {}       # gain -> when it last overloaded
+        self.trouble_at: float | None = None    # the last overload or FIB error that counted
+        self.bad: dict[float, float] = {}       # gain -> when it last overloaded with errors
+        self.floor: float | None = None         # a gain whose errors were the weak signal's: never this far
+        self.last_step = None                   # (direction, gain stepped from, errors before) awaiting its verdict
         self.backoffs = 0
         self.overloaded = False
         self.at_limit = False
+        self.fib_bad: float | None = None
+        self.signal = "overload"
+        self.streak = 0
+        self._win = None
         self.wanted = ("manual", self.gain)
         self._publish(now)
 
@@ -191,61 +224,126 @@ class Policy:
     def operator_changed(self, now: float, operator_db: float) -> None:
         """The operator moved rxGain while the station plays: the new
         figure is the new start and ceiling, as if the station began now
-        (their change is a deliberate act; the memory of what overloaded
-        stays)."""
-        bad = self.bad
+        (their change is a deliberate act; what was learned stays)."""
+        bad, floor = self.bad, self.floor
         self.begin(self.key, now, self.ladder.model, self.rfgr_range, operator_db, self.adaptive)
-        self.bad = bad
+        self.bad, self.floor = bad, floor
 
-    def tick(self, now: float, overloaded: bool) -> bool:
-        """One look at the device; True when the gain to apply changed."""
+    # -- the steps ------------------------------------------------------------
+    def _allowed(self, g: float, now: float) -> bool:
+        lad = self.ladder
+        if self.floor is not None and not lad.gainier(g, self.floor):
+            return False            # as little gain as the weak side's cliff, or less
+        if lad.gainier(g, self.top):
+            return False
+        return not any(now - t < MEMORY_S and (b == g or lad.gainier(g, b)) for b, t in self.bad.items())
+
+    def _step(self, now: float, direction: str, errors: float | None) -> bool:
+        nxt = (self.ladder.less if direction == "less" else self.ladder.more)(self.gain)
+        if nxt is None or not self._allowed(nxt, now):
+            self.at_limit = True
+            return False
+        self.last_step = (direction, self.gain, errors) if errors is not None else None
+        self.gain, self.changed_at = nxt, now
+        self.at_limit = False
+        if direction == "less":
+            self.backoffs += 1
+        return True
+
+    def tick(self, now: float, overloaded: bool, fibs: tuple | None = None) -> bool:
+        """One look at the device (`overloaded`: a new overload since the
+        last look) and, for DAB, the session's FIB counts so far (`fibs`,
+        (ok, bad), or None). True when the gain to apply changed."""
         if self.wanted is None:
             return False
-        self.overloaded = bool(overloaded) and self.adaptive
+        if now - self.changed_at < SETTLE_S:
+            self._win = None
+            self._publish(now)
+            return False
+        if self._win is None:
+            self._win = {"t": now, "fibs": fibs, "over": False}
+        w = self._win
+        w["over"] = w["over"] or (bool(overloaded) and self.adaptive)
+        if now - w["t"] < WINDOW_S:
+            return False
+        self._win = None
+        self.overloaded = w["over"]
         changed = False
-        if self.overloaded:
-            self.over_at = now
-            self.bad[self.gain] = now
-            if now - self.changed_at >= STEP_S:
-                nxt = self.ladder.less(self.gain)
-                if nxt is None:
-                    self.at_limit = True
-                else:
-                    self.gain, self.changed_at, changed = nxt, now, True
-                    self.backoffs += 1
-        elif self.adaptive and now - self.changed_at >= CREEP_S and \
-                (self.over_at is None or now - self.over_at >= CREEP_S):
-            nxt = self.ladder.more(self.gain)
-            if nxt is not None and not self.ladder.gainier(nxt, self.cap) and not self._recently_bad(nxt, now):
-                self.gain, self.changed_at, changed = nxt, now, True
-                self.at_limit = False
+        n = bad = 0
+        if fibs is not None and w["fibs"] is not None:
+            ok, bad = fibs[0] - w["fibs"][0], fibs[1] - w["fibs"][1]
+            n = ok + bad
+        if n >= MIN_FIBS and bad >= 0:
+            changed = self._fib_window(now, bad / n, w["over"])
+        else:
+            self.signal, self.fib_bad = "overload", None
+            changed = self._overload_window(now, w["over"])
         if changed:
             self.wanted = ("manual", self.gain)
         self._publish(now)
         return changed
 
-    def _recently_bad(self, g: float, now: float) -> bool:
-        """`g`, or anything with more gain than it, overloaded within
-        MEMORY_S."""
-        return any(now - t < MEMORY_S and (b == g or self.ladder.gainier(g, b)) for b, t in self.bad.items())
+    def _fib_window(self, now: float, frac: float, over: bool) -> bool:
+        self.signal, self.fib_bad, self.streak = "fibs", round(frac, 4), 0
+        last, self.last_step = self.last_step, None
+        if last is not None and last[2] is not None and frac > last[2] + WORSE_FRAC:
+            # The step made it worse: back, and never there again.
+            direction, before, _errors = last
+            if direction == "less":
+                self.floor = self.gain
+            else:
+                self.bad[self.gain] = now
+            self.gain, self.changed_at, self.trouble_at = before, now, now
+            return True
+        if frac <= CLEAN_FRAC:
+            self.at_limit = False
+            return False
+        self.trouble_at = now
+        if over:
+            self.bad[self.gain] = now
+            return self._step(now, "less", frac)
+        if not self.adaptive and self.floor is None:
+            # No overload report to say which side the errors are on: try
+            # less gain first (a broadcast station is more often too strong
+            # than too weak); if that is worse it is undone and becomes the
+            # floor, and from then on the errors mean more gain.
+            return self._step(now, "less", frac)
+        return self._step(now, "more", frac)
+
+    def _overload_window(self, now: float, over: bool) -> bool:
+        if not self.adaptive:
+            return False
+        if over:
+            self.trouble_at = now
+            self.streak += 1
+            if self.streak < DEBOUNCE:
+                return False
+            self.streak = 0
+            self.bad[self.gain] = now
+            return self._step(now, "less", None)
+        self.streak = 0
+        quiet = self.trouble_at is None or now - self.trouble_at >= CREEP_S
+        if quiet and now - self.changed_at >= CREEP_S and self.ladder.gainier(self.cap, self.gain):
+            return self._step(now, "more", None)
+        return False
 
     def _publish(self, now: float) -> None:
-        if not self.adaptive:
+        recent = self.trouble_at is not None and now - self.trouble_at < HOLD_S
+        if not self.adaptive and self.signal != "fibs":
             state, text = "fixed", _(
                 "Broadcast gain {db:g} (this radio does not report overload, so it stays there). Your own "
                 "gain, {op:g}, is back when the station stops.")
-        elif now - (self.over_at if self.over_at is not None else self.began_at) < HOLD_S:
-            state = "limit" if self.at_limit else "backing_off"
-            if self.over_at is None:
-                state, text = "settling", _("Broadcast gain {db:g}: watching for overload")
-            elif self.at_limit:
-                text = _("Broadcast gain {db:g}: the radio is still overloaded at the least gain this policy may set")
-            else:
-                text = _("Broadcast gain {db:g}: the radio reports overload, so the gain is coming down")
+        elif self.at_limit and recent:
+            state, text = "limit", _(
+                "Broadcast gain {db:g}: reception still has errors, and no gain this policy may set is better")
+        elif recent:
+            state, text = "adjusting", _("Broadcast gain {db:g}: adjusting to this station")
+        elif now - self.began_at < HOLD_S:
+            state, text = "settling", _("Broadcast gain {db:g}: watching reception")
         else:
             state, text = "settled", _(
                 "Broadcast gain {db:g}, chosen for this station. Your own gain, {op:g}, is back when it stops.")
         self._view = {"auto": True, "db": self.gain, "operatorDb": self.operator, "gainModel": self.ladder.model,
-                      "adaptive": self.adaptive, "state": state, "overloaded": self.overloaded,
-                      "backoffs": self.backoffs, "atLimit": self.at_limit,
-                      "text": text.format(db=self.gain, op=self.operator)}
+                      "adaptive": self.adaptive, "state": state, "signal": self.signal, "fibBad": self.fib_bad,
+                      "overloaded": self.overloaded, "backoffs": self.backoffs, "atLimit": self.at_limit,
+                      "floorDb": self.floor, "text": text.format(db=self.gain, op=self.operator)}

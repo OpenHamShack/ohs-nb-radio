@@ -969,13 +969,26 @@ class Radio(Engine):
                 else:
                     over = bool(ds.get("overloaded"))
                 before = bg.gain
-                if bg.tick(now, over):
+                if bg.tick(now, over, self._broadcast_fibs(key)):
                     self.log.info("broadcast gain %g -> %g (%s)", before, bg.gain,
+                                  f"FIB errors {bg.fib_bad:.1%}" if bg.fib_bad is not None else
                                   "overload" if bg.overloaded else "clear: creeping back")
             self._bg_overloads = count
         if bg.wanted != was:
             self.reconf = True
         self._status(broadcastGain=bg.view())
+
+    def _broadcast_fibs(self, key) -> tuple | None:
+        """(FIBs passed, FIBs failed) so far for the DAB session `key`
+        names, or None (wide FM; a session with no counts yet). What the
+        broadcast gain steers DAB by (bcastgain.py)."""
+        if key[0] != "dab":
+            return None
+        stats = self.decoders.held_stats(key[1])
+        ok, bad = stats.get("fibsOk"), stats.get("fibsBad")
+        if isinstance(ok, (int, float)) and isinstance(bad, (int, float)):
+            return int(ok), int(bad)
+        return None
 
     def _rx_gain_wanted(self, s: dict) -> tuple:
         b = self.bgain.wanted

@@ -305,8 +305,8 @@ with REG.after("txDial"):
                                    "null. Changes when a list does (GET api/fm/stations, api/dab/stations)."),
         ("broadcastGain", "dict", {}, "The receiver gain a broadcast station (DAB holding the receiver, or wide "
                                       "FM) has in place of the operator's, which rxGain keeps (bcastgain.py): "
-                                      "{auto, db, operatorDb, gainModel, adaptive, state, overloaded, backoffs, "
-                                      "atLimit, text}; {auto: false, db: null, why, text} while one plays but "
+                                      "{auto, db, operatorDb, gainModel, adaptive, state, signal, fibBad, overloaded, "
+                                      "backoffs, atLimit, floorDb, text}; {auto: false, db: null, why, text} while one plays but "
                                       "the operator's gain stands; {} while none plays."),
         ("rds", "dict", None, "Wide FM: the station's RDS as the receiver decoded it (shack_sdr), "
                               "{pi, ps, rt, pty, ptyName, ta, tp, ct, af, stereo, ts}; null until a station's "

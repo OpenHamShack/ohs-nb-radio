@@ -623,6 +623,17 @@ class Decoders:
             self.engine.span_changed()
         return True
 
+    def held_stats(self, sid: str) -> dict:
+        """The counters of session `sid` if it holds the receiver, else {}:
+        what Radio's broadcast gain reads ten times a second
+        (ohsradio/bcastgain.py), so only the one host's status, not the
+        whole session view."""
+        with self.lock:
+            f = self.fixed.get(sid)
+        if f is None or not f.held:
+            return {}
+        return self._status_of(f.id, f.host).get("stats") or {}
+
     def background(self) -> list[_Fixed]:
         """The sessions that pin the span: fixed ones on frequencies of
         their own (not the mode's, not one holding the receiver)."""
