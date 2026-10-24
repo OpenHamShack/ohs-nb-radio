@@ -357,7 +357,16 @@ class Timeshift:
             item = self.item
             out = {"available": self.buffering and length > 0, "startUtc": self._iso(self.base) if length else None,
                    "lengthS": round(length, 1), "capS": round(self.cap_s), "station": self.station,
-                   "itemStartUtc": self._iso(item["index"]) if item and item["index"] is not None else None}
+                   "itemStartUtc": None, "itemStartInBuffer": False}
+            if item and length:
+                # An item on since before the buffer (the first one heard
+                # after tuning in, or one longer than the buffer) starts, as
+                # far as anyone can go back, at the buffer's start: a client
+                # can still offer "from the start of this song" (ohs-box,
+                # 24/10/2026: STV Radio showed none for minutes otherwise).
+                inside = item["index"] is not None and item["index"] >= self.base
+                out["itemStartUtc"] = self._iso(item["index"] if inside else self.base)
+                out["itemStartInBuffer"] = inside
             if self.why:
                 out["why"] = self.why
             return out

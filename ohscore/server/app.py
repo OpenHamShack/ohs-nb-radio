@@ -1677,8 +1677,11 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", f"audio/L16; rate={fmt['rate']}; channels={channels}")
             self.send_header("X-Audio-Format", json.dumps(fmt))
+            # Further back than is kept is clamped, not refused: a client
+            # seeking back 30 s at a time lands on the oldest audio, and is
+            # told so (clamped) rather than getting an error to work round.
             self.send_header("X-Timeshift", json.dumps({
-                "behindS": round(ago, 3),
+                "behindS": round(ago, 3), "clamped": ago < behind - 0.05,
                 "startUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(utc)) if utc else None}))
             self.send_header("Cache-Control", "no-store")
             self.send_header("Connection", "close")

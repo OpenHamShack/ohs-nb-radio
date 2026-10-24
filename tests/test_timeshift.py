@@ -236,6 +236,9 @@ class Buffer(unittest.TestCase):
         _gen, index, ago, why = self.ts.item_start()
         self.assertEqual(index, self.ts.base)
         self.assertIn("began before the timeshift buffer", why)
+        # Status offers it from as far back as is kept, and says so.
+        st = self.ts.status()
+        self.assertEqual((st["itemStartUtc"], st["itemStartInBuffer"]), (st["startUtc"], False))
         self.radio.station = dict(self.radio.station, title="Second", artist="B")
         self.assertTrue(self.until(lambda: (self.ts.item or {}).get("title") == "Second"))
         at = self.ts.item["index"]
@@ -245,6 +248,7 @@ class Buffer(unittest.TestCase):
         self.assertEqual((index, why), (at, ""))
         self.assertAlmostEqual(ago, 3.0, delta=0.01)
         self.assertIsNotNone(self.ts.status()["itemStartUtc"])
+        self.assertTrue(self.ts.status()["itemStartInBuffer"])
         self.radio.station = dict(self.radio.station, title=None, artist=None)
         self.assertTrue(self.until(lambda: self.ts.item is None))
         self.assertIn("no item", self.ts.item_start()[3])
@@ -425,6 +429,18 @@ class EndToEnd(unittest.TestCase):
         cap_mono = ((cap[:, 0].astype(np.int32) + cap[:, 1]) // 2).astype(np.int16)
         at = self.find(np.stack([mono[:2400], mono[:2400]], 1), np.stack([cap_mono, cap_mono], 1))
         np.testing.assert_array_equal(mono, cap_mono[at:at + len(mono)])
+        # Further back than is kept: clamped to the oldest, and said.
+        kept = self.req("GET", "/api/status", level="view")[1]["timeshift"]["lengthS"]
+        c, r = self.open("/api/audio/rx?behind=99999", level="view")
+        head = json.loads(r.getheader("X-Timeshift"))
+        c.close()
+        self.assertEqual(r.status, 200)
+        self.assertTrue(head["clamped"])
+        self.assertGreaterEqual(head["behindS"], kept - 0.5)
+        self.assertLess(head["behindS"], 99999)
+        c, r = self.open("/api/audio/rx?behind=2", level="view")
+        self.assertFalse(json.loads(r.getheader("X-Timeshift"))["clamped"])
+        c.close()
         # behind=0 is live; nonsense is refused.
         c, r = self.open("/api/audio/rx?behind=0", level="view")
         self.assertIsNone(r.getheader("X-Timeshift"))

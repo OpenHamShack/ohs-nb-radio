@@ -53,6 +53,7 @@ is /data in the store image), which survives updates.
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import os
 import threading
@@ -173,6 +174,7 @@ class ServerRecordings:
         self.Refused = rec.Refused
         self._noting: threading.Thread | None = None
         self.timeshift = timeshift
+        self._broadcasts: dict = {}         # metadata path -> ((mtime, size), broadcast): listing()'s
 
     # ---------------------------------------------------------------- start
     PAST = ("fromSecondsAgo", "fromItemStart", "lastMinutes")
@@ -342,7 +344,39 @@ class ServerRecordings:
         return {"kinds": list(self.rec.kinds), "active": active}
 
     def listing(self) -> dict:
-        return self.rec.listing()
+        """shack_rec's listing, each entry with its `broadcast` (the station
+        as the recording began; null for any other) so a client can show
+        the station, mode, title and artist without fetching every
+        sidecar. Only that object: never the sidecar's `changes`, which
+        grow with the recording. shack_rec's own list keeps a fixed set of
+        fields, so it is read here from each metadata file, once per
+        version of the file."""
+        out = self.rec.listing()
+        folder = self.rec.store.folder
+        for e in out.get("recordings") or []:
+            meta = (e.get("parts") or {}).get("meta")
+            e["broadcast"] = self._broadcast(folder / meta["name"], e["kind"]) if meta else None
+        return out
+
+    def _broadcast(self, path: Path, kind: str):
+        try:
+            st = path.stat()
+        except OSError:
+            return None
+        key = (st.st_mtime_ns, st.st_size)
+        hit = self._broadcasts.get(path)
+        if hit is not None and hit[0] == key:
+            return hit[1]
+        try:
+            doc = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            return None
+        b = doc.get("broadcast") if kind == "audio" else (doc.get("global") or {}).get("openhamshack:broadcast")
+        b = b if isinstance(b, dict) else None
+        if len(self._broadcasts) > 2000:
+            self._broadcasts.clear()
+        self._broadcasts[path] = (key, b)
+        return b
 
     def file(self, rid: str, part: str):
         return self.rec.file(rid, part)

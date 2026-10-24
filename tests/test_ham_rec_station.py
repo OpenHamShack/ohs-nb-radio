@@ -159,6 +159,11 @@ class OverTheApi(unittest.TestCase):
         self.assertRegex(audio["id"], rf"^openhamshack-radio-{STAMP}-Shack-MP2-Tone-DAB$")
         self.assertEqual((audio["mode"], audio["freqHz"], audio["station"]), ("DAB", CENTRE, "GM4BRI"))
         self.assertEqual((audio["sampleRate"], audio["channels"]), (48_000, 2))
+        # In the list too, as it began, without the sidecar's history.
+        self.assertEqual((audio["broadcast"]["label"], audio["broadcast"]["mode"], audio["broadcast"]["title"],
+                          audio["broadcast"]["artist"]), ("Shack MP2 Tone", "DAB", "1 kHz left", "Shack MP2 Tone"))
+        self.assertNotIn("changes", audio)
+        self.assertEqual(iq["broadcast"]["sid"], "C221")
         side = self.sidecar(audio)
         self.assertEqual(side["kind"], "audio")                          # shack_rec's own, untouched
         self.assertEqual(side["broadcast"], {
@@ -212,6 +217,7 @@ class OverTheApi(unittest.TestCase):
         self.assertRegex(iq["id"], rf"^openhamshack-radio-{STAMP}-145\.500MHz-FM$")
         self.assertEqual((audio["mode"], audio["channels"]), ("FM", 1))
         self.assertNotIn("broadcast", self.sidecar(audio))
+        self.assertEqual((audio["broadcast"], iq["broadcast"], audio["station"]), (None, None, "GM4BRI"))
         g = sigmf.read_meta(Path(self.radio.recordings_dir(), iq["parts"]["data"]["name"]))["global"]
         self.assertNotIn("openhamshack:broadcast", g)
         self.assertEqual(g["openhamshack:receive"]["mode"], "fm")

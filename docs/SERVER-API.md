@@ -523,6 +523,12 @@ same on Icom and Flex; what is this app's own:
     `"wfm"`) instead of the operator's mode from before DAB took the
     receiver, and carries the same object as `openhamshack:broadcast`.
     Played back, it tunes to the block and leaves the operator's mode.
+- **In the list:** each entry of `api/recordings` carries `broadcast`,
+  the same start-of-recording object (null for a recording of anything
+  else), so a client shows the station, mode, title and artist without
+  fetching each sidecar; never `changes`, which stays in the sidecar.
+  `station` in an entry is, as it always was, the operator's callsign
+  (shack_rec's field), not the broadcast station.
 - **Names** (the id, and the files' base name) are the app's own name,
   the UTC start, then what it is (host.recording_name):
 
@@ -628,10 +634,13 @@ decisions.
 ```
 
 `station` is the same object as a recording's `broadcast` (Recordings),
-as it is now; `itemStartUtc` is when the current DL Plus item began, null
-when unknown (none sent, or the one on now began before the buffer:
-DL Plus arrives a few seconds after the sound, so the first item heard
-after tuning in counts as begun before it). `why` appears when it
+as it is now. `itemStartUtc` is where the current DL Plus item starts,
+as far back as is kept, null when no item is on (or nothing is kept);
+`itemStartInBuffer` is true when that is the item's real start, false
+when the item began before the buffer and `itemStartUtc` is the buffer's
+start ("from the start of this song, as far back as I have"). DL Plus
+arrives a few seconds after the sound, so the first item heard after
+tuning in is always false; it turns true at the first change of item. `why` appears when it
 stopped for a reason (low disk). `available` is false, `lengthS` 0, while
 nothing is kept. The server keeps no per-client position: a client
 tracks its own.
@@ -642,9 +651,12 @@ that many seconds ago (clamped to what is kept) and carrying on in real
 time from there. It is sent at the pace it plays, at most a second ahead,
 so a player's buffer never fills with minutes of it. It adds a header:
 
-    X-Timeshift: {"behindS": 30.0, "startUtc": "2026-10-24T04:40:00Z"}
+    X-Timeshift: {"behindS": 30.0, "clamped": false, "startUtc": "2026-10-24T04:40:00Z"}
 
-(`behindS`: how far behind it actually starts, after clamping). A client
+`behindS` is how far behind it actually starts. Further back than is kept
+(`behind=99999`) is **clamped**, not refused: the stream starts at the
+oldest audio kept, `behindS` says how far back that is, and `clamped` is
+true. A client
 does everything by opening a new stream:
 
 - **pause:** stop reading and close; note the wall-clock time;
@@ -661,7 +673,7 @@ while nothing is kept.
 | Field | Starts at |
 |---|---|
 | `"fromSecondsAgo": 45` | that long ago, clamped to what is kept |
-| `"fromItemStart": true` | the start of the current DL Plus item (DAB); with none known, the buffer's start (an item on since before it) or now (no item), and `why` says which |
+| `"fromItemStart": true` | `itemStartUtc`: the start of the current DL Plus item (DAB), or the buffer's start for an item on since before it, or now with no item; `why` says when it was not the item's real start |
 | `"lastMinutes": 5` | that long ago, and **ends at now**: a finished recording of the last minutes, made at once (FLAC is written at 20-35 times real time on shack, so five minutes take 10-15 s; meanwhile it is the audio recording that is running) |
 | none of them | `recordLeadSeconds` ago (a setting, 30 by default, 0-300), only while a broadcast station plays; otherwise now, as always |
 

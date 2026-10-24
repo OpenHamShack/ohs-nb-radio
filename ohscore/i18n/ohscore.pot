@@ -328,7 +328,7 @@ msgstr ""
 msgid "Give decoder, freqHz and, if any, params"
 msgstr ""
 
-#: ohscore/server/recording.py:227
+#: ohscore/server/recording.py:229
 msgid "Give one of fromSecondsAgo, fromItemStart and lastMinutes"
 msgstr ""
 
@@ -495,7 +495,7 @@ msgstr ""
 msgid "Nothing is kept to listen behind live: the timeshift keeps a DAB or wide FM station while it plays"
 msgstr ""
 
-#: ohscore/server/recording.py:249
+#: ohscore/server/recording.py:251
 msgid "Nothing is kept to record from the past: the timeshift keeps a DAB or wide FM station while it plays"
 msgstr ""
 
@@ -519,7 +519,7 @@ msgstr ""
 msgid "On the air"
 msgstr ""
 
-#: ohscore/server/recording.py:190
+#: ohscore/server/recording.py:192
 msgid "Only audio is kept in the timeshift: IQ records from now"
 msgstr ""
 
@@ -603,7 +603,7 @@ msgstr ""
 msgid "Record audio"
 msgstr ""
 
-#: ohscore/server/recording.py:381
+#: ohscore/server/recording.py:415
 #, python-brace-format
 msgid "Recording is not available in this installation: {why}"
 msgstr ""
@@ -685,7 +685,7 @@ msgid "Start the radio before adding a decoder"
 msgstr ""
 
 #: ohscore/engine.py:3466
-#: ohscore/server/recording.py:187
+#: ohscore/server/recording.py:189
 msgid "Start the radio before recording"
 msgstr ""
 
@@ -917,16 +917,16 @@ msgstr ""
 msgid "The sound system is not running"
 msgstr ""
 
-#: ohscore/server/timeshift.py:392
+#: ohscore/server/timeshift.py:401
 msgid "The station has sent no item (DL Plus) to start from: recording from now"
 msgstr ""
 
-#: ohscore/server/recording.py:240
+#: ohscore/server/recording.py:242
 #, python-brace-format
 msgid "The timeshift holds {s:.0f} s: recording from its start"
 msgstr ""
 
-#: ohscore/server/recording.py:294
+#: ohscore/server/recording.py:296
 msgid "The timeshift was cleared as the recording started: recording from now"
 msgstr ""
 
@@ -1127,7 +1127,7 @@ msgstr ""
 msgid "This is a recording already: go back to the radio to record"
 msgstr ""
 
-#: ohscore/server/timeshift.py:395
+#: ohscore/server/timeshift.py:404
 msgid "This item began before the timeshift buffer: recording from the buffer's start"
 msgstr ""
 
@@ -1157,7 +1157,7 @@ msgstr ""
 msgid "Timeshift stopped: {error}"
 msgstr ""
 
-#: ohscore/server/recording.py:150
+#: ohscore/server/recording.py:151
 msgid "Too many recordings started in the same second."
 msgstr ""
 
@@ -1489,7 +1489,7 @@ msgstr ""
 msgid "the SoapySDR radio"
 msgstr ""
 
-#: ohscore/server/recording.py:313
+#: ohscore/server/recording.py:315
 msgid "the radio stopped"
 msgstr ""
 
@@ -1507,15 +1507,15 @@ msgstr ""
 msgid "the station is {shift:+d} Hz away but the {why}"
 msgstr ""
 
-#: ohscore/server/recording.py:85
+#: ohscore/server/recording.py:86
 msgid "the time limit"
 msgstr ""
 
-#: ohscore/server/timeshift.py:469
+#: ohscore/server/timeshift.py:478
 msgid "the timeshift buffer was cleared while it was being read"
 msgstr ""
 
-#: ohscore/server/recording.py:291
+#: ohscore/server/recording.py:293
 msgid "the timeshift's minutes are all in it"
 msgstr ""
 
@@ -1656,7 +1656,7 @@ msgstr ""
 msgid "{key} is not a station condition"
 msgstr ""
 
-#: ohscore/server/recording.py:236
+#: ohscore/server/recording.py:238
 #, python-brace-format
 msgid "{key} must be a positive number"
 msgstr ""
