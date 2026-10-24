@@ -882,9 +882,21 @@ Per service (each field null, empty or false until the FIC has said):
   ensembles carrying it (FIG 0/24) with their frequencies and Band III
   block (FIG 0/21), FM frequencies with the RDS PI it is linked to (FIG
   0/6, 0/21), linked DAB services, and whether any link is hard (the same
-  programme rather than a related one).
-- `now` and `next`: from the SPI programme guide, null without one; times
-  ISO UTC.
+  programme rather than a related one). An `fm` entry with `mhz: []` is
+  right: the ensemble names the RDS PI (in a linkage set) but sends no FM
+  frequencies for it. BBC National on 12B does this for every service (its
+  only FIG 0/21 entry is an AM one, which Radio does not list), so Radio 4
+  is `{"pi": "C204", "mhz": []}`. To find the FM station, match the PI
+  against the FM scan (`api/fm/stations`, each entry's `pi`).
+- `now` and `next`: what is on and what comes next, from the SPI
+  programme guide, times ISO UTC; null when no guide is held for the
+  service. Radio works them out from every schedule it has stored (they
+  survive restarts and other sessions) at the current UTC, so they are
+  there from the first second of a session whenever a guide was heard
+  before, and are current in every fetch of the session. When they change
+  - a programme ends, or a guide arrives - the feed gets a fresh `meta`
+  item marked `"refresh": true` (its `rev` is the session's current one:
+  it is no new result of the decoder's).
 - `logoUrl` (square, 128x128 preferred) and `logoWideUrl` (320x240
   preferred): present only once a logo has come. Labels are FIG 2's
   (UTF-8) when the ensemble sends one.
@@ -1115,8 +1127,15 @@ reopens the radio and, on a controller, hands the broker's claim back).
 
 **How long** (at the RSPdx's 2.4 MS/s, its only rate in Radio): FM is
 eleven hops of 3 s across 87.5-108 MHz (about 35-40 s); DAB is 41 blocks
-(5A-13F) of 1.2 s each, 2.4 s for a block holding an ensemble (about 55 s
-plus 1.2 s per ensemble). At 1.2 MS/s FM takes 26 hops and DAB is refused
+(5A-13F) of 1.2 s each, and a block holding an ensemble is listened to
+1.2 s more at a time, up to 6 s, until its list is complete and every
+service has its programme type (about 55 s, plus 1.2 s for each block
+that needs it). On the local blocks' captures every type comes with the
+labels, so only a block slow to complete pays: 12A, which beta.8 left
+incomplete at 2.4 s, listens 3.6 s if it needs one step more;
+a block with a service that never sends a type pays the whole 6 s, at
+most 38 s more over the eight local ensembles. At 1.2 MS/s FM takes 26
+hops and DAB is refused
 (`unsupported`: it needs 2.048 MS/s).
 
 **Progress** in `api/state` (and its `state` diffs): `bandScan` is
