@@ -66,11 +66,11 @@ with REG.after("sampleRate"):
             "included, it does nothing.")
     _k("rfNotch", "enum", "auto", "setting", choices=list(notch.CHOICES),
        help="The SDRplay RSP's broadcast notch, ahead of its LNA: one switch for the FM band (about 77-115 MHz) "
-            "and MW (about 500-1530 kHz). Automatic: in, except while the receiver is tuned within 87.5-108 MHz "
-            "or the LW and MW broadcast bands. In, it also costs at least 4 dB on 2 m (SDRplay's RSPdx figure): "
-            "off suits a 2 m station with no strong FM transmitter near. On or off holds it. RSPdx, RSP1A, "
-            "RSP1B, RSP2 and RSPduo (on Tuner 1's Hi-Z input, that port's MW notch); on any other radio, the "
-            "RSP1 included, it does nothing.")
+            "and MW (about 500-1530 kHz). Automatic: in only while the receiver is tuned below 60 MHz, except "
+            "within the LW and MW broadcast bands; out above 60 MHz, because in it costs at least 4 dB on 2 m "
+            "(SDRplay's RSPdx figure). On holds it in everywhere: for a station near a strong FM transmitter. "
+            "Off holds it out. RSPdx, RSP1A, RSP1B, RSP2 and RSPduo (on Tuner 1's Hi-Z input, that port's MW "
+            "notch); on any other radio, the RSP1 included, it does nothing.")
     # The zero-IF receivers' DC spike (ohscore/dsp/dcblock.py; Brian,
     # 23/10/2026): auto takes it out where the radio makes one.
     _k("dcBlock", "enum", "auto", "setting", choices=["auto", "on", "off"],

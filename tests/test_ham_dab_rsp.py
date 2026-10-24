@@ -358,7 +358,7 @@ class ThroughTheRsp(unittest.TestCase):
         self.assertEqual(view["stats"]["dropped"], 0)
         self.assertEqual(r.centre, centre)
         # ...and out while the DAB station holds the receiver, with no reopen.
-        self.assertEqual(r.state()["deviceStatus"]["options"], {"rf_notch": True, "dab_notch": False})
+        self.assertEqual(r.state()["deviceStatus"]["options"], {"rf_notch": False, "dab_notch": False})
         # Its sound, 1 kHz left and 1.5 kHz right, is the receive audio.
         mark = len(audio.chunks)
         self.assertTrue(wait(r, lambda: sum(len(c) for c in audio.chunks[mark:] if c.ndim == 2) >= 48_000))

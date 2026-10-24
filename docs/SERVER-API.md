@@ -826,7 +826,7 @@ Radio under "RTL-SDR and SDRplay"; code `ohsradio/notch.py`, tests
 | Setting | Values (default `auto`) | `auto` |
 |---|---|---|
 | `dabNotch` | `auto`, `on`, `off` | in, except while the receiver's span touches 174-240 MHz or a DAB session holds the receiver |
-| `rfNotch` | `auto`, `on`, `off` | in, except while the span touches 87.5-108 MHz, LW (148.5-283.5 kHz) or MW (526.5-1705 kHz) |
+| `rfNotch` | `auto`, `on`, `off` | in only while the whole span is below 60 MHz and clear of LW (148.5-283.5 kHz) and MW (526.5-1705 kHz); out above 60 MHz |
 
 `on` (in) and `off` (out) hold a notch wherever the receiver is. The span
 is the RSP's own: its local oscillator plus and minus half the sample rate,
@@ -834,8 +834,9 @@ so through a converter it is the IF the RSP sees. What the switches cover,
 from SDRplay's datasheets (the API specification does not say): on an
 RSPdx, DAB >30 dB 160-230 MHz; FM >30 dB 77-115 MHz and MW >30 dB
 500-1530 kHz - and the FM notch also takes at least 4 dB off 2 m
-(144-148 MHz), so `auto` costs that there; `rfNotch: "off"` is the
-setting for a 2 m station with no FM transmitter near.
+(144-148 MHz), which is why `auto` leaves it out above 60 MHz (2 m, 70 cm
+and the FM band itself). `rfNotch: "on"` puts it in everywhere, for a
+station near a strong FM transmitter.
 
 - **Which radios:** an RSP whose model has the switch - RSPdx (and dx R2),
   RSP1A, RSP1B and RSPduo have both; the RSP2 only `rfNotch`; the RSP1
@@ -853,7 +854,7 @@ setting for a 2 m station with no FM transmitter near.
 - **What is applied** is `deviceStatus.options` in `api/status`: each
   switch the open RSP has, as SDRplay's API holds it (`rf_notch`,
   `dab_notch`, and `bias_t` and `hdr`, which Radio never changes), e.g.
-  `{"rf_notch": true, "dab_notch": false, "bias_t": false, "hdr": false}`
+  `{"rf_notch": false, "dab_notch": false, "bias_t": false, "hdr": false}`
   on an RSPdx tuned to 11B with both on `auto`. Absent for a radio
   without them.
 

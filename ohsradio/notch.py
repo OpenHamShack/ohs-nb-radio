@@ -15,9 +15,15 @@ wherever it cannot be in the way:
   session holds the receiver - which centres it on a block, so in Band
   III anyway; the hold is checked as well so a DAB session never depends
   on a centring rule elsewhere.
-- **`rfNotch`** (shack_sdr's `rf_notch`) is in unless the span touches
-  the FM broadcast band, 87.5-108 MHz, or the LW or MW AM broadcast bands
-  (`AM_BANDS`): the one switch is both an FM and an MW notch (below).
+- **`rfNotch`** (shack_sdr's `rf_notch`) is in only while the whole span
+  lies below 60 MHz (`RF_AUTO_TOP`), and even there out while it touches
+  the LW or MW broadcast bands (`AM_BANDS`). The one switch is both an FM
+  and an MW notch (below): on HF and LF the MW part helps and the FM part
+  costs nothing, but above 60 MHz - the FM band itself, 2 m, 70 cm, Band
+  III - it is out, because on 2 m it costs at least 4 dB (below) and Radio
+  is mostly a 2 m receiver. A station near a strong FM transmitter sets
+  `on`. (24/10/2026, before Store Radio beta.7: the first rule kept it in
+  everywhere outside the FM and AM broadcast bands, 2 m included.)
 
 `on` and `off` hold a notch whatever is tuned: for comparing, or for a
 station whose neighbour is somewhere the rule does not expect.
@@ -30,9 +36,8 @@ Specification 3.15 says nothing about it - every field is just "default:
   *and* MW notch, one switch - FM >30 dB 77-115 MHz, >50 dB 85-107 MHz;
   MW >30 dB 500-1530 kHz, >15 dB 400-1650 kHz. `rfDabNotchEnable` is
   >30 dB 160-230 MHz, >20 dB 155-235 MHz. The same datasheet gives the
-  FM notch >4 dB at 144-148 MHz: **in, it costs at least 4 dB on 2 m**.
-  Automatic still puts it in there, as asked (Brian's rule); `rfNotch
-  off` is the setting for a 2 m station with no FM broadcaster nearby.
+  FM notch >4 dB at 144-148 MHz: **in, it costs at least 4 dB on 2 m**,
+  which is why automatic takes it out above 60 MHz.
 - RSP1A and RSP1B (which the API drives through the RSP1A's fields):
   the same pair, "AM/FM" and DAB; FM >50 dB 85-100 MHz, MW >30 dB
   660-1550 kHz, DAB >30 dB 165-230 MHz (RSP1B datasheet).
@@ -73,6 +78,10 @@ CHOICES = ("auto", "on", "off")
 
 BAND_III = (174_000_000.0, 240_000_000.0)
 FM_BROADCAST = (87_500_000.0, 108_000_000.0)
+# rfNotch auto: in only below this (module docstring). 6 m (50-52 MHz) is
+# under it and far enough from the FM notch's 77 MHz lower edge; 4 m (70
+# MHz) is over it, so its edge is never in question.
+RF_AUTO_TOP = 60_000_000.0
 # LW 148.5-283.5 kHz (ITU Region 1); MW 526.5 kHz to 1705 kHz, Region 2's
 # top edge rather than Region 1's 1606.5, so a station anywhere is covered.
 # 160 m starts at 1810 kHz, outside both.
@@ -90,7 +99,7 @@ def auto_dab(lo: float, hi: float, dab_held: bool) -> bool:
 
 def auto_rf(lo: float, hi: float) -> bool:
     """Whether `auto` puts the broadcast notch in for a span lo..hi Hz."""
-    return not any(_touches(lo, hi, b) for b in (FM_BROADCAST, *AM_BANDS))
+    return hi <= RF_AUTO_TOP and not any(_touches(lo, hi, b) for b in AM_BANDS)
 
 
 def _pick(setting: str, auto: bool) -> bool:
