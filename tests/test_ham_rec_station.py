@@ -190,7 +190,7 @@ class OverTheApi(unittest.TestCase):
         self.assertEqual(g["openhamshack:receive"]["mode"], "dab")
         self.assertEqual(g["openhamshack:broadcast"]["label"], "Shack MP2 Tone")
         self.assertEqual(g["openhamshack:broadcast"]["eid"], "C1CE")
-        self.assertTrue(g["core:description"].endswith("222.064000 MHz DAB, Shack MP2 Tone"))
+        self.assertTrue(g["core:description"].endswith("222.064000 MHz DAB, " + g["openhamshack:broadcast"]["label"]))
 
     def test_a_wide_fm_station_is_recorded_by_its_rds_name(self):
         s, a = self.req("POST", "/api/set", {"vfo": FM, "mode": "wfm"})
