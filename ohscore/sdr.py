@@ -34,15 +34,14 @@ log = logging.getLogger("ohscore.sdr")
 # milestone 2): the PSK modes' decoder (modes/sdrmode.py PskDecoder, with
 # several stations at once through pskChannels), `psk` sessions in the
 # Decoders view and on api/decoders, and the zoom's click-to-add-a-station.
-# OFF, and so the PSK modes decode with psk.py's Python decoder as before
-# milestone 2, because the Rust decoder still loses an over's last
-# character when no idle follows it, and a character when TX lock steps
-# our own echo mid-over (test_tx_drain, test_playback's own-echo check:
-# both pass on psk.py). The fix is parked (ohs-libs fix/psk-tail-and-step,
-# Brian, 23/10/2026); store beta.6 ships without it. Turn this on once
-# wheels with that fix are vendored and those two tests pass with it on;
-# the tests skipped with "PSK library fix parked" run again then.
-PSK_ON_SHACK_SDR = False
+# On since the wheels with ohs-libs' fix (the over's last character when
+# no idle follows it, and a carrier step mid-over when TX lock steps our
+# own echo: test_tx_drain and test_playback's own-echo check) were
+# vendored for beta.7. Off puts the PSK modes back on psk.py's Python
+# decoder, as before milestone 2 (store beta.6 shipped that way, Brian,
+# 23/10/2026): kept as the one switch should the Rust decoder need
+# parking again, and the "as shipped" tests still check that path then.
+PSK_ON_SHACK_SDR = True
 
 _lock = threading.Lock()
 _mod = None

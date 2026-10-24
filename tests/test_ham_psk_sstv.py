@@ -36,7 +36,7 @@ from ohscore import sdr
 from ohscore.devices import simsignals as sg
 from ohscore.modes import psk
 
-PARKED = "PSK library fix parked (ohs-libs fix/psk-tail-and-step)"
+PARKED = "no shack_sdr here, or the Rust PSK decoder switched off (ohscore/sdr.py PSK_ON_SHACK_SDR)"
 RUST_PSK = sdr.available() and sdr.PSK_ON_SHACK_SDR
 
 DIAL = 14_101_000.0            # USB; the simulator's own stations are off (simSignals False)
@@ -268,6 +268,7 @@ class SstvAsASession(unittest.TestCase):
 
 
 @unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+@unittest.skipIf(sdr.PSK_ON_SHACK_SDR, "the Rust PSK decoder is switched on")
 class PskAsShipped(unittest.TestCase):
     """With the Rust PSK decoder switched off (ohscore/sdr.py
     PSK_ON_SHACK_SDR): the PSK modes decode with psk.py as before

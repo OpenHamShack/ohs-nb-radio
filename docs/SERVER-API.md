@@ -84,10 +84,10 @@ FM (`wfm`: a 240 kS/s channel of its own, `panel` `meta`, its RDS as the
 session's `meta`; refused on every receiver before 23/10/2026, and now
 `409 rate_too_low` only below 144 kS/s), CW through shack_cw, RTTY
 (45.45, 50, 75 Bd; 170, 425,
-450, 850 Hz; normal or reversed), and since 23/10/2026 SSTV (`sstv`,
-fourteen modes, pictures as files): shack_sdr's Rust decoders, the same
-ones the RTTY and SSTV modes now use (below, "SSTV"). PSK is not a
-session yet (below, "PSK"). Nothing here
+450, 850 Hz; normal or reversed), and since 23/10/2026 PSK31/63/125
+(`psk`, several stations in one session) and SSTV (`sstv`, fourteen
+modes, pictures as files): shack_sdr's Rust decoders, the same ones the
+RTTY, PSK and SSTV modes now use (below, "PSK" and "SSTV"). Nothing here
 transmits. The mode decoder itself is unchanged: its decodes still come
 as `events`, and it is listed as the session `vfo` while the mode is
 decoded by shack_sdr.
@@ -175,25 +175,53 @@ fetches the session with `?since=`. `t` is UTC from the samples. Text is
 not yet coalesced: RTTY's results come a character or a few at a time,
 about seven a second at 45.45 Bd.
 
-A session whose decoder sends `meta` (wide FM, SSTV; DAB below)
+A session whose decoder sends `meta` (wide FM, PSK, SSTV; DAB below)
 carries the latest as `meta` in the session, and each new one comes as a
 `meta` result.
 
 ### PSK
 
-**Not yet.** shack_sdr has a `psk` decoder that hears several stations in
-one session, but it is switched off in this release: it still loses an
-over's last character when no idle follows it, and a character when TX
-lock steps a station mid-over (its fix is parked, ohs-libs
-fix/psk-tail-and-step). So `psk` is not in `api/decoders`' list (a session
-of it is `404 unknown_decoder`), there is no `pskChannels`, and the PSK
-modes (`psk31`, `psk63`, `psk125`) decode one station with the app's own
-decoder, their `events` as before: `{"mode": "psk31", "text", "center",
-"df", "snr"}`. What the sessions and the modes will carry once it is on -
-`params.channels` offsets, results routed by `offsetHz`, a `meta` per
-channel, a `channel` on each mode event - is in RADIO-SDR-PLAN §8.5 and
-ohs-libs' shack_sdr README "PSK"; this file will describe it when it
-ships.
+`psk` decodes PSK31, PSK63 and PSK125 (BPSK, Varicode; no QPSK), several
+stations in one session. Its frequency is a centre; `params.channels`
+lists the stations as offsets in Hz from it, comma-separated, up to 16
+(`"-400,0,350"`; default `"0"`, the one on its frequency). Other params:
+`baud` 31.25, 62.5 or 125 (31.25), `afc` (true) and `afcRangeHz` 0-100
+(15, each side of each channel), `squelch` 0-20 dB (3; 0 is off). All
+change live through `POST api/decoders/sessions/{id}` - a waterfall tap
+sends the list with one more offset - and a channel kept in the new list
+keeps its lock; a list of more than 16 is `400 bad_params`. A channel the
+session's band cannot hold makes the session `error` with why
+`channel_outside`.
+
+```json
+{"kind": "decoder", "session": "ds_7c10", "rev": 41, "t": 1792663200.25, "type": "text", "text": "C", "offsetHz": -399.2, "snrDb": -9.8}
+{"kind": "decoder", "session": "ds_7c10", "rev": 42, "t": 1792663201.0, "type": "meta",
+ "fields": {"channels": [{"offsetHz": -400.0, "freqHz": -399.2, "sync": true, "snrDb": -9.6, "imdDb": -28.4},
+                         {"offsetHz": 350.0, "freqHz": 350.0, "sync": false, "snrDb": null, "imdDb": null}], "whyText": ""}}
+```
+
+One `text` result per character, `t` its first symbol's time. Its
+`offsetHz` is the frequency it was heard on, from the session's centre:
+route it to the nearest of the session's channels, one line per channel.
+`snrDb` is in 2.5 kHz (add 19 dB at 31.25 Bd for the symbol's own
+bandwidth). Characters come about a second after they were sent at
+PSK31. `meta` comes once a second while a channel hears a signal: per
+channel its `offsetHz` (as given), `freqHz` (where it is tracking, same
+reference), `sync`, `snrDb` and `imdDb` (null until the tones stand 20 dB
+over the noise). `stats` adds `chars` and `channels`.
+
+**The PSK modes** (`psk31`, `psk63`, `psk125` in `api/set mode`) are the
+same decoder as the session `vfo`. Their `events` keep their shape -
+`{"mode": "psk31", "text", "center", "df", "snr"}`, `center` and `df` the
+audio frequency (Hz above the dial) the station is on, `snr` in the
+symbol's bandwidth as before - and add `channel`, the audio frequency of
+the channel it belongs to. The mode's own channel is at 1000 Hz;
+**`pskChannels`** (control, `POST api/set`, not kept over a restart) adds
+up to 15 more, audio frequencies 200-2900 Hz above the dial
+(`{"pskChannels": [1450, 1720]}`; `[]` for none). Show a character whose
+`channel` is not 1000 on that station's own line. The `vfo` session's
+`params.channels` are offsets from its `audioCentreHz` (1500), not from
+the dial. PSK125 transmits as PSK31 and PSK63 do.
 
 ### SSTV
 

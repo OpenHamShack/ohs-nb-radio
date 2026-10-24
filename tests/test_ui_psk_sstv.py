@@ -32,7 +32,7 @@ from ohscore import sdr
 from ohscore.devices import simsignals as sg
 from ohscore.modes import psk
 
-PARKED = "PSK library fix parked (ohs-libs fix/psk-tail-and-step)"
+PARKED = "no shack_sdr here, or the Rust PSK decoder switched off (ohscore/sdr.py PSK_ON_SHACK_SDR)"
 RUST_PSK = sdr.PSK_ON_SHACK_SDR
 DIAL = 14_101_000.0
 LEVEL = -58.0

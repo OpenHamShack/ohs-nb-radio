@@ -190,7 +190,7 @@ class PskAndSstvApi(test_server.ServerTest):
             time.sleep(0.05)
         return False
 
-    @unittest.skipUnless(sdr.PSK_ON_SHACK_SDR, "PSK library fix parked (ohs-libs fix/psk-tail-and-step)")
+    @unittest.skipUnless(sdr.PSK_ON_SHACK_SDR, "the Rust PSK decoder switched off (ohscore/sdr.py PSK_ON_SHACK_SDR)")
     def test_a_psk_session_copies_each_of_its_channels(self):
         self.radio.dev.add_station("a", self.DIAL, _psk_air("ALPHA DE G4AAA G4AAA ", 1000.0), self.LEVEL)
         self.radio.dev.add_station("b", self.DIAL, _psk_air("BRAVO DE M0BBB M0BBB ", 1900.0), self.LEVEL)

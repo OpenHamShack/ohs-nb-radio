@@ -16,7 +16,7 @@ import numpy as np
 from ohscore import sdr
 from ohscore.modes import psk, sdrmode
 
-PARKED = "PSK library fix parked (ohs-libs fix/psk-tail-and-step)"
+PARKED = "no shack_sdr here, or the Rust PSK decoder switched off (ohscore/sdr.py PSK_ON_SHACK_SDR)"
 RUST = sdr.available() and sdr.PSK_ON_SHACK_SDR
 
 
