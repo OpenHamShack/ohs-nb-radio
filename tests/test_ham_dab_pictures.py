@@ -1,5 +1,5 @@
 """DAB's pictures in Radio (24/10/2026): SlideShow's slides, SPI's station
-logos and programme guide, all off air (nothing is ever fetched).
+logos and programme guide, all off air (the fetched ones are test_ham_radiodns.py).
 
 - **The store** (ohscore/dabpics.py): a decoder's `slide`, `logo` and
   `schedule` frames are kept and come back without their bytes and with
@@ -75,8 +75,9 @@ class TheStore(unittest.TestCase):
         again = DabPictures(Path(self.tmp.name), clock=lambda: self.now)
         self.assertEqual(again.logo("C221", "square"), (PNG, "image/png"))
         self.assertEqual(again.logo("C221", "wide"), (PNG + b"w", "image/png"))
-        self.assertEqual(again.logo_paths("C221"), {"logoPath": "api/dab/logos/C221",
-                                                    "logoWidePath": "api/dab/logos/C221?variant=wide"})
+        self.assertEqual(again.logo_paths("C221"), {"logoPath": "api/dab/logos/C221", "logoSource": "broadcast",
+                                                    "logoWidePath": "api/dab/logos/C221?variant=wide",
+                                                    "logoWideSource": "broadcast"})
         self.assertEqual(again.schedule("C221"), progs)
         self.assertEqual(again.schedule("C221", date="1970-01-02"), [])
         self.assertIsNone(again.slide("C221"), "a slide is what is on now: never kept past a restart")
@@ -105,7 +106,8 @@ class TheStore(unittest.TestCase):
         self.pics.take(frame("slide", raw=PNG, sid="C221", contentType="image/png", name="s.png"))
         meta = {"services": [{"sid": "C221"}, {"sid": "C3A7"}], "slide": {"sid": "C221", "name": "s.png"}}
         out = self.pics.decorate(meta)
-        self.assertEqual(out["services"], [{"sid": "C221", "logoPath": "api/dab/logos/C221"}, {"sid": "C3A7"}])
+        self.assertEqual(out["services"], [{"sid": "C221", "logoPath": "api/dab/logos/C221",
+                                                "logoSource": "broadcast"}, {"sid": "C3A7"}])
         self.assertEqual(out["slide"]["path"], "api/dab/slides/C221")
         self.assertIsInstance(out["slide"]["rev"], int)
         self.assertNotIn("logoPath", meta["services"][0], "the meta given is not changed")

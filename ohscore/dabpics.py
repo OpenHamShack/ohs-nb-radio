@@ -2,7 +2,8 @@
 (SlideShow), the station logos and the schedules a DAB session's decoder
 hands over (shack_sdr README "DAB": `frame` results `slide`, `logo` and
 `schedule`, the picture's bytes in `raw`). Nothing here fetches anything:
-every picture came off air.
+a picture came off air, or was handed in by Radio's RadioDNS fetcher
+(ohsradio/radiodns.py, `take_fetched`).
 
     pics = engine.dab_pictures
     pics.take(item)            # a decoder result; the item without its bytes
@@ -30,6 +31,15 @@ dropped.
 X-Forwarded-Prefix (server/app.py `with_urls`), because only it knows
 where the app is being served from.
 
+**Two sources, the air first.** A logo is `broadcast` (from the
+ensemble's SPI) or `radiodns` (fetched from the broadcaster's own server);
+each path and URL handed out says which (`logoSource`, `logoWideSource`).
+Per variant the air wins: a fetched logo never replaces a broadcast one,
+and a broadcast one always replaces a fetched one. Fetched ones are the
+first to go when the store is full, and while `show_fetched()` is false
+(the radioDnsLogos setting off) they are kept but not shown, so the store
+answers exactly as it did before there were any.
+
 A logo is keyed by SId alone. SIds are unique within a country, and a
 receiver hears one country's ensembles, so the ECC is not part of the key.
 """
@@ -52,8 +62,10 @@ VARIANTS = ("square", "wide")
 TYPES = {"image/png": "png", "image/jpeg": "jpg"}
 MAX_SLIDES = 32
 MAX_SLIDE_BYTES = 460_800            # SlideShow's own limit (TS 101 499 §9.1)
-LOGO_FILES = 256
-LOGO_BYTES = 16 << 20
+# Room for a broadcast and a fetched pair for every service of a full
+# station list (ohs-box's had 123 services, 24/10/2026): 256 until RadioDNS.
+LOGO_FILES = 512
+LOGO_BYTES = 24 << 20
 MAX_SCHEDULES = 64
 SCHEDULE_KEEP_S = 86_400.0
 
@@ -71,6 +83,9 @@ class DabPictures:
         self.logos: dict[str, dict[str, dict]] = {}
         self.schedules: dict[str, dict] = {}
         self.rev = 0
+        # Whether fetched (RadioDNS) logos are shown; Radio gives it the
+        # radioDnsLogos setting.
+        self.show_fetched = lambda: True
         self._load()
 
     # ------------------------------------------------------------ disk
@@ -109,11 +124,13 @@ class DabPictures:
         self._write(name, json.dumps(obj, separators=(",", ":")).encode())
 
     def _prune_logos(self) -> None:
-        """At most LOGO_FILES files and LOGO_BYTES bytes: the oldest go."""
-        entries = sorted(((e.get("t", 0.0), sid, v) for sid, vs in self.logos.items() for v, e in vs.items()))
-        total = sum(int(self.logos[sid][v].get("size", 0)) for _, sid, v in entries)
+        """At most LOGO_FILES files and LOGO_BYTES bytes: fetched ones go
+        first, then the oldest."""
+        entries = sorted(((e.get("source") != "radiodns", e.get("t", 0.0), sid, v)
+                          for sid, vs in self.logos.items() for v, e in vs.items()))
+        total = sum(int(self.logos[sid][v].get("size", 0)) for _, _, sid, v in entries)
         while entries and (len(entries) > LOGO_FILES or total > LOGO_BYTES):
-            _, sid, v = entries.pop(0)
+            _, _, sid, v = entries.pop(0)
             e = self.logos[sid].pop(v)
             total -= int(e.get("size", 0))
             if not self.logos[sid]:
@@ -164,11 +181,8 @@ class DabPictures:
                     self.logos.setdefault(sid, {})[variant] = {
                         "file": name, "contentType": ctype, "width": fields.get("width"),
                         "height": fields.get("height"), "size": len(raw), "name": fields.get("name"), "t": t,
-                        **({"bytes": bytes(raw)} if self.dir is None else {})}
-                    if self.dir is not None:
-                        self._prune_logos()
-                        self._save_index("logos.json", {s: {v: {k: x for k, x in e.items() if k != "bytes"}
-                                                            for v, e in vs.items()} for s, vs in self.logos.items()})
+                        "source": "broadcast", **({"bytes": bytes(raw)} if self.dir is None else {})}
+                    self._logos_changed()
                 fields["path"] = self.logo_path(sid, variant)
             else:
                 progs = [p for p in fields.get("programmes") or [] if isinstance(p, dict)]
@@ -180,6 +194,56 @@ class DabPictures:
                 fields["path"] = f"api/dab/schedule/{sid}"
         out["fields"] = fields
         return out
+
+    def _logos_changed(self) -> None:
+        """Under the lock, after a logo went in: the caps, then the index."""
+        if self.dir is not None:
+            self._prune_logos()
+            self._save_index("logos.json", {s: {v: {k: x for k, x in e.items() if k != "bytes"}
+                                                for v, e in vs.items()} for s, vs in self.logos.items()})
+
+    def take_fetched(self, sid: str, variant: str, raw: bytes, ctype: str, width, height, url: str) -> bool:
+        """A logo from RadioDNS. Refused (False) where the air has brought
+        that variant: the broadcast one wins."""
+        if not sid_ok(sid) or variant not in VARIANTS or ctype not in TYPES or not raw:
+            return False
+        with self.lock:
+            old = self.logos.get(sid, {}).get(variant)
+            if old is not None and old.get("source", "broadcast") != "radiodns":
+                return False
+            name = f"{sid}-{variant}-radiodns.{TYPES[ctype]}"
+            if not (self._write(name, bytes(raw)) or self.dir is None):
+                return False
+            if old and old.get("file") != name and self.dir is not None:
+                try:
+                    (self.dir / old["file"]).unlink()
+                except OSError:
+                    pass
+            self.rev += 1
+            self.logos.setdefault(sid, {})[variant] = {
+                "file": name, "contentType": ctype, "width": width, "height": height, "size": len(raw),
+                "t": self.clock(), "source": "radiodns", "url": url,
+                **({"bytes": bytes(raw)} if self.dir is None else {})}
+            self._logos_changed()
+            return sid in self.logos and variant in self.logos[sid]
+
+    def has_broadcast(self, sid, variant: str) -> bool:
+        with self.lock:
+            e = (self.logos.get(sid) or {}).get(variant)
+            return e is not None and e.get("source", "broadcast") != "radiodns"
+
+    def fetched_url(self, sid, variant: str) -> str | None:
+        """The URL a fetched logo of that variant came from, None without one."""
+        with self.lock:
+            e = (self.logos.get(sid) or {}).get(variant)
+            return e.get("url") if e is not None and e.get("source") == "radiodns" else None
+
+    def _shown(self, sid) -> dict:
+        """Under the lock: a service's logos as they may be shown now."""
+        vs = self.logos.get(sid) or {}
+        if vs and not self.show_fetched():
+            vs = {v: e for v, e in vs.items() if e.get("source", "broadcast") != "radiodns"}
+        return vs
 
     def _prune_schedules(self) -> None:
         now = self.clock()
@@ -212,7 +276,7 @@ class DabPictures:
     def logo(self, sid: str, variant: str = "square") -> tuple[bytes, str] | None:
         """A service's logo: the variant asked for, else the other one."""
         with self.lock:
-            vs = self.logos.get(sid) or {}
+            vs = self._shown(sid)
             e = vs.get(variant) or next(iter(vs.values()), None)
             if e is None:
                 return None
@@ -226,17 +290,20 @@ class DabPictures:
 
     def has_logo(self, sid) -> bool:
         with self.lock:
-            return bool(self.logos.get(sid))
+            return bool(self._shown(sid))
 
     def logo_paths(self, sid) -> dict:
-        """{"logoPath", "logoWidePath"} for a service with logos; {} without."""
+        """{"logoPath", "logoSource", "logoWidePath", "logoWideSource"} for a
+        service with logos ({} without): each source "broadcast" or
+        "radiodns", for the picture that path serves."""
         with self.lock:
-            vs = self.logos.get(sid) or {}
+            vs = {v: e.get("source", "broadcast") for v, e in self._shown(sid).items()}
         out = {}
         if vs:
-            out["logoPath"] = self.logo_path(sid, "square" if "square" in vs else "wide")
+            v = "square" if "square" in vs else "wide"
+            out["logoPath"], out["logoSource"] = self.logo_path(sid, v), vs[v]
         if "wide" in vs:
-            out["logoWidePath"] = self.logo_path(sid, "wide")
+            out["logoWidePath"], out["logoWideSource"] = self.logo_path(sid, "wide"), vs["wide"]
         return out
 
     def schedule(self, sid: str, date: str | None = None) -> list[dict] | None:
