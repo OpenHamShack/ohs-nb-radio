@@ -323,7 +323,8 @@ class StationsView(QWidget):
         return getattr(self.radio, "bandscan", None)
 
     def _state(self, ch: dict) -> None:
-        if any(k in ch for k in ("stationsAt", "bandScan")):
+        # radioDnsLogos: its fetched logos shown or hidden (dabpics.py).
+        if any(k in ch for k in ("stationsAt", "bandScan", "radioDnsLogos")):
             self.refresh()
 
     def _chosen(self, _i: int = 0) -> None:

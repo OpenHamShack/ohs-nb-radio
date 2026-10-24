@@ -10,19 +10,19 @@ msgstr ""
 msgid "'{command}' failed on the radio (exit {status}: {output}). The radio was not restarted."
 msgstr ""
 
-#: ohsradio/bandscan.py:342
+#: ohsradio/bandscan.py:344
 msgid "A band scan is running already"
 msgstr ""
 
-#: ohsradio/bandscan.py:354
+#: ohsradio/bandscan.py:356
 msgid "A decoder is running"
 msgstr ""
 
-#: ohsradio/bandscan.py:352
+#: ohsradio/bandscan.py:354
 msgid "A recording is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1004
+#: ohsradio/radio.py:1015
 msgid "A recording is playing: its gain was fixed when it was recorded."
 msgstr ""
 
@@ -30,23 +30,23 @@ msgstr ""
 msgid "A refresh is already running"
 msgstr ""
 
-#: ohsradio/bandscan.py:370
+#: ohsradio/bandscan.py:372
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1498
+#: ohsradio/radio.py:1509
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
-#: ohsradio/bandscan.py:350
+#: ohsradio/bandscan.py:352
 msgid "An IQ recording is being made"
 msgstr ""
 
-#: ohsradio/bandscan.py:560
+#: ohsradio/bandscan.py:564
 msgid "Band III (DAB)"
 msgstr ""
 
-#: ohsradio/ui/settings.py:592
+#: ohsradio/ui/settings.py:595
 #, python-brace-format
 msgid "Bands & power, {band}: not a number"
 msgstr ""
@@ -90,7 +90,7 @@ msgstr ""
 msgid "Connecting to {host}…"
 msgstr ""
 
-#: ohsradio/bandscan.py:599
+#: ohsradio/bandscan.py:603
 #, python-brace-format
 msgid "DAB: block {block} ({n} of {of})"
 msgstr ""
@@ -100,12 +100,12 @@ msgstr ""
 msgid "Done: the Pluto now runs as {chip}, which tunes {range}."
 msgstr ""
 
-#: ohsradio/state.py:327
+#: ohsradio/state.py:339
 #, python-brace-format
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
 
-#: ohsradio/radio.py:622
+#: ohsradio/radio.py:633
 #, python-brace-format
 msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
 msgstr ""
@@ -116,8 +116,8 @@ msgstr ""
 msgid "FIR / sample rate"
 msgstr ""
 
-#: ohsradio/bandscan.py:570
-#: ohsradio/bandscan.py:575
+#: ohsradio/bandscan.py:574
+#: ohsradio/bandscan.py:579
 #, python-brace-format
 msgid "FM: {mhz:.2f} MHz ({n} of {of})"
 msgstr ""
@@ -168,21 +168,21 @@ msgstr ""
 msgid "Not a field of my frequencies: {fields}"
 msgstr ""
 
-#: ohsradio/bandscan.py:296
+#: ohsradio/bandscan.py:298
 msgid "Not scanned yet"
 msgstr ""
 
-#: ohsradio/bandscan.py:442
+#: ohsradio/bandscan.py:444
 #, python-brace-format
 msgid "Not scanning now: {why}"
 msgstr ""
 
-#: ohsradio/radio.py:1187
+#: ohsradio/radio.py:1198
 #, python-brace-format
 msgid "Notch filter not changed: {error}"
 msgstr ""
 
-#: ohsradio/radio.py:1061
+#: ohsradio/radio.py:1072
 #, python-brace-format
 msgid "Radio is scanning {label} for its station list: it is yours again the moment you use it"
 msgstr ""
@@ -191,7 +191,7 @@ msgstr ""
 msgid "Reachable"
 msgstr ""
 
-#: ohsradio/radio.py:1008
+#: ohsradio/radio.py:1019
 msgid "Receiver gain control is automatic: the radio's own AGC follows the station."
 msgstr ""
 
@@ -204,7 +204,7 @@ msgstr ""
 msgid "Running: {command}"
 msgstr ""
 
-#: ohsradio/bandscan.py:292
+#: ohsradio/bandscan.py:294
 msgid "Scanning now"
 msgstr ""
 
@@ -220,15 +220,15 @@ msgstr ""
 msgid "Set the station's locator to list what is near it; only the channel tables and your own frequencies are listed without it."
 msgstr ""
 
-#: ohsradio/bandscan.py:365
+#: ohsradio/bandscan.py:367
 msgid "Someone is listening"
 msgstr ""
 
-#: ohsradio/bandscan.py:439
+#: ohsradio/bandscan.py:441
 msgid "Start the radio before scanning"
 msgstr ""
 
-#: ohsradio/bandscan.py:537
+#: ohsradio/bandscan.py:539
 #, python-brace-format
 msgid "Stopped: the radio was wanted ({why})"
 msgstr ""
@@ -238,7 +238,7 @@ msgstr ""
 msgid "The CW segment, {lo:.3f}-{hi:.3f} MHz, is outside what the receiver covers now, {slo:.3f}-{shi:.3f} MHz."
 msgstr ""
 
-#: ohsradio/bandscan.py:356
+#: ohsradio/bandscan.py:358
 msgid "The CW skimmer is running"
 msgstr ""
 
@@ -251,11 +251,11 @@ msgstr ""
 msgid "The CW skimmer stopped."
 msgstr ""
 
-#: ohsradio/radio.py:1006
+#: ohsradio/radio.py:1017
 msgid "The Hermes-Lite 2's receive gain is its LNA setting, which stays yours."
 msgstr ""
 
-#: ohsradio/radio.py:877
+#: ohsradio/radio.py:888
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
@@ -269,7 +269,7 @@ msgstr ""
 msgid "The radio is configured as {uri}. The change is made over the Pluto's network link (its USB Ethernet, normally ip:192.168.2.1), which this address does not use. Set the address to ip:192.168.2.1 in Settings › Radio (Find lists it) and try again, or follow the steps below."
 msgstr ""
 
-#: ohsradio/bandscan.py:344
+#: ohsradio/bandscan.py:346
 msgid "The radio is not running"
 msgstr ""
 
@@ -286,17 +286,17 @@ msgstr ""
 msgid "The radio restarted, but its firmware does not report which chip it runs as, so the change could not be confirmed. Try 2 m once the radio is running again."
 msgstr ""
 
-#: ohsradio/bandscan.py:374
+#: ohsradio/bandscan.py:376
 #, python-brace-format
 msgid "The radio was used in the last {minutes:g} minutes"
 msgstr ""
 
-#: ohsradio/bandscan.py:348
+#: ohsradio/bandscan.py:350
 #, python-brace-format
 msgid "The receiver is in use: {text}"
 msgstr ""
 
-#: ohsradio/bandscan.py:511
+#: ohsradio/bandscan.py:513
 msgid "The receiver stopped delivering samples"
 msgstr ""
 
@@ -310,22 +310,22 @@ msgstr ""
 msgid "The settings were written, but the radio did not restart within {secs:.0f} s and still runs as {chip}. Unplug it and plug it back in, wait half a minute, then use Help › Check radio…."
 msgstr ""
 
-#: ohsradio/bandscan.py:390
+#: ohsradio/bandscan.py:392
 #, python-brace-format
 msgid "The {device} does not receive Band III"
 msgstr ""
 
-#: ohsradio/bandscan.py:386
+#: ohsradio/bandscan.py:388
 #, python-brace-format
 msgid "The {device} does not receive the FM band"
 msgstr ""
 
-#: ohsradio/radio.py:583
+#: ohsradio/radio.py:594
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz ({radio} MHz through {converter}) is outside it"
 msgstr ""
 
-#: ohsradio/radio.py:586
+#: ohsradio/radio.py:597
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
@@ -338,7 +338,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1456
+#: ohsradio/radio.py:1467
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -361,11 +361,11 @@ msgstr ""
 msgid "This Pluto runs firmware {version}, not ADI's numbered firmware, so the program does not know what its environment commands do and will not run them. The steps below are ADI's."
 msgstr ""
 
-#: ohsradio/bandscan.py:346
+#: ohsradio/bandscan.py:348
 msgid "Transmitting"
 msgstr ""
 
-#: ohsradio/radio.py:833
+#: ohsradio/radio.py:844
 #, python-brace-format
 msgid "Tuning to {freq} stops {sessions}: the receiver stays on {lo} to {hi} while they run"
 msgstr ""
@@ -379,12 +379,12 @@ msgstr ""
 msgid "Waiting for the radio to restart…"
 msgstr ""
 
-#: ohsradio/radio.py:1100
+#: ohsradio/radio.py:1111
 #, python-brace-format
 msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""
 
-#: ohsradio/bandscan.py:437
+#: ohsradio/bandscan.py:439
 msgid "band must be fm, dab or both"
 msgstr ""
 
@@ -444,12 +444,12 @@ msgstr ""
 msgid "in: overload seen at {mhz} MHz"
 msgstr ""
 
-#: ohsradio/radio.py:963
-#: ohsradio/radio.py:968
+#: ohsradio/radio.py:974
+#: ohsradio/radio.py:979
 msgid "in: set on"
 msgstr ""
 
-#: ohsradio/radio.py:970
+#: ohsradio/radio.py:981
 msgid "in: tuned below 60 MHz, clear of MW and LW broadcasting"
 msgstr ""
 
@@ -502,12 +502,12 @@ msgstr ""
 msgid "out: no overload seen"
 msgstr ""
 
-#: ohsradio/radio.py:963
-#: ohsradio/radio.py:968
+#: ohsradio/radio.py:974
+#: ohsradio/radio.py:979
 msgid "out: set off"
 msgstr ""
 
-#: ohsradio/radio.py:972
+#: ohsradio/radio.py:983
 msgid "out: tuned above 60 MHz or within MW or LW broadcasting"
 msgstr ""
 
@@ -519,7 +519,7 @@ msgstr ""
 msgid "still restarting"
 msgstr ""
 
-#: ohsradio/bandscan.py:560
+#: ohsradio/bandscan.py:564
 msgid "the FM band"
 msgstr ""
 
@@ -553,7 +553,7 @@ msgstr ""
 msgid "{error}. The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:875
+#: ohsradio/radio.py:886
 #, python-brace-format
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""
@@ -578,12 +578,12 @@ msgstr ""
 msgid "{field} must be text"
 msgstr ""
 
-#: ohsradio/radio.py:778
+#: ohsradio/radio.py:789
 #, python-brace-format
 msgid "{freq} does not fit in the {width} the receiver covers together with the dial ({dial}) and {sessions}"
 msgstr ""
 
-#: ohsradio/radio.py:775
+#: ohsradio/radio.py:786
 #, python-brace-format
 msgid "{freq} is too far from the dial ({dial}): the receiver covers {width} at once, so tune nearer to it first"
 msgstr ""

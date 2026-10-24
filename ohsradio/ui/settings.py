@@ -44,7 +44,7 @@ class SettingsDialog(core.SettingsDialog):
               "cwSkim": "CW skimmer", "cwSkimSquelch": "CW skimmer squelch", "cwSkimMax": "CW skimmer channels",
               "cwSkimScp": "Download MASTER.SCP", "localRadiusKm": "Radius", "openAipKey": "openAIP API key",
               "scanAuto": "Weekly station scan", "scanHour": "Scan at (hour)", "scanEveryDays": "Scan every",
-              "scanIdleMinutes": "Only after idle for"}
+              "scanIdleMinutes": "Only after idle for", "radioDnsLogos": "Station logos from the internet"}
     CHOICE_LABELS = {**core.CHOICE_LABELS,
                      "device": {"sim": "Simulator", "pluto": "Pluto family", "libresdr": "LibreSDR",
                                 "hl2": "Hermes-Lite 2", "rtlsdr": "RTL-SDR (RX only)",
@@ -174,6 +174,9 @@ class SettingsDialog(core.SettingsDialog):
         lay.addWidget(note)
         for key in ("scanAuto", "scanHour", "scanEveryDays", "scanIdleMinutes"):
             self._add(lay, key)
+        # RadioDNS logos (ohsradio/radiodns.py): the one setting here that
+        # reaches the internet, so its help (what goes out) is shown in full.
+        self._add(lay, "radioDnsLogos")
         self._section(lay, self.tr("Codecs"))
         note = QLabel(self.tr("codec2, for FreeDV, comes with Radio on Windows and macOS and with your system on "
                               "Linux. Radio never includes the codecs whose patents or licences keep them out of "

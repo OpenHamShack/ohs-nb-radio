@@ -846,8 +846,9 @@ carries, beside what "DAB" lists:
                "next": {"name": "Shack MP2 Tone Evening", "start": "2026-10-24T18:00:00Z",
                         "durationS": 21600, "description": null},
                "logoPath": "api/dab/logos/C221", "logoUrl": "/apps/radio/api/dab/logos/C221",
+               "logoSource": "broadcast",
                "logoWidePath": "api/dab/logos/C221?variant=wide",
-               "logoWideUrl": "/apps/radio/api/dab/logos/C221?variant=wide"}],
+               "logoWideUrl": "/apps/radio/api/dab/logos/C221?variant=wide", "logoWideSource": "radiodns"}],
  "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right",
  "dlPlus": {"itemTitle": "1 kHz left", "itemArtist": "Shack MP2 Tone", "itemAlbum": null,
             "programmeNow": null, "programmeHost": null, "stationNameLong": null,
@@ -898,8 +899,10 @@ Per service (each field null, empty or false until the FIC has said):
   item marked `"refresh": true` (its `rev` is the session's current one:
   it is no new result of the decoder's).
 - `logoUrl` (square, 128x128 preferred) and `logoWideUrl` (320x240
-  preferred): present only once a logo has come. Labels are FIG 2's
-  (UTF-8) when the ensemble sends one.
+  preferred): present only once a logo has come, each with its source,
+  `logoSource` and `logoWideSource`: `"broadcast"` (the ensemble's SPI)
+  or `"radiodns"` (fetched, "Logos from RadioDNS" below). Labels are FIG
+  2's (UTF-8) when the ensemble sends one.
 
 Beside the services: `ensemble.ecc`, `country` (ISO 3166, from the ECC
 and the ensemble id), `ltoMinutes` (local time offset) and `utc` (the
@@ -922,10 +925,12 @@ now; `spi`, the ensemble's SPI service (`state` `listening`, `resting`,
   first.
 - `GET api/dab/logos/{sid}[?variant=square|wide]`: the logo; the other
   variant when the one asked for never came; `404 no_logo`. Kept on the
-  app's disk (its data folder's `dab` folder, at most 256 files and 16 MB,
-  the oldest going) so lists show logos after a restart. SPI takes a few
-  minutes of listening on a real ensemble to bring them; they come while
-  a service of that ensemble plays, never during the band scan.
+  app's disk (its data folder's `dab` folder, at most 512 files and 24 MB,
+  fetched ones going first, then the oldest) so lists show logos after a
+  restart. SPI takes a few minutes of listening on a real ensemble to
+  bring them; they come while a service of that ensemble plays, never
+  during the band scan. Logos from RadioDNS (below) are served the same
+  way, from the same store.
 - `GET api/dab/schedule/{sid}[?date=YYYY-MM-DD]`: `{"sid", "date",
   "programmes": [{"name", "start", "durationS", "description"}…]}`, oldest
   first; with `date`, those starting on that UTC day. Kept on disk; a
@@ -948,6 +953,32 @@ with their bytes:
 
 A slide item means: fetch the new picture now (or show the next one in
 turn). A TV that only polls can watch `meta.slide.rev` instead.
+
+**Logos from RadioDNS.** So a station list has logos before each
+ensemble has been listened to, Radio also fetches them from the
+broadcasters' own servers (ohsradio/radiodns.py; ETSI TS 103 270 and TS
+102 818), in the background, at the lowest priority, never on a path a
+scan, a session or playback waits for. For each stored service (16-bit
+SId) it asks the system's resolvers for the CNAME of
+`<scids>.<sid>.<eid>.<gcc>.dab.radiodns.org` (`0.c224.ce15.ce1.dab.radiodns.org`),
+then the SRV `_radiospi._tcp.<target>` (else `_radioepg._tcp`), fetches
+that server's `SI.xml` once for all its services, and takes the square
+logo nearest 128x128 and the wide one nearest 320x240, as over the air.
+Clients never touch the internet: the logos are served by
+`api/dab/logos/{sid}` with `logoSource: "radiodns"`. Over the air wins
+per variant: a variant the ensemble has sent is never fetched, and one it
+sends later replaces the fetched one. It looks two minutes after start,
+then whenever a DAB scan stores a list, and refreshes each service weekly
+(a picture is refetched only when its URL changed). A failure (no route,
+a timeout, a server error) backs off per host, ten minutes doubling to a
+day, and is one log line; nothing is ever shown to a listener. Offline,
+the API answers exactly as it did without the feature. What goes out:
+those DNS queries, then GETs to the SPI servers and the logo URLs their
+documents name, with `User-Agent: OpenHamShack-Radio/<version>`, no cookie
+and nothing about the station. The `radioDnsLogos` setting (`api/set`,
+control level; default true) turns it off: no query or request at all,
+and the fetched logos are hidden (kept on disk, back when it is turned on
+again). Programme information (PI.xml) is not fetched.
 
 **What is not done:** a slide's TriggerTime (a slide is shown when it is
 whole) and categories as a browsable set; SPI's genres, links and
@@ -1169,22 +1200,27 @@ tune: `POST api/set {"changes": {"mode": "wfm", "vfo": best.hz}}`.
 `statusText`, and
 
 ```json
-{"ensembles": [{"block": "11D", "freqHz": 222064000, "id": "C1CE", "label": "Shack Test Mux", "country": "GB",
+{"ensembles": [{"block": "11D", "freqHz": 222064000, "id": "C1CE", "label": "Shack Test Mux", "country": "GB", "ecc": "E1",
                 "services": [{"sid": "C221", "label": "Shack MP2 Tone", "kind": "dab", "bitrate": 128,
                               "pty": 10, "ptyName": "Pop music", "language": "en", "hasSlideshow": true,
                               "logoPath": "api/dab/logos/C221", "logoUrl": "/apps/radio/api/dab/logos/C221",
+                              "logoSource": "broadcast",
                               "logoWidePath": "api/dab/logos/C221?variant=wide",
-                              "logoWideUrl": "/apps/radio/api/dab/logos/C221?variant=wide"},
+                              "logoWideUrl": "/apps/radio/api/dab/logos/C221?variant=wide",
+                              "logoWideSource": "radiodns"},
                              {"sid": "C3A7", "label": "Shack DAB+ Data", "kind": "dab+", "bitrate": 64,
                               "pty": 9, "ptyName": "Varied", "language": "en", "hasSlideshow": true}]}]}
 ```
 
 `pty` (the code, 0-31) and `ptyName` are the genre to show beside the bit
-rate, `language` ISO 639, `country` ISO 3166; null when the scan's second
-or two on the block did not catch them. `logoUrl` and `logoWideUrl` (and
-their `…Path`) appear once a logo has come from listening to that
-ensemble ("DAB pictures and service information" above); the scan itself
-brings none.
+rate, `language` ISO 639, `country` ISO 3166, `ecc` the ensemble's
+extended country code (`"E1"`; absent from a list made before it was
+kept); null when the scan's second or two on the block did not
+catch them. `logoUrl` and `logoWideUrl` (and their `…Path`, and
+`logoSource`/`logoWideSource`) appear once a logo has come from listening
+to that ensemble or from RadioDNS ("DAB pictures and service information"
+above); the scan itself brings none, but a new list is looked up in
+RadioDNS straight after.
 
 To play one: `POST api/decoders/sessions {"decoder": "dab", "freqHz":
 freqHz, "params": {"block": block, "service": sid}}` ("DAB" above).

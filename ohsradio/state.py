@@ -268,6 +268,18 @@ with REG.after("openAipKey"):
        help="How long the radio must have been left alone (nobody tuning or listening) before a night's scan "
             "may start.")
 
+# --- DAB logos from RadioDNS (ohsradio/radiodns.py) ------------------------------
+# On by default (Brian, 24/10/2026: "as long as it can still be used without
+# internet"): offline it changes nothing. Off means no traffic at all and the
+# fetched logos hidden. The help says exactly what goes out.
+with REG.after("scanIdleMinutes"):
+    _k("radioDnsLogos", "bool", True, "setting",
+       help="Fetch DAB station logos from the internet in the background, so the station list has them before "
+            "Radio has heard each ensemble's own. What goes out: DNS look-ups of each station's RadioDNS name, "
+            "then web requests to the broadcasters' service-information servers and the logo addresses they "
+            "give, saying only \"OpenHamShack-Radio\" and its version. Logos sent over the air always win; "
+            "without internet nothing changes.")
+
 # --- status (read-only) -------------------------------------------------------
 _o("rxDial", help="Frequency the receiver is demodulating (vfo + RIT, or the repeater input in reverse).")
 _o("txDial", help="Frequency our transmission is meant to land on (with split, repeater shift and XIT).")

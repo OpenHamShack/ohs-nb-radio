@@ -122,6 +122,12 @@ os.environ["SOURCE_SITE_URL"] = "http://source-site.invalid/"
 # takes them; the tests that check the packets bind their own.
 os.environ["OHS_PSKREPORTER"] = os.environ["OPENHAMSHACK_PSKREPORTER"] = "127.0.0.1:9"
 
+# RadioDNS logos (ohsradio/radiodns.py): a test radio starts no fetcher, but
+# one that does, or a tool a test runs, must never ask the real internet.
+# A closed local port answers every query "unreachable" at once, which the
+# fetcher takes as offline; the tests that check it run their own server.
+os.environ["OHS_RADIODNS_RESOLVER"] = "127.0.0.1:9"
+
 # The time of day, too: the suite runs at local noon, whatever the machine's
 # clock says. Radio's weekly band scan (ohsradio/bandscan.py) starts by
 # itself at the first tick in the hour after scanHour (03:00 local), and a

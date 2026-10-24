@@ -267,6 +267,17 @@ class Radio(Engine):
         # DAB's slides, logos and programme guide (ohscore/dabpics.py), the
         # logos and guide kept in the data folder across restarts.
         self.dab_pictures = DabPictures(self.data_dir)
+        self.dab_pictures.show_fetched = lambda: bool(self.st.get("radioDnsLogos", True))
+        # The same logos from the broadcasters' RadioDNS servers, fetched in
+        # the background (ohsradio/radiodns.py): only for the program an
+        # operator runs, as the station profile's watch is, so a test's
+        # throw-away radio never asks the network for anything. Offline it
+        # changes nothing.
+        from .radiodns import RadioDns
+        self.radiodns = RadioDns(self.dab_pictures, lambda: self.bandscan.records["dab"]["ensembles"],
+                                 lambda: bool(self.st.get("radioDnsLogos", True)))
+        if self.persist:
+            self.radiodns.start()
         self.activity_hooks.append(self.bandscan.touch)
         self.st["stationsAt"] = self.bandscan.stations_at()
 
