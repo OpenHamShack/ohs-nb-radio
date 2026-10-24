@@ -106,7 +106,7 @@ msgstr ""
 msgid "Ask your controller's administrator to install SDRplay's API (Controller › Optional libraries) to use this radio."
 msgstr ""
 
-#: ohscore/decoders.py:1172
+#: ohscore/decoders.py:1202
 #, python-brace-format
 msgid "Ask your controller's administrator to install {codec} (Controller › Optional libraries)."
 msgstr ""
@@ -315,7 +315,7 @@ msgstr ""
 msgid "Each decoder session needs a frequency in hertz"
 msgstr ""
 
-#: ohscore/decoders.py:1162
+#: ohscore/decoders.py:1192
 #, python-brace-format
 msgid "Found: {path}"
 msgstr ""
@@ -418,7 +418,7 @@ msgstr ""
 msgid "No memory called {name}"
 msgstr ""
 
-#: ohscore/decoders.py:1065
+#: ohscore/decoders.py:1066
 msgid "No more decoders can run at once"
 msgstr ""
 
@@ -450,12 +450,12 @@ msgstr ""
 msgid "Not a WAV file this program can read ({error}): save it as 16-bit PCM WAV"
 msgstr ""
 
-#: ohscore/decoders.py:1175
+#: ohscore/decoders.py:1205
 #, python-brace-format
 msgid "Not found: {codec} is normally included; reinstalling the program puts it back."
 msgstr ""
 
-#: ohscore/decoders.py:1176
+#: ohscore/decoders.py:1206
 #, python-brace-format
 msgid "Not installed. This program never includes {codec}: install it yourself, or put it in the codecs folder."
 msgstr ""
@@ -661,7 +661,7 @@ msgstr ""
 msgid "Size"
 msgstr ""
 
-#: ohscore/decoders.py:1071
+#: ohscore/decoders.py:1072
 #: ohscore/decoders.py:407
 #: ohscore/decoders.py:499
 #: ohscore/engine.py:2051
@@ -769,7 +769,7 @@ msgstr ""
 msgid "The controller's services did not answer ({why})"
 msgstr ""
 
-#: ohscore/decoders.py:1062
+#: ohscore/decoders.py:1063
 #, python-brace-format
 msgid "The decoder does not take those settings ({detail})"
 msgstr ""
@@ -783,7 +783,7 @@ msgstr ""
 msgid "The decoder has stopped responding and everything it is given is thrown away: stop it and start it again (restart the app if that does not help)."
 msgstr ""
 
-#: ohscore/decoders.py:1077
+#: ohscore/decoders.py:1078
 #, python-brace-format
 msgid "The decoder would not start ({code})"
 msgstr ""
@@ -870,7 +870,7 @@ msgstr ""
 msgid "The receiver's own AGC is on, so its gain moves with the signal and no offset would hold. Set Receiver gain control to Manual (Settings › Radio) and calibrate again."
 msgstr ""
 
-#: ohscore/decoders.py:1073
+#: ohscore/decoders.py:1074
 #, python-brace-format
 msgid "The receiver's samples do not suit this decoder ({detail})"
 msgstr ""
@@ -910,12 +910,12 @@ msgstr ""
 msgid "The voice keyer stopped repeating: {error}"
 msgstr ""
 
-#: ohscore/decoders.py:1167
+#: ohscore/decoders.py:1197
 #, python-brace-format
 msgid "The {codec} in {path} was refused: {reason}."
 msgstr ""
 
-#: ohscore/decoders.py:1041
+#: ohscore/decoders.py:1042
 #, python-brace-format
 msgid "The {decoder} decoder has stopped responding: stop it and start it again"
 msgstr ""
@@ -995,13 +995,13 @@ msgid "There is no decoded picture called {name}"
 msgstr ""
 
 #: ohscore/decoders.py:390
-#: ohscore/decoders.py:1067
+#: ohscore/decoders.py:1068
 #, python-brace-format
 msgid "There is no decoder called {name}"
 msgstr ""
 
 #: ohscore/decoders.py:581
-#: ohscore/decoders.py:1076
+#: ohscore/decoders.py:1077
 #: ohscore/server/app.py:1096
 #: ohscore/server/app.py:1104
 #, python-brace-format
@@ -1332,15 +1332,15 @@ msgstr ""
 msgid "faad2 could not play this station's sound."
 msgstr ""
 
-#: ohscore/decoders.py:1164
+#: ohscore/decoders.py:1194
 msgid "it crashed when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:1164
+#: ohscore/decoders.py:1194
 msgid "it did not answer when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:1165
+#: ohscore/decoders.py:1195
 msgid "it gave a wrong answer when it was tested"
 msgstr ""
 
@@ -1348,7 +1348,7 @@ msgstr ""
 msgid "its decoder did not start (the log says why)"
 msgstr ""
 
-#: ohscore/decoders.py:1166
+#: ohscore/decoders.py:1196
 msgid "its folder does not allow programs to run"
 msgstr ""
 
@@ -1507,7 +1507,7 @@ msgstr ""
 msgid "{decoder} needs the receiver to run at {least:g} kS/s or more, and it runs at {rate:g} kS/s"
 msgstr ""
 
-#: ohscore/decoders.py:1182
+#: ohscore/decoders.py:1212
 #, python-brace-format
 msgid "{decoder} on {freq}"
 msgstr ""
