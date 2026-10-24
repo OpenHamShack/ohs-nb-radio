@@ -33,6 +33,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 WINDOWS = sys.platform == "win32"
@@ -120,3 +121,23 @@ os.environ["SOURCE_SITE_URL"] = "http://source-site.invalid/"
 # stations to the real server as heard. The discard port on this machine
 # takes them; the tests that check the packets bind their own.
 os.environ["OHS_PSKREPORTER"] = os.environ["OPENHAMSHACK_PSKREPORTER"] = "127.0.0.1:9"
+
+# The time of day, too: the suite runs at local noon, whatever the machine's
+# clock says. Radio's weekly band scan (ohsradio/bandscan.py) starts by
+# itself at the first tick in the hour after scanHour (03:00 local), and a
+# freshly made radio counts as idle, so any test radio alive in that hour
+# had a scan take its receiver: the Radio store beta.8 suite, run from
+# 02:58, came out red in five modules (a stations list already "Scanning",
+# a decoder session pushed "outside", an RSP notch moved for an overload
+# the scan's FM hop caused) that were green all day. A test of the scan
+# itself gives the scanner its own clock and zone (test_ham_bandscan.py);
+# every other test must not depend on when it is run. A fixed offset with
+# no summer time, chosen so it is noon here now: the local date is then
+# always the UTC date, and the nightly hour is fifteen hours away, longer
+# than any run. A test that needs another zone sets TZ itself and puts this
+# back (test_ui_mmbview.py's Clock does).
+_utc_hour = time.gmtime().tm_hour
+_offset = (12 - _utc_hour + 11) % 24 - 11            # hours east of UTC, -11..+12
+os.environ["TZ"] = f"OHS{-_offset:+d}"               # POSIX: the sign is west of UTC
+if hasattr(time, "tzset"):
+    time.tzset()
