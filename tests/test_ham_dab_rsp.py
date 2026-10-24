@@ -230,10 +230,13 @@ class RspStandIn:
     ANTENNAS = ("Antenna A", "Antenna B", "Antenna C")
 
     def __init__(self, centre, rate, gain, *, serial=None, lna_state=4, antenna=None,
-                 gain_model="reduction", agc_setpoint=-60):
+                 gain_model="reduction", agc_setpoint=-60, rf_notch=None, dab_notch=None):
         self.centre, self.rate, self.gain = float(centre), float(rate), gain
         self.antenna = antenna or self.ANTENNAS[0]
         self.gain_model = gain_model
+        # An RSPdx's two notches, as SdrplaySource holds them (None: the
+        # API's default, off); Radio switches them (ohsradio/notch.py).
+        self.options = {"rf_notch": bool(rf_notch), "dab_notch": bool(dab_notch)}
         self.opened = False
         self.k = 0
         self.t0 = None
@@ -263,9 +266,15 @@ class RspStandIn:
     def gain_sense(self):
         return {"gainIsReduction": True, "gainModel": self.gain_model, "rfgrRange": [0, 27]}
 
+    def option_values(self):
+        return dict(self.options)
+
+    def set_options(self, **kw):
+        self.options.update({k: bool(v) for k, v in kw.items()})
+
     def status(self):
         return {"kind": "sdrplay", "centre": self.centre, "rate": self.rate, "antenna": self.antenna,
-                "apiGaps": 0, "apiLost": 0}
+                "apiGaps": 0, "apiLost": 0, "options": self.option_values()}
 
     def read(self):
         from shack_sdr.sources import IqBlock
@@ -335,6 +344,8 @@ class ThroughTheRsp(unittest.TestCase):
 
     def test_a_dab_station_plays_at_2_4_ms_with_nothing_dropped(self):
         r, audio = rsp_radio(self)
+        # On 2 m the RSP's DAB notch is in (dabNotch auto, ohsradio/notch.py)...
+        self.assertTrue(wait(r, lambda: r.dev.src.options["dab_notch"]))
         centre = float(sdr.load().dab.block_centre(DAB_BLOCK))
         sess = r.decoders.start("dab", centre, {"service": MP2})
         self.assertTrue(wait(r, lambda: (lambda m: m is not None and m.get("dls") == DLS and m.get("complete"))(
@@ -346,6 +357,8 @@ class ThroughTheRsp(unittest.TestCase):
         self.assertGreater(view["stats"]["cpu"], 0)
         self.assertEqual(view["stats"]["dropped"], 0)
         self.assertEqual(r.centre, centre)
+        # ...and out while the DAB station holds the receiver, with no reopen.
+        self.assertEqual(r.state()["deviceStatus"]["options"], {"rf_notch": True, "dab_notch": False})
         # Its sound, 1 kHz left and 1.5 kHz right, is the receive audio.
         mark = len(audio.chunks)
         self.assertTrue(wait(r, lambda: sum(len(c) for c in audio.chunks[mark:] if c.ndim == 2) >= 48_000))

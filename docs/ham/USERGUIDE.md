@@ -758,7 +758,10 @@ The table below is generated from the Settings window itself (`tools/settings-re
 | Swap HL2 transmit I/Q | On / Off | Off | Swap the Hermes-Lite 2's transmit I and Q. Whether HL2 clients swap them is not documented; a wrong choice mirrors the signal (USB comes out as LSB). Settle it with a known tone into a dummy load. *Restarts the radio when saved.* |
 | Receiver serial | text | (empty) | The RTL-SDR's or SDRplay RSP's serial number, to pick one of several alike. Empty: the first found. *Restarts the radio when saved.* |
 | RSP LNA state | 0 – 27 | 4 | The SDRplay RSP's LNA state: higher attenuates more. 4 suits an HF dipole in the evening; the range each band allows is in SDRplay's API notes. *Restarts the radio when saved.* |
+| RSP DAB notch | Automatic / On / Off | Automatic | The SDRplay RSP's DAB notch (about 160-230 MHz), ahead of its LNA: keeps a strong Band III transmitter from overloading the receiver wherever it is tuned. Automatic: in, except while the receiver is tuned within 174-240 MHz or a DAB station plays. On or off holds it. RSPdx, RSP1A, RSP1B and RSPduo only (not the RSPduo's Hi-Z input); on any other radio, the RSP2 and RSP1 included, it does nothing. |
+| RSP broadcast notch | Automatic / On / Off | Automatic | The SDRplay RSP's broadcast notch, ahead of its LNA: one switch for the FM band (about 77-115 MHz) and MW (about 500-1530 kHz). Automatic: in, except while the receiver is tuned within 87.5-108 MHz or the LW and MW broadcast bands. In, it also costs at least 4 dB on 2 m (SDRplay's RSPdx figure): off suits a 2 m station with no strong FM transmitter near. On or off holds it. RSPdx, RSP1A, RSP1B, RSP2 and RSPduo (on Tuner 1's Hi-Z input, that port's MW notch); on any other radio, the RSP1 included, it does nothing. |
 | Reference error | -50.00 ppm – 50.00 ppm | 0.00 ppm | The device's reference error, measured once against a known signal; applied to every tune. |
+| DC spike removal | Automatic / On / Off | Automatic | Take out the line a receiver's own DC offset puts at the centre of the span. Automatic: on for the Pluto family, RTL-SDR, SDRplay and SoapySDR receivers, off for the Hermes-Lite 2 and the simulator. |
 
 #### Decoders
 
@@ -817,6 +820,13 @@ The table below is generated from the Settings window itself (`tools/settings-re
 | Scope speed | 1 lines/s – 50 lines/s | 20 lines/s | - |
 | Wide scope averaging | 1 – 16 | 2 | FFTs averaged per wide line. |
 | Zoom scope averaging | 1 – 16 | 2 | - |
+
+#### Local frequencies
+
+| Setting | Range or choices | Default | What it does |
+| --- | --- | --- | --- |
+| Radius | 1 km – 2000 km | 100 km | Local frequencies lists what is within this distance of the station's locator: airfields, area control, coast stations and marinas, nearest first. |
+| openAIP API key | text | (empty) | Your openAIP API key (openaip.net, your profile's API clients), used only when you refresh the local frequencies, to fetch area control around the station. Empty: the copy Radio came with. |
 
 #### Simulator
 

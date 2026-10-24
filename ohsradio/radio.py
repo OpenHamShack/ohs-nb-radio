@@ -69,6 +69,7 @@ from ohscore import converters as cv
 from ohscore import licences, smeter_cal, txguard
 from ohscore import span as spanfit
 from ohscore.decoders import Refused, sessions_text
+from ohscore.devices import DeviceError
 from ohscore.i18n import fmt
 from ohscore.dsp import wfm
 from ohscore.dsp.bank import Channel, Geometry, Source
@@ -79,7 +80,7 @@ from ohscore.engine import AUDIO_RATE, Engine, SpanPinned, TxRefused
 
 from ohsradio.i18n import _
 
-from . import bands, bcastgain, config, guard, power, state, xvtr
+from . import bands, bcastgain, config, guard, notch, power, state, xvtr
 from .bandscan import BandScanner, rds_text
 from .cwskim import CwSkim, off_item
 from .devices import REGISTRY
@@ -1074,6 +1075,43 @@ class Radio(Engine):
         have = getattr(self.dev, "lna_db", None)
         if have is not None and have != want:
             self.dev.set_lna(want)
+        self._apply_notches()
+
+    def _apply_notches(self) -> None:
+        """The RSP's front-end notches for where it is tuned now
+        (ohsradio/notch.py), on the receive thread between two reads, as
+        the gain and antenna are: from _configure_rx (a setting changed,
+        or the radio started) and _rx_done (the centre moved). A device
+        with no notch (anything but an RSP that has one) is never asked;
+        one already holding what is wanted is not asked again, judged by
+        its own record (notch_want), which survives its reconnects."""
+        dev = self.dev
+        have = dev.notches() if dev is not None else ()
+        if not have or self.rx_if is None:
+            return
+        if self.st["keyed"]:
+            # Every device with a notch is receive-only, so this cannot be
+            # mid-over; as the antenna switch (Engine._configure_rx), the
+            # rule is not left to a device's kind: try again unkeyed.
+            self.reconf = True
+            return
+        half = self.geo.fs / 2
+        h = self.held
+        want = notch.wanted(self.st["dabNotch"], self.st["rfNotch"], self.rx_if - half, self.rx_if + half,
+                            dab_held=h is not None and h.get("by") == "dab")
+        # Only what changes: each switch is an Update of its own, and one
+        # already where it should be needs none.
+        had = getattr(dev, "notch_want", {})
+        want = {k: v for k, v in want.items() if k in have and had.get(k) != v}
+        if not want:
+            return
+        try:
+            dev.set_notches(**want)
+        except DeviceError as e:
+            self.toast(_("Notch filter not changed: {error}").format(error=e), "warn")
+            return
+        self.log.info("notches at %.3f MHz (dab %s, rf %s): %s", self.rx_if / 1e6, self.st["dabNotch"],
+                      self.st["rfNotch"], ", ".join(f"{k} {'in' if v else 'out'}" for k, v in want.items()))
 
     def _configure_consumers(self, s: dict) -> None:
         cut = s["fmDeviation"] + 5_000.0
@@ -1219,6 +1257,7 @@ class Radio(Engine):
             self.centre = c
             self.rx_if = self._dev_freq(c, self.rx_conv)
             self.dev.set_rx_if(self.rx_if)
+            self._apply_notches()
             self.settle_at = self.rx_samples + int(RETUNE_SETTLE * self.geo.fs)
             if self.dcblock is not None:
                 # A zero-IF radio's DC moves with its LO: start the estimate

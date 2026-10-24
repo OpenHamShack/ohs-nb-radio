@@ -77,6 +77,19 @@ class Device:
         implementation does nothing, successfully, so the setting is
         simply inert rather than refused."""
 
+    def notches(self) -> tuple[str, ...]:
+        """The front-end notch filters the open device can switch, by
+        shack_sdr's option names ("rf_notch", "dab_notch"): an SDRplay
+        RSP's, per model (ohscore/devices/sdrsource.py). () here: a device
+        with none is never asked to switch one (ohsradio/notch.py)."""
+        return ()
+
+    def set_notches(self, **want: bool) -> None:
+        """Put notches in (True) or take them out (False) on the open
+        device, live, with no reopen; and remember them, so a reopen of
+        the same device opens with them. Only names `notches()` gives are
+        passed. Raises DeviceError when the device refuses."""
+
     def set_tx_freq(self, hz: float) -> None:
         raise DeviceError("This device cannot transmit")
 

@@ -777,6 +777,50 @@ RSP's LNA state (`soapysdrplay3`), does not hold (`why`
 cannot_calibrate` while a broadcast gain applies; the stored calibrations
 are never touched.
 
+## RSP notch filters (Radio)
+
+An SDRplay RSP has two switchable notches ahead of its LNA: a DAB notch
+(Band III) and a broadcast notch (FM and MW together, one switch). A
+strong transmitter in either band can overload the front end wherever the
+receiver is tuned (Brian's RSPdx, 8 km from a DAB transmitter on 11B,
+overloaded on 2 m). Two settings in `api/spec`, control level, Settings ›
+Radio under "RTL-SDR and SDRplay"; code `ohsradio/notch.py`, tests
+`tests/test_ham_notch.py`:
+
+| Setting | Values (default `auto`) | `auto` |
+|---|---|---|
+| `dabNotch` | `auto`, `on`, `off` | in, except while the receiver's span touches 174-240 MHz or a DAB session holds the receiver |
+| `rfNotch` | `auto`, `on`, `off` | in, except while the span touches 87.5-108 MHz, LW (148.5-283.5 kHz) or MW (526.5-1705 kHz) |
+
+`on` (in) and `off` (out) hold a notch wherever the receiver is. The span
+is the RSP's own: its local oscillator plus and minus half the sample rate,
+so through a converter it is the IF the RSP sees. What the switches cover,
+from SDRplay's datasheets (the API specification does not say): on an
+RSPdx, DAB >30 dB 160-230 MHz; FM >30 dB 77-115 MHz and MW >30 dB
+500-1530 kHz - and the FM notch also takes at least 4 dB off 2 m
+(144-148 MHz), so `auto` costs that there; `rfNotch: "off"` is the
+setting for a 2 m station with no FM transmitter near.
+
+- **Which radios:** an RSP whose model has the switch - RSPdx (and dx R2),
+  RSP1A, RSP1B and RSPduo have both; the RSP2 only `rfNotch`; the RSP1
+  neither. On an RSPduo's Tuner 1 Hi-Z input `rfNotch` is that port's
+  MW-only notch. Every other radio ignores both settings: they stay in
+  `api/spec` and Settings, and the device is never asked. That holds for
+  `device sdrplay`, `device soapy` reaching an RSP through shack_sdr
+  (ohs-box), and SoapySDR with SoapySDRPlay3 installed (its
+  `rfnotch_ctrl`/`dabnotch_ctrl`).
+- **Live:** applied on the running stream, one SDRplay API update per
+  switch that changes, never a reopen: when either setting changes and
+  whenever the receiver's centre moves (a dial change out of the span, a
+  DAB session taking or giving back the receiver, the band scan). A radio
+  lost and reopened comes back with the notches it had.
+- **What is applied** is `deviceStatus.options` in `api/status`: each
+  switch the open RSP has, as SDRplay's API holds it (`rf_notch`,
+  `dab_notch`, and `bias_t` and `hdr`, which Radio never changes), e.g.
+  `{"rf_notch": true, "dab_notch": false, "bias_t": false, "hdr": false}`
+  on an RSPdx tuned to 11B with both on `auto`. Absent for a radio
+  without them.
+
 ## Station lists (Radio)
 
 Radio scans the FM band and DAB's Band III by itself once a week, at night,

@@ -22,6 +22,15 @@ Switching it does not reopen the device: SoapySDRPlay3 (the RSPdx) takes
 cannot change it live would raise from `setAntenna` itself, which the
 engine shows as "antenna not changed" rather than acting on - there is
 none such known today, so this has not been exercised against a refusal.
+
+An RSP's front-end notches (Radio's `rfNotch`/`dabNotch`, ohsradio/notch.py)
+are SoapySDRPlay3's settings `rfnotch_ctrl` and `dabnotch_ctrl`, written with
+writeSetting, which SoapySDRPlay3 pushes to a running stream with the same
+sdrplay_api_Update reasons shack_sdr's SdrplaySource uses. It lists each only
+for a model that has the switch (getSettingInfo), so that list is what
+`notches()` offers; a driver with neither (every other one) is never asked.
+Not yet run on an RSP through this path: ohs-box reaches its RSPdx through
+shack_sdr's binding (sdrsource.SoapySdrplayDevice).
 """
 from __future__ import annotations
 
@@ -29,6 +38,10 @@ import numpy as np
 
 from .. import host
 from .base import Device, DeviceError
+
+
+# shack_sdr's notch names (Device.notches) to SoapySDRPlay3's setting keys.
+NOTCH_KEYS = {"rf_notch": "rfnotch_ctrl", "dab_notch": "dabnotch_ctrl"}
 
 
 class SoapyDevice(Device):
@@ -48,6 +61,10 @@ class SoapyDevice(Device):
         self.antennas: list[str] = []
         self.block = int(self.fs * 0.075)
         self.overflows = 0
+        # What set_notches was last asked: written again at open, so a
+        # reopen comes back with it (the engine's reconnect only re-tunes).
+        self.notch_want: dict[str, bool] = {}
+        self.notch_names: tuple[str, ...] = ()
 
     def open(self) -> None:
         try:
@@ -74,6 +91,11 @@ class SoapyDevice(Device):
             self.set_rx_gain(self.cfg.get("rxGainMode", "slow_attack"), float(self.cfg.get("rxGain", 40.0)))
         except DeviceError:
             pass                    # a driver with no gain control still receives
+        self.notch_names = self._list_notches()
+        try:
+            self._write_notches(self.notch_want)
+        except DeviceError:
+            pass                    # as the gain: the radio still receives, and the next change says so
         self.stream = self.sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32)
         self.sdr.activateStream(self.stream)
         self.buf = np.zeros(self.block, np.complex64)
@@ -100,6 +122,34 @@ class SoapyDevice(Device):
         if self.sdr is None:
             return
         self._set_antenna(str(name or "").strip())
+
+    def notches(self) -> tuple[str, ...]:
+        return self.notch_names if self.sdr is not None else ()
+
+    def _list_notches(self) -> tuple[str, ...]:
+        """Asked once per open: the model does not change under it, and
+        status() reads the switches back several times a second."""
+        try:
+            keys = {str(a.key) for a in self.sdr.getSettingInfo()}
+        except (RuntimeError, AttributeError, TypeError):
+            return ()
+        return tuple(n for n, k in NOTCH_KEYS.items() if k in keys)
+
+    def set_notches(self, **want: bool) -> None:
+        want = {k: bool(v) for k, v in want.items() if k in NOTCH_KEYS}
+        self.notch_want.update(want)
+        if self.sdr is not None:
+            self._write_notches(want)
+
+    def _write_notches(self, want: dict) -> None:
+        have = self.notches()
+        for name, on in want.items():
+            if name not in have:
+                continue
+            try:
+                self.sdr.writeSetting(NOTCH_KEYS[name], "true" if on else "false")
+            except RuntimeError as e:
+                raise DeviceError(f"The SDR refused {NOTCH_KEYS[name]} ({e})") from e
 
     def set_rx_gain(self, mode: str, db: float) -> None:
         """SoapySDR has one automatic gain switch, not the AD936x's two
@@ -167,4 +217,14 @@ class SoapyDevice(Device):
                 st["hardware"] = self.sdr.getHardwareKey()
             except (RuntimeError, AttributeError):
                 pass
+            # As SdrplaySource's status() reads its switches back: what the
+            # driver holds, for each one this model has.
+            opts = {}
+            for name in self.notches():
+                try:
+                    opts[name] = str(self.sdr.readSetting(NOTCH_KEYS[name])).lower() == "true"
+                except (RuntimeError, AttributeError):
+                    pass
+            if opts:
+                st["options"] = opts
         return st

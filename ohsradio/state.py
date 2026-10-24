@@ -21,7 +21,7 @@ from ohscore.state import Registry, add_shared_keys
 
 from ohsradio.i18n import _
 
-from . import bands, plans, power, xvtr
+from . import bands, notch, plans, power, xvtr
 
 # JS8 joined 10/10/2026, receive only, once ohsdigi decoded it everywhere
 # (ohscore/modes/js8.py): before, it needed JS8Call's js8, which the Radio
@@ -55,6 +55,22 @@ with REG.after("sampleRate"):
     _k("sdrplayLna", "int", 4, "setting", lo=0, hi=27, restart=True,
        help="The SDRplay RSP's LNA state: higher attenuates more. 4 suits an HF dipole in the evening; the "
             "range each band allows is in SDRplay's API notes.")
+    # The RSP's front-end notches (ohsradio/notch.py; Brian, 24/10/2026: a
+    # DAB transmitter 8 km away overloads the RSPdx on 2 m). Live, no
+    # restart: each is one API update on the running stream.
+    _k("dabNotch", "enum", "auto", "setting", choices=list(notch.CHOICES),
+       help="The SDRplay RSP's DAB notch (about 160-230 MHz), ahead of its LNA: keeps a strong Band III "
+            "transmitter from overloading the receiver wherever it is tuned. Automatic: in, except while the "
+            "receiver is tuned within 174-240 MHz or a DAB station plays. On or off holds it. RSPdx, RSP1A, "
+            "RSP1B and RSPduo only (not the RSPduo's Hi-Z input); on any other radio, the RSP2 and RSP1 "
+            "included, it does nothing.")
+    _k("rfNotch", "enum", "auto", "setting", choices=list(notch.CHOICES),
+       help="The SDRplay RSP's broadcast notch, ahead of its LNA: one switch for the FM band (about 77-115 MHz) "
+            "and MW (about 500-1530 kHz). Automatic: in, except while the receiver is tuned within 87.5-108 MHz "
+            "or the LW and MW broadcast bands. In, it also costs at least 4 dB on 2 m (SDRplay's RSPdx figure): "
+            "off suits a 2 m station with no strong FM transmitter near. On or off holds it. RSPdx, RSP1A, "
+            "RSP1B, RSP2 and RSPduo (on Tuner 1's Hi-Z input, that port's MW notch); on any other radio, the "
+            "RSP1 included, it does nothing.")
     # The zero-IF receivers' DC spike (ohscore/dsp/dcblock.py; Brian,
     # 23/10/2026): auto takes it out where the radio makes one.
     _k("dcBlock", "enum", "auto", "setting", choices=["auto", "on", "off"],

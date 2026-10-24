@@ -268,6 +268,44 @@ class SdrplayDevice(SourceDevice):
     kind = source = "sdrplay"
     RATES = (2_400_000.0,)
     GR_RANGE = (20.0, 59.0)
+    # The front-end notches Radio switches (ohsradio/notch.py); shack_sdr's
+    # other two options, bias-T and HDR, are never touched (module
+    # docstring: bias-T powers whatever is on the socket).
+    NOTCHES = ("rf_notch", "dab_notch")
+
+    def __init__(self, cfg: dict, fs: float):
+        super().__init__(cfg, fs)
+        # What set_notches was last asked, kept across a reopen: _make
+        # hands it to the new source, which writes it before Init, so a
+        # radio lost and found again comes back with the notches it had
+        # (the engine's reconnect only re-tunes). None: SDRplay's default,
+        # off, until Radio first decides.
+        self.notch_want: dict[str, bool] = {}
+
+    def _notch_kw(self) -> dict:
+        # Only what has been decided: left out is the source's None, SDRplay's
+        # default (off), exactly as before these settings existed.
+        return {name: on for name, on in self.notch_want.items() if name in self.NOTCHES}
+
+    def notches(self) -> tuple[str, ...]:
+        # The source reads back each switch the open model has (its
+        # option_values; SoapySDRPlay3's model table): an RSP2 has no DAB
+        # notch, an RSP1 neither.
+        src = self.src
+        if src is None:
+            return ()
+        have = src.option_values()
+        return tuple(n for n in self.NOTCHES if n in have)
+
+    def set_notches(self, **want: bool) -> None:
+        want = {k: bool(v) for k, v in want.items() if k in self.NOTCHES}
+        self.notch_want.update(want)
+        if self.src is None or not want:
+            return
+        try:
+            self.src.set_options(**want)
+        except self._error as e:
+            raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
 
     def _gain(self, mode: str, db: float):
         if mode != "manual":
@@ -285,7 +323,7 @@ class SdrplayDevice(SourceDevice):
         gain = self._gain(self.cfg.get("rxGainMode", "slow_attack"), float(self.cfg.get("rxGain", 40.0)))
         return SdrplaySource(self.rx_if or 145_000_000.0, self.fs, gain, serial=serial,
                              lna_state=int(self.cfg.get("sdrplayLna", 4)),
-                             antenna=self._saved_antenna() or None)
+                             antenna=self._saved_antenna() or None, **self._notch_kw())
 
 
 def soapy_has_driver(driver: str) -> bool:
@@ -369,8 +407,11 @@ class SoapySdrplayDevice(SdrplayDevice):
 
     Without rfgain_sel the LNA state opens at 0, as SoapySDRPlay3 opened it
     (`sdrplayLna` was never read on this path, and is not now). The other
-    soapyArgs SoapySDRPlay3 took (iqcorr_ctrl, biasT_ctrl, the notches,
-    extref_ctrl) are not carried over: no station is known to set them."""
+    soapyArgs SoapySDRPlay3 took (iqcorr_ctrl, biasT_ctrl, extref_ctrl,
+    and rfnotch_ctrl/dabnotch_ctrl) are not carried over: no station is
+    known to set them. The notches are Radio's own settings instead
+    (`rfNotch`, `dabNotch`; ohsradio/notch.py), on this path and
+    `device sdrplay` alike."""
 
     kind = "soapy"
 
@@ -401,7 +442,7 @@ class SoapySdrplayDevice(SdrplayDevice):
         return SdrplaySource(self.rx_if or 145_000_000.0, self.fs, gain, serial=serial,
                              lna_state=int(self.cfg.get("sdrplayLna", 0)),
                              antenna=self._saved_antenna() or None,
-                             gain_model="soapysdrplay3", agc_setpoint=self.agc_setpoint)
+                             gain_model="soapysdrplay3", agc_setpoint=self.agc_setpoint, **self._notch_kw())
 
     def gain_sense(self) -> dict:
         # The source already knows SoapySDRPlay3's sense for the model it

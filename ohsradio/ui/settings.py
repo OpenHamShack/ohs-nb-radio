@@ -30,7 +30,8 @@ class SettingsDialog(core.SettingsDialog):
              ("link", "Controller", "page_controller"), ("keyboard", "Control pad", "page_pad"),
              ("gear", "Simulator", "page_simulator")]
     LABELS = {**core.LABELS,
-              "sdrSerial": "Receiver serial", "sdrplayLna": "RSP LNA state", "dcBlock": "DC spike removal",
+              "sdrSerial": "Receiver serial", "sdrplayLna": "RSP LNA state", "dabNotch": "RSP DAB notch",
+              "rfNotch": "RSP broadcast notch", "dcBlock": "DC spike removal",
               "decodersMax": "Decoders at once", "decodeCpuMax": "Processor share for decoders",
               "decoderFilesKeep": "Pictures kept",
               "hl2Address": "Hermes-Lite 2 address", "hl2Rate": "Hermes-Lite 2 rate", "hl2Lna": "HL2 receiver gain",
@@ -50,6 +51,8 @@ class SettingsDialog(core.SettingsDialog):
                                 "sdrplay": "SDRplay RSP (RX only)", "soapy": "SoapySDR (RX only)"},
                      "sampleRate": {1200000: "1.2 MS/s", 2400000: "2.4 MS/s"},
                      "dcBlock": {"auto": "Automatic", "on": "On", "off": "Off"},
+                     "dabNotch": {"auto": "Automatic", "on": "On", "off": "Off"},
+                     "rfNotch": {"auto": "Automatic", "on": "On", "off": "Off"},
                      "hl2Rate": {48000: "48 k", 96000: "96 k", 192000: "192 k", 384000: "384 k"},
                      "plan": {plans.AUTO: "Follow the country", **{pid: p.SHORT for pid, p in plans.PLANS.items()}},
                      "planGuard": {"warn": "Warn", "enforce": "Enforce", "off": "Off"},
@@ -129,6 +132,10 @@ class SettingsDialog(core.SettingsDialog):
         self._section(box, self.tr("RTL-SDR and SDRplay"))
         self._add(box, "sdrSerial")
         self._add(box, "sdrplayLna")
+        # The RSP's notches apply at once (ohsradio/notch.py), and do
+        # nothing on a radio without them.
+        self._add(box, "dabNotch")
+        self._add(box, "rfNotch")
         self.sdr_why = QLabel()
         self.sdr_why.setWordWrap(True)
         self.sdr_why.setObjectName("Muted")
