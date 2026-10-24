@@ -253,6 +253,38 @@ class Buffer(unittest.TestCase):
         self.assertTrue(self.until(lambda: self.ts.item is None))
         self.assertIn("no item", self.ts.item_start()[3])
 
+    def dab(self, **kw):
+        return {"kind": "dab", "mode": "DAB", "label": "STV Radio", "block": "11B", "sid": "C0F4",
+                "freqHz": 218_640_000.0, "dls": "STV Radio", "title": None, "artist": None, **kw}
+
+    def test_an_item_after_dls_alone_starts_where_it_appears(self):
+        # ohs-box, STV Radio, 24/10/2026: DLS alone for minutes, then the
+        # first song's DL Plus. That song starts there, not before the buffer.
+        self.radio.station = self.dab()
+        self.buffering()
+        self.play(12)
+        self.assertTrue(self.until(lambda: self.ts.status()["lengthS"] >= 11.9))
+        st = self.ts.status()
+        self.assertEqual((st["itemStartUtc"], st["itemStartInBuffer"]), (None, False))
+        self.radio.station = self.dab(title="Song", artist="Band", itemRunning=True, itemToggle=False)
+        self.assertTrue(self.until(lambda: self.ts.item is not None))
+        self.assertAlmostEqual(self.ts.item["index"] / RATE, 12.0, delta=0.6)
+        self.assertTrue(self.ts.status()["itemStartInBuffer"])
+        self.assertEqual(self.ts.item_start()[3], "")
+
+    def test_item_running_and_the_toggle_start_an_item(self):
+        self.radio.station = self.dab(title="Jingle", artist="STV", itemRunning=False, itemToggle=False)
+        self.buffering()
+        self.play(1)
+        self.radio.station = self.dab(title="Song", artist="Band", itemRunning=True, itemToggle=False)
+        self.assertTrue(self.until(lambda: self.ts.item is not None))
+        self.assertAlmostEqual(self.ts.item["index"] / RATE, 1.0, delta=0.6)
+        self.play(1, seed=2)
+        # The same title again, as a new item: the toggle flips.
+        self.radio.station = self.dab(title="Song", artist="Band", itemRunning=True, itemToggle=True)
+        self.assertTrue(self.until(lambda: self.ts.item["toggle"] is True))
+        self.assertAlmostEqual(self.ts.item["index"] / RATE, 2.0, delta=0.6)
+
     def test_the_first_item_heard_after_tuning_in_began_before(self):
         # DL Plus comes a few seconds after the sound starts.
         self.radio.station = {"kind": "dab", "mode": "DAB", "label": "Shack MP2 Tone", "block": "11D",

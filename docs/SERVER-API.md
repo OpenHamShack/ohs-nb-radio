@@ -509,10 +509,11 @@ same on Icom and Flex; what is this app's own:
      "sid": "C221", "block": "11D", "freqHz": 222064000.0,
      "ensemble": "Shack Test Mux", "eid": "C1CE", "ptyName": "Pop music",
      "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right",
-     "title": "1 kHz left", "artist": "Shack MP2 Tone"}
+     "title": "1 kHz left", "artist": "Shack MP2 Tone", "itemRunning": true, "itemToggle": true}
     ```
 
-    (`title`/`artist` are DL Plus's item title and artist), or for wide
+    (`title`/`artist` are DL Plus's item title and artist, `itemRunning`
+    and `itemToggle` its item bits, TS 102 980), or for wide
     FM `{"kind": "wfm", "mode": "WFM", "label", "ps", "pi", "rt",
     "ptyName", "freqHz"}` (`label` is the PS name). A field the station
     has not sent yet is null. `changes` also carries `label`, `sid`/`pi`,
@@ -640,7 +641,11 @@ as far back as is kept, null when no item is on (or nothing is kept);
 when the item began before the buffer and `itemStartUtc` is the buffer's
 start ("from the start of this song, as far back as I have"). DL Plus
 arrives a few seconds after the sound, so the first item heard after
-tuning in is always false; it turns true at the first change of item. `why` appears when it
+tuning in is false. An item starts, and `itemStartInBuffer` is true,
+when its title or artist changes, when DL Plus's item toggle flips, when
+item running goes from false to true, or when an item appears after the
+station has sent DLS alone for 10 s or more (between items, or a station
+that sends DL Plus only for songs). `why` appears when it
 stopped for a reason (low disk). `available` is false, `lengthS` 0, while
 nothing is kept. The server keeps no per-client position: a client
 tracks its own.

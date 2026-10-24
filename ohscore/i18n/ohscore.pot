@@ -917,7 +917,7 @@ msgstr ""
 msgid "The sound system is not running"
 msgstr ""
 
-#: ohscore/server/timeshift.py:401
+#: ohscore/server/timeshift.py:423
 msgid "The station has sent no item (DL Plus) to start from: recording from now"
 msgstr ""
 
@@ -1127,7 +1127,7 @@ msgstr ""
 msgid "This is a recording already: go back to the radio to record"
 msgstr ""
 
-#: ohscore/server/timeshift.py:404
+#: ohscore/server/timeshift.py:426
 msgid "This item began before the timeshift buffer: recording from the buffer's start"
 msgstr ""
 
@@ -1152,7 +1152,7 @@ msgstr ""
 msgid "This station uses a coding Radio cannot read."
 msgstr ""
 
-#: ohscore/server/timeshift.py:315
+#: ohscore/server/timeshift.py:337
 #, python-brace-format
 msgid "Timeshift stopped: {error}"
 msgstr ""
@@ -1412,7 +1412,7 @@ msgstr ""
 msgid "not a Huffman code"
 msgstr ""
 
-#: ohscore/server/timeshift.py:310
+#: ohscore/server/timeshift.py:332
 msgid "not enough free disk space"
 msgstr ""
 
@@ -1511,7 +1511,7 @@ msgstr ""
 msgid "the time limit"
 msgstr ""
 
-#: ohscore/server/timeshift.py:478
+#: ohscore/server/timeshift.py:500
 msgid "the timeshift buffer was cleared while it was being read"
 msgstr ""
 

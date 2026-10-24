@@ -262,9 +262,8 @@ class Timeshift:
         self.t0 = None
         self.buffering, self.overflow, self.why = True, False, ""
         # What is on as the buffer begins began before it: its start is not here.
-        self.item = {"index": None, "title": st.get("title"), "artist": st.get("artist")} \
-            if st.get("title") or st.get("artist") else None
-        self.item_seen = self.item is not None
+        self.item, self.item_seen, self.no_item_from = None, False, None
+        self._note_item(st)
         self._tapped(True)
         log.info("timeshift: keeping %s (%s)", st.get("label") or key, f"{self.cap_s / 60:g} minutes")
 
@@ -284,16 +283,39 @@ class Timeshift:
         self._tapped(bool(self.followers))
         self.cond.notify_all()
 
+    # Plain DLS heard this long with no DL Plus item means the station is
+    # between items (or sends none), so the next item to appear starts
+    # here. Shorter, and it may only be DL Plus lagging the sound as a
+    # session starts (it follows its DLS by a cycle or two).
+    NO_ITEM_S = 10.0
+
     def _note_item(self, st: dict) -> None:
-        """DL Plus's item changing is an item starting, here (to POLL_S).
-        The first item heard after tuning in is not: DL Plus comes a few
-        seconds after the sound, so that item was on before the buffer."""
-        now = (st.get("title"), st.get("artist"))
-        was = (self.item or {}).get("title"), (self.item or {}).get("artist")
-        if now != was:
-            self.item = {"index": self.total if self.item_seen else None, "title": now[0], "artist": now[1]} \
-                if any(now) else None
-            self.item_seen = self.item_seen or any(now)
+        """DL Plus's item starting, here (to POLL_S; TS 102 980). An item
+        starts when its title or artist changes, when its toggle bit
+        flips, or when one appears after the station was seen with none:
+        running false, an item that ended, or NO_ITEM_S of DLS without
+        DL Plus (ohs-box, 24/10/2026: STV Radio sent DLS alone for three
+        minutes and the first song after it was taken for one on since
+        before the buffer). Only an item already there in the first DL
+        Plus a buffer hears began before it: `index` None."""
+        running = st.get("itemRunning")
+        has = bool(st.get("title") or st.get("artist")) and running is not False
+        if not has:
+            if self.item is not None or running is False:
+                self.item_seen = True                 # between items, seen: the next one starts here
+            elif st.get("dls") and self.no_item_from is None:
+                self.no_item_from = self.total
+            self.item = None
+            return
+        if self.no_item_from is not None and self.total - self.no_item_from >= self.NO_ITEM_S * self.rate:
+            self.item_seen = True
+        self.no_item_from = None
+        now = (st.get("title"), st.get("artist"), st.get("itemToggle"))
+        item = self.item or {}
+        if now != (item.get("title"), item.get("artist"), item.get("toggle")):
+            self.item = {"index": self.total if self.item_seen else None, "title": now[0], "artist": now[1],
+                         "toggle": now[2]}
+            self.item_seen = True
 
     def _flush(self) -> None:
         with self.cond:

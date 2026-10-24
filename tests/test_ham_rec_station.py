@@ -170,7 +170,7 @@ class OverTheApi(unittest.TestCase):
             "kind": "dab", "mode": "DAB", "label": "Shack MP2 Tone", "shortLabel": "ShackMP2", "sid": "C221",
             "block": "11D", "freqHz": CENTRE, "ensemble": "Shack Test Mux", "eid": "C1CE", "ptyName": "Pop music",
             "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right", "title": "1 kHz left",
-            "artist": "Shack MP2 Tone"})
+            "artist": "Shack MP2 Tone", "itemRunning": True, "itemToggle": True})
         # What it said as it went: from the start, the station and its text.
         first = {k: v for c in side["changes"] if c["t"] < 0.5 for k, v in c.items() if k != "t"}
         self.assertEqual((first["mode"], first["label"], first["sid"], first["title"], first["artist"]),

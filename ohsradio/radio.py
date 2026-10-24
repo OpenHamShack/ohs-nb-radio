@@ -1156,8 +1156,9 @@ class Radio(Engine):
         - **DAB**, while a DAB session holds the receiver: `{"kind": "dab",
           "mode": "DAB" | "DAB+", "label", "shortLabel", "sid", "block",
           "freqHz" (the block's centre), "ensemble", "eid", "ptyName",
-          "dls", "title", "artist"}` (title and artist from DL Plus), each
-          null until the ensemble has said it.
+          "dls", "title", "artist", "itemRunning", "itemToggle"}` (the last
+          four from DL Plus; the bits mark an item's start for the
+          timeshift), each null until the ensemble has said it.
         - **Wide FM**: `{"kind": "wfm", "mode": "WFM", "label" (the PS
           name), "ps", "pi", "rt", "ptyName", "freqHz"}`, null fields until
           the station's RDS has been heard.
@@ -1177,7 +1178,8 @@ class Radio(Engine):
                     "label": sv.get("label"), "shortLabel": sv.get("shortLabel"), "sid": sid,
                     "block": h["block"], "freqHz": h["centre"], "ensemble": ens.get("label"), "eid": ens.get("id"),
                     "ptyName": sv.get("ptyName"), "dls": meta.get("dls") if sid else None,
-                    "title": dlp.get("itemTitle"), "artist": dlp.get("itemArtist")}
+                    "title": dlp.get("itemTitle"), "artist": dlp.get("itemArtist"),
+                    "itemRunning": dlp.get("itemRunning"), "itemToggle": dlp.get("itemToggle")}
         s = self.st
         if s.get("mode") == "wfm":
             rds = s.get("rds") or {}
