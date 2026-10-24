@@ -724,10 +724,11 @@ usual one with `"panel": "meta"`, `"holdsReceiver": true`, `"block":
          {"main": 1, "sub": 7, "levelDb": -8.5, "confidence": 1.0}],
  "transmitters": [{"main": 11, "sub": 1, "levelDb": -0.5, "confidence": 1.0, "site": "Crystal Palace",
                    "area": "London", "ensemble": "SDL National", "erpKw": 5.73, "lat": 51.42417, "lon": -0.07494,
-                   "distanceKm": 3.8, "bearingDeg": 113, "match": "eid"},
+                   "distanceKm": 3.8, "bearingDeg": 113, "match": "eid", "listedAs": null},
                   {"main": 1, "sub": 7, "levelDb": -8.5, "confidence": 1.0, "site": "Wrotham",
                    "area": "North West Kent", "ensemble": "SDL National", "erpKw": 25.0, "lat": 51.3207,
-                   "lon": 0.2877, "distanceKm": 31.4, "bearingDeg": 114, "match": "eid"}]}
+                   "lon": 0.2877, "distanceKm": 31.4, "bearingDeg": 114, "match": "eid",
+                   "listedAs": null}]}
 ```
 
 `ensemble` is null and `services` empty until heard. `dls` is the playing
@@ -748,7 +749,15 @@ single-frequency network apart. shack_sdr reads them (ohs-libs
 list of UK DAB transmitters, bundled (`ohsradio/data/dabtx/`, Open
 Government Licence v3.0) and refreshed with the local frequencies below.
 Strongest first; empty until about 1.5 s after sync, then updated every
-3 s at most, and only when something in it changes. Each entry:
+3 s at most, and only when something in it changes. Only what is worth
+showing is in `transmitters` (`tii` keeps everything the decoder listed):
+a code the list knows for this ensemble at `confidence` 0.5 or more, or
+at any confidence within 150 km of the station (the decoder lists a weak
+transmitter beside a loud one at 0.3, since it cannot tell it from the
+loud one's intermodulation, and a near one is worth showing while a code
+from the far end of the country is not); a code it does not know only at
+0.8 or more. On nine real blocks recorded in Ayrshire this showed every
+transmitter there and nothing else. Each entry:
 
 | Field | Meaning |
 |---|---|
@@ -759,7 +768,8 @@ Strongest first; empty until about 1.5 s after sync, then updated every
 | `erpKw` | Its licensed effective radiated power, kW (null if the list has none). |
 | `lat`, `lon` | The site, degrees. |
 | `distanceKm`, `bearingDeg` | From the station's locator (great circle, to 0.1 km; bearing from true north, whole degrees); null without a locator or a site. |
-| `match` | How it was found: `eid` (the ensemble's id and the code: certain), `block` (the code on this block, nearest the station, because the list has no row for this ensemble id), or null. |
+| `match` | How it was found: `eid` (the ensemble's id and the code), `site` (the code is another ensemble's at a site that also carries this one: real sites often send one code on every multiplex they carry, as Darvel sends Central Scotland's 63/5 on Ayr's and Glasgow's multiplexes too), `sub` (this ensemble's only transmitter with that sub identifier, heard under another main one: West Kilbride, listed for Ayr as 64/7, sends 63/7), `block` (the ensemble is not in the list; the code on this block, nearest the station), or null (a code the list does not know). |
+| `listedAs` | `{"main", "sub"}`: the code the list gives the site, when it was matched by `site` or `sub` and differs from what is heard; else null. A client may say "West Kilbride (sends 63/7)". |
 
 A TV might show "Crystal Palace, 4 km ESE, 0 dB", a line each. Nothing about
 it is needed to play a station. The simulator's ensemble on 11D is sent

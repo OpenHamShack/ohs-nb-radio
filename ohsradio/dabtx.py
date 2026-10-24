@@ -29,12 +29,15 @@ Where the data comes from, and why it is kept the way it is:
   local-frequencies refresh, an administrator's action, never at start-up)
   downloads a newer copy into the data folder, which then wins.
 
-**Matching.** The EId and the code name one transmitter. Some rows have no
-EId (a few small-scale ones) and an EId can change before Ofcom's sheet
-does, so when the EId finds nothing the same code on the session's block
-is tried, nearest the station first, and the answer says it was matched
-that way (`match`: "eid" or "block"). A code found by neither is still
-listed, with no site.
+**Matching.** The EId and the code name one transmitter - when Ofcom's
+sheet is right, and on the air it is not always: on ohs-box's Ayr
+recordings (23/10/2026) Darvel sends Central Scotland's 63/5 on every
+multiplex it carries and West Kilbride 63/7, where the sheet gives Ayr
+64/10 and 64/7. So a code is also matched by the site (another ensemble's
+code at a site that carries this one) and by the sub identifier (this
+ensemble's only transmitter with it), and for an ensemble the sheet lacks
+by the code on the session's block; `match` says which (Transmitters.find).
+What is shown is filtered by confidence and distance (describe).
 
 Nothing here transmits or touches a radio.
 """
@@ -69,6 +72,11 @@ ATTRIBUTION = {"source": "Ofcom", "licence": "Open Government Licence v3.0",
                "url": OFCOM_PAGE}
 # Each row of the file, in this order (columns keep 1,400 transmitters to
 # about 130 kB).
+# What a transmitters list shows (Transmitters.describe): a known code at
+# this confidence or more, or nearer than this; an unknown one only at this.
+KNOWN_CONFIDENCE = 0.5
+NEAR_KM = 150.0
+UNKNOWN_CONFIDENCE = 0.8
 FIELDS = ("eid", "ensemble", "block", "main", "sub", "site", "area", "lat", "lon", "erpKw", "heightM")
 
 
@@ -150,7 +158,7 @@ class Transmitters:
         self.data_dir = Path(data_dir) if data_dir is not None else None
         self.bundled = Path(bundled)
         self._lock = threading.Lock()
-        self._cache: tuple | None = None        # (stamp, by_eid, by_block, data)
+        self._cache: tuple | None = None        # (stamp, by_eid, by_block, by_code, by_ens, data)
 
     def _path(self) -> Path | None:
         if self.data_dir is not None:
@@ -172,6 +180,8 @@ class Transmitters:
                 return self._cache[1:]
         by_eid: dict = {}
         by_block: dict = {}
+        by_code: dict = {}
+        by_ens: dict = {}
         data: dict = {}
         if path is not None:
             try:
@@ -186,25 +196,83 @@ class Transmitters:
                     continue
                 if t["eid"]:
                     by_eid.setdefault((t["eid"], *key), []).append(t)
+                    by_ens.setdefault(t["eid"], []).append(t)
                 by_block.setdefault((t["block"], *key), []).append(t)
+                by_code.setdefault(key, []).append(t)
         with self._lock:
-            self._cache = (stamp, by_eid, by_block, data)
-        return by_eid, by_block, data
+            self._cache = (stamp, by_eid, by_block, by_code, by_ens, data)
+        return by_eid, by_block, by_code, by_ens, data
 
     def about(self) -> dict:
         """What the list is: source, date, licence, how many."""
-        _, _, data = self._index()
+        data = self._index()[-1]
         return {"source": data.get("source", ""), "fetched": data.get("fetched", ""),
                 "transmitters": len(data.get("rows", [])), "attribution": data.get("attribution") or {}}
+
+    def find(self, eid: str, block: str, main: int, sub: int, here) -> tuple[dict | None, str | None]:
+        """The list's transmitter for a code heard in ensemble `eid` on
+        `block`, and how it was found (module docstring, "Matching"):
+
+        - `eid`: the list has this code for this ensemble.
+        - `site`: the list has this code for another ensemble at a site that
+          also carries this one. Real sites send one code on every
+          multiplex they carry while Ofcom's sheet gives each its own:
+          Darvel sends Central Scotland's 63/5 on Ayr's 11B and Glasgow's
+          11C too, where the sheet says 64/10 and 57/6 (ohs-box,
+          23/10/2026).
+        - `sub`: this ensemble has exactly one transmitter with this sub
+          identifier, under another main one: West Kilbride, the sheet's
+          64/7 for Ayr, is heard as 63/7.
+        - `block`: this ensemble is not in the list at all (a new or
+          small-scale one) and the code is on this block, nearest first.
+        """
+        by_eid, by_block, by_code, by_ens, _ = self._index()
+
+        def nearest(rows):
+            if not rows:
+                return None
+            return min(rows, key=lambda r: distance_bearing(here[0], here[1], r["lat"], r["lon"])[0] if here else 0.0)
+
+        mine = by_ens.get(eid, []) if eid else []
+        hit = nearest(by_eid.get((eid, main, sub), [])) if eid else None
+        if hit:
+            return hit, "eid"
+        if mine:
+            # A site carrying this ensemble whose other row has this code.
+            for other in by_code.get((main, sub), []):
+                same = [r for r in mine if abs(r["lat"] - other["lat"]) < 0.005 and abs(r["lon"] - other["lon"]) < 0.008]
+                if same:
+                    return same[0], "site"
+            subs = [r for r in mine if int(r["sub"]) == sub]
+            if len(subs) == 1:
+                return subs[0], "sub"
+            return None, None
+        hit = nearest(by_block.get((block, main, sub), [])) if block else None
+        return (hit, "block") if hit else (None, None)
 
     def describe(self, meta: dict, locator: str) -> list[dict]:
         """The feed's `tii` list as transmitters: each code with its site,
         distance and bearing from the station (None without a locator), and
-        ERP, strongest first as the decoder put them."""
+        ERP, strongest first as the decoder put them - but only those worth
+        showing (`shown`), since the decoder lists what it cannot rule out
+        at low confidence, and a list someone reads should not name a
+        transmitter that is not there:
+
+        - a code the list knows for this ensemble (`eid`, `site`, `sub`, or
+          `block` for an ensemble the list lacks) at confidence 0.5 or
+          more, or at any confidence within NEAR_KM of the station - a weak
+          neighbour of a loud transmitter is listed at 0.3 by the decoder,
+          and a real one nearby (Rothesay on 12B) is worth showing, a
+          code from the far end of the country (Bow Brickhill's 22/9 heard
+          "on" 12B in Ayrshire) is not;
+        - a code it does not know only at UNKNOWN_CONFIDENCE or more.
+
+        Measured on nine real blocks (ohs-libs rust/shack_sdr
+        tests/dab_tii_real.rs): this shows every transmitter that is there
+        and nothing else."""
         tii = meta.get("tii")
         if not isinstance(tii, list) or not tii:
             return []
-        by_eid, by_block, _ = self._index()
         ens = meta.get("ensemble") if isinstance(meta.get("ensemble"), dict) else {}
         eid = str(ens.get("id") or "").upper()
         block = str(meta.get("block") or "").upper()
@@ -213,25 +281,26 @@ class Transmitters:
         for t in tii:
             try:
                 main, sub = int(t["main"]), int(t["sub"])
+                conf = float(t.get("confidence") or 0.0)
             except (TypeError, ValueError, KeyError):
                 continue
             item = {"main": main, "sub": sub, "levelDb": t.get("levelDb"), "confidence": t.get("confidence"),
                     "site": None, "area": None, "ensemble": None, "erpKw": None, "lat": None, "lon": None,
-                    "distanceKm": None, "bearingDeg": None, "match": None}
-            for match, found in (("eid", by_eid.get((eid, main, sub)) if eid else None),
-                                 ("block", by_block.get((block, main, sub)) if block else None)):
-                if not found:
-                    continue
-                def far(r):
-                    return distance_bearing(here[0], here[1], r["lat"], r["lon"])[0] if here else 0.0
-                best = min(found, key=far)
-                item.update(site=best["site"], area=best["area"], ensemble=best["ensemble"], erpKw=best["erpKw"],
-                            lat=best["lat"], lon=best["lon"], match=match)
+                    "distanceKm": None, "bearingDeg": None, "match": None, "listedAs": None}
+            row, match = self.find(eid, block, main, sub, here)
+            if row is not None:
+                item.update(site=row["site"], area=row["area"], ensemble=row["ensemble"], erpKw=row["erpKw"],
+                            lat=row["lat"], lon=row["lon"], match=match)
+                if (int(row["main"]), int(row["sub"])) != (main, sub):
+                    item["listedAs"] = {"main": int(row["main"]), "sub": int(row["sub"])}
                 if here:
-                    km, deg = distance_bearing(here[0], here[1], best["lat"], best["lon"])
+                    km, deg = distance_bearing(here[0], here[1], row["lat"], row["lon"])
                     item.update(distanceKm=round(km, 1), bearingDeg=round(deg))
-                break
-            out.append(item)
+                shown = conf >= KNOWN_CONFIDENCE or (item["distanceKm"] is not None and item["distanceKm"] <= NEAR_KM)
+            else:
+                shown = conf >= UNKNOWN_CONFIDENCE
+            if shown:
+                out.append(item)
         return out
 
     # ------------------------------------------------------------ refresh

@@ -146,9 +146,12 @@ class TheCard(unittest.TestCase):
         meta = {"transmitters": [
             {"main": 11, "sub": 1, "site": "Crystal Palace", "distanceKm": 4.2, "bearingDeg": 7, "levelDb": -0.5},
             {"main": 1, "sub": 7, "site": "Wrotham", "distanceKm": None, "bearingDeg": None, "levelDb": -8.5},
+            {"main": 63, "sub": 7, "site": "West Kilbride", "distanceKm": 31.0, "bearingDeg": 334, "levelDb": -11.5,
+             "listedAs": {"main": 64, "sub": 7}},
             {"main": 5, "sub": 5, "site": None, "distanceKm": None, "bearingDeg": None, "levelDb": -20.0}]}
         self.assertEqual(transmitters_text(meta).splitlines(),
                          ["Transmitters heard:", "Crystal Palace, 4 km at 007°, 0 dB", "Wrotham, -8 dB",
+                          "West Kilbride (sends TII 63/7), 31 km at 334°, -12 dB",
                           "TII 5/5 (not in the list), -20 dB"])
         self.assertEqual(transmitters_text({"transmitters": []}), "")
         self.assertEqual(transmitters_text({}), "")

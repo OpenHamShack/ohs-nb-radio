@@ -119,12 +119,20 @@ def transmitters_text(meta: dict) -> str:
         if not t.get("site"):
             lines.append(QCoreApplication.translate("DecodersView", "TII {main}/{sub} (not in the list), {db} dB")
                          .format(main=t.get("main"), sub=t.get("sub"), db=db))
-        elif t.get("distanceKm") is None:
-            lines.append(QCoreApplication.translate("DecodersView", "{site}, {db} dB").format(site=t["site"], db=db))
         else:
-            lines.append(QCoreApplication.translate("DecodersView", "{site}, {km} km at {deg}°, {db} dB")
-                         .format(site=t["site"], km=f"{float(t['distanceKm']):.0f}",
-                                 deg=f"{int(t['bearingDeg']):03d}", db=db))
+            site = t["site"]
+            listed = t.get("listedAs")
+            if listed:
+                # Heard under another code than the regulator's list gives
+                # it (matched by its site or sub identifier): say both.
+                site = QCoreApplication.translate("DecodersView", "{site} (sends TII {main}/{sub})").format(
+                    site=site, main=t.get("main"), sub=t.get("sub"))
+            if t.get("distanceKm") is None:
+                lines.append(QCoreApplication.translate("DecodersView", "{site}, {db} dB").format(site=site, db=db))
+            else:
+                lines.append(QCoreApplication.translate("DecodersView", "{site}, {km} km at {deg}°, {db} dB")
+                             .format(site=site, km=f"{float(t['distanceKm']):.0f}",
+                                     deg=f"{int(t['bearingDeg']):03d}", db=db))
     if not lines:
         return ""
     return QCoreApplication.translate("DecodersView", "Transmitters heard:") + "\n" + "\n".join(lines)

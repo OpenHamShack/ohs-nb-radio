@@ -67,9 +67,13 @@ class Naming(unittest.TestCase):
         self.assertEqual((t["main"], t["sub"], t["levelDb"], t["confidence"]), (1, 3, -1.0, 1.0))
 
     def test_strongest_first_as_heard_and_an_unknown_code_has_no_site(self):
-        out = self.tx.describe(meta(tii=((1, 2, -0.5, 1.0), (1, 3, -9.0, 0.6), (5, 5, -20.0, 0.3))), ASHFORD)
+        out = self.tx.describe(meta(tii=((1, 2, -0.5, 1.0), (1, 3, -9.0, 0.6), (5, 5, -20.0, 0.9))), ASHFORD)
         self.assertEqual([t["site"] for t in out], ["Dover", "Charing Hill", None])
         self.assertIsNone(out[2]["distanceKm"])
+
+    def test_an_unknown_code_shows_only_when_sure(self):
+        out = self.tx.describe(meta(tii=((1, 2, -0.5, 1.0), (5, 5, -20.0, 0.7))), ASHFORD)
+        self.assertEqual([t["site"] for t in out], ["Dover"])
 
     def test_the_block_finds_what_the_ensemble_id_does_not(self):
         # An ensemble whose id Ofcom's sheet does not have (yet): the same
@@ -90,6 +94,37 @@ class Naming(unittest.TestCase):
     def test_nothing_heard_is_an_empty_list(self):
         self.assertEqual(self.tx.describe({"tii": []}, ASHFORD), [])
         self.assertEqual(self.tx.describe({}, ASHFORD), [])
+
+
+class OnTheAir(unittest.TestCase):
+    """What shack_sdr listed on ohs-box's real blocks (rust/shack_sdr
+    tests/dab_tii_real.rs, 23/10/2026), through the bundled list, from the
+    station near Ayr: every transmitter that is there named, nothing else."""
+    AYR = "IO75QK"
+
+    def heard(self, eid, block, tii):
+        return [(t["site"], t["match"]) for t in dabtx.Transmitters(None).describe(meta(eid, block, tii), self.AYR)]
+
+    def test_ayr_11b_names_its_four_though_two_send_other_codes(self):
+        got = self.heard("C19B", "11B", [(64, 14, 1.0, 1.0), (63, 7, -11.5, 1.0), (63, 5, -23.0, 1.0),
+                                         (64, 4, -33.0, 0.3), (58, 15, -38.0, 0.3), (2, 9, -40.0, 0.3)])
+        self.assertEqual(got, [("Brown Carrick Hill", "eid"), ("West Kilbride", "sub"), ("Darvel", "site"),
+                               ("Girvan", "eid")])
+        wk = dabtx.Transmitters(None).describe(meta("C19B", "11B", [(63, 7, -11.5, 1.0)]), self.AYR)[0]
+        self.assertEqual(wk["listedAs"], {"main": 64, "sub": 7})
+
+    def test_bbc_12b_shows_a_weak_neighbour_near_but_not_a_code_from_england(self):
+        got = self.heard("CE15", "12B", [(64, 14, -0.5, 1.0), (64, 10, -6.0, 1.0), (61, 8, -13.5, 1.0),
+                                         (57, 13, -30.0, 0.3), (64, 4, -35.5, 1.0), (22, 9, -41.0, 0.3),
+                                         (66, 2, -42.5, 0.7), (2, 2, -45.5, 0.3), (21, 1, -48.5, 0.0)])
+        self.assertEqual([g[0] for g in got], ["Brown Carrick Hill", "Darvel", "South Knapdale", "Rothesay", "Girvan",
+                                               "Kirkconnel"])
+
+    def test_glasgow_11c_names_darvel_by_its_site(self):
+        got = self.heard("C182", "11C", [(63, 5, 0.0, 1.0), (57, 13, -23.0, 1.0), (63, 3, -26.5, 0.3),
+                                         (57, 4, -27.0, 0.3), (57, 12, -29.0, 0.8), (57, 15, -30.5, 0.5)])
+        self.assertEqual(got, [("Darvel", "site"), ("Rothesay", "eid"), ("Sergeant Law", "site"), ("Black Hill", "eid"),
+                               ("Rosneath", "eid"), ("Millburn Muir", "eid")])
 
 
 class Bundled(unittest.TestCase):
