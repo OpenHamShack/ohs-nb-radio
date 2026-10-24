@@ -219,6 +219,11 @@ class Radio(Engine):
         # engine's own set-up, which asks _rx_gain_wanted.
         self.bgain = bcastgain.Policy()
         self._bg_overloads = None
+        # dabNotch auto's verdict (notch.DabAuto), the device's overload
+        # count it last saw, and the notches the device last said it has.
+        self.dab_auto = notch.DabAuto()
+        self._notch_overloads = None
+        self._notch_have: tuple = ()
         super().__init__(*a, **kw)
         self.centre = None
         self.pending_centre = None
@@ -909,6 +914,60 @@ class Radio(Engine):
     def _app_tick(self, now: float) -> None:
         self.bandscan.tick()
         self._broadcast_tick(now)
+        self._notch_tick(now)
+
+    def _notch_tick(self, now: float) -> None:
+        """dabNotch auto (notch.DabAuto) from the device's overload count,
+        as broadcast gain reads it (_broadcast_tick: a new overload is the
+        count rising), and the `notches` status. A change only asks for a
+        reconfigure: the receive thread applies it (_apply_notches)."""
+        have = self._notch_have
+        if not have or self.rx_if is None or not self.running:
+            self._notch_overloads = None
+            if self.st.get("notches"):
+                self._status(notches={})
+            return
+        ds = self.st.get("deviceStatus") or {}
+        count = ds.get("overloads")
+        count = int(count) if isinstance(count, (int, float)) else None
+        over = count is not None and self._notch_overloads is not None and count > self._notch_overloads
+        self._notch_overloads = count
+        lo, hi = self._notch_span()
+        if self.dab_auto.tick(now, over, lo, hi, self._dab_held()):
+            self.log.info("dabNotch auto: %s", self.dab_auto.text())
+            self.reconf = True
+        self._status(notches=self._notch_view(lo, hi))
+
+    def _notch_span(self) -> tuple[float, float]:
+        half = self.geo.fs / 2
+        return self.rx_if - half, self.rx_if + half
+
+    def _dab_held(self) -> bool:
+        h = self.held
+        return h is not None and h.get("by") == "dab"
+
+    def _notch_view(self, lo: float, hi: float) -> dict:
+        """`notches` in api/state and api/status: per switch the device has,
+        its setting, whether it is in, and why."""
+        s, want = self.st, getattr(self.dev, "notch_want", {})
+        out = {}
+        if "dab_notch" in self._notch_have:
+            setting = s["dabNotch"]
+            if setting == "auto":
+                why, text = self.dab_auto.why, self.dab_auto.text()
+            else:
+                why, text = "setting", _("in: set on") if setting == "on" else _("out: set off")
+            out["dab_notch"] = {"setting": setting, "in": bool(want.get("dab_notch")), "why": why, "text": text}
+        if "rf_notch" in self._notch_have:
+            setting = s["rfNotch"]
+            if setting != "auto":
+                why, text = "setting", _("in: set on") if setting == "on" else _("out: set off")
+            elif notch.auto_rf(lo, hi):
+                why, text = "below_60mhz", _("in: tuned below 60 MHz, clear of MW and LW broadcasting")
+            else:
+                why, text = "band", _("out: tuned above 60 MHz or within MW or LW broadcasting")
+            out["rf_notch"] = {"setting": setting, "in": bool(want.get("rf_notch")), "why": why, "text": text}
+        return out
 
     # ------------------------------------------------------------ broadcast gain
     # A DAB session holding the receiver, or wide FM, plays with a gain of
@@ -1100,6 +1159,7 @@ class Radio(Engine):
         its own record (notch_want), which survives its reconnects."""
         dev = self.dev
         have = dev.notches() if dev is not None else ()
+        self._notch_have = have
         if not have or self.rx_if is None:
             return
         if self.st["keyed"]:
@@ -1108,10 +1168,9 @@ class Radio(Engine):
             # rule is not left to a device's kind: try again unkeyed.
             self.reconf = True
             return
-        half = self.geo.fs / 2
-        h = self.held
-        want = notch.wanted(self.st["dabNotch"], self.st["rfNotch"], self.rx_if - half, self.rx_if + half,
-                            dab_held=h is not None and h.get("by") == "dab")
+        lo, hi = self._notch_span()
+        want = notch.wanted(self.st["dabNotch"], self.st["rfNotch"], lo, hi, dab_held=self._dab_held(),
+                            overload_in=self.dab_auto.inn)
         # Only what changes: each switch is an Update of its own, and one
         # already where it should be needs none.
         had = getattr(dev, "notch_want", {})

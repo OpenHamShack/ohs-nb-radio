@@ -361,6 +361,9 @@ class Server:
                 # The gain a broadcast station plays with in place of the
                 # operator's (Radio; {} while none plays, and in NB).
                 "broadcastGain": st.get("broadcastGain") or {},
+                # The RSP's notch filters and why each is in or out (Radio;
+                # {} for any other radio, and in NB).
+                "notches": st.get("notches") or {},
                 "hostLibs": st.get("hostLibs") or {}}
 
     def shared_log(self) -> dict:

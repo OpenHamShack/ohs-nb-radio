@@ -9,9 +9,11 @@ gain), which logs each Init and Update with the notch fields as the
 API's structures hold them. So what is checked is what SDRplay's service
 would be handed, field by field, not what Radio meant to send.
 
-- **Automatic** at 145 MHz puts the DAB notch in and leaves the broadcast
-  notch out (in, it costs 2 m at least 4 dB); tuned to 218.640 MHz (11B)
-  the DAB notch comes out too; on 80 m the broadcast notch goes in.
+- **Automatic** leaves both out on 2 m (in, either costs 2 m about 4 dB)
+  and on 11B; on 80 m the broadcast notch goes in. The DAB notch goes in
+  only after the RSP reports overload in three one-second windows running
+  outside Band III, and comes out after the clear hold; never in without
+  overload (`DabAuto`, on numbers, and through the stand-in API).
 - **On and off** hold a notch wherever the receiver is tuned.
 - **Live:** a retune or a changed setting is one Update on the running
   stream, never a second Init; a reopen comes back with what was applied.
@@ -26,6 +28,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -60,6 +63,11 @@ static void note(const char *what, int reason, int ext) {
                      dev.rsp1aParams.rfNotchEnable, dev.rsp1aParams.rfDabNotchEnable,
                      chA.rsp2TunerParams.rfNotchEnable, (int)(chA.tunerParams.rfFreq.rfHz / 1000));
     if (n > 0 && loglen + n < sizeof logbuf) loglen += n;
+}
+void stub_overload(void) {
+    sdrplay_api_EventParamsT p; memset(&p, 0, sizeof p);
+    p.powerOverloadParams.powerOverloadChangeType = sdrplay_api_Overload_Detected;
+    cbs.EventCbFn(sdrplay_api_PowerOverloadChange, sdrplay_api_Tuner_A, &p, 0);
 }
 const char *stub_log(void) { logbuf[loglen] = 0; return logbuf; }
 void stub_clear(void) { loglen = 0; }
@@ -119,24 +127,91 @@ HW_RSP1, HW_RSP2, HW_RSPDX = 1, 2, 4
 MHZ = 1e6
 
 
+class DabAutoOnNumbers(unittest.TestCase):
+    """notch.DabAuto driven at Radio's supervisor rate (0.1 s), on a 2 m span
+    unless said otherwise."""
+
+    LO, HI = 144.1 * MHZ, 146.5 * MHZ
+
+    def run_for(self, a, t, seconds, over, lo=LO, hi=HI, held=False):
+        changes = []
+        end = t + seconds
+        while t < end - 1e-9:
+            t = round(t + 0.1, 6)
+            if a.tick(t, over, lo, hi, held):
+                changes.append((t, a.inn))
+        return t, changes
+
+    def test_never_in_without_overload(self):
+        a = notch.DabAuto()
+        _t, changes = self.run_for(a, 0.0, 3600, False)
+        self.assertEqual(changes, [])
+        self.assertFalse(a.inn)
+        self.assertEqual(a.text(), "out: no overload seen")
+
+    def test_overload_in_three_windows_running_puts_it_in(self):
+        # Overload for half a second, then clear for three, over and over:
+        # never three windows running, so never in.
+        a, t = notch.DabAuto(), 0.0
+        for _ in range(20):
+            t, on = self.run_for(a, t, 0.5, True)
+            t, off = self.run_for(a, t, 3.0, False)
+            self.assertEqual(on + off, [])
+        # Lasting overload: in once three windows running have seen it -
+        # the one already open when it began counts - and not before.
+        start = t
+        t, changes = self.run_for(a, t, 5.0, True)
+        self.assertEqual([inn for _t, inn in changes], [True])
+        self.assertTrue(2.0 <= changes[0][0] - start <= 4.1, changes)
+        self.assertEqual(a.text(), "in: overload seen at 145.300 MHz")
+
+    def test_clear_for_the_hold_takes_it_out_and_a_return_doubles_the_hold(self):
+        a = notch.DabAuto()
+        t, _ = self.run_for(a, 0.0, 3.5, True)
+        self.assertTrue(a.inn)
+        t, changes = self.run_for(a, t, notch.HOLD_S - 5, False)
+        self.assertEqual(changes, [])                        # not yet: the hold counts from the last overload
+        t, changes = self.run_for(a, t, 10, False)
+        self.assertEqual([inn for _t, inn in changes], [False])
+        self.assertEqual(a.text(), "out: no overload for 5 min")
+        # Back within the memory: in again, and now held twice as long.
+        t, _ = self.run_for(a, t, 3.5, True)
+        self.assertTrue(a.inn)
+        t, changes = self.run_for(a, t, notch.HOLD_S + 10, False)
+        self.assertEqual(changes, [])
+        t, changes = self.run_for(a, t, notch.HOLD_S, False)
+        self.assertEqual([inn for _t, inn in changes], [False])
+
+    def test_never_in_band_iii_and_band_iii_takes_it_out(self):
+        a = notch.DabAuto()
+        _t, changes = self.run_for(a, 0.0, 10, True, lo=217.4 * MHZ, hi=219.8 * MHZ)
+        self.assertEqual(changes, [])
+        self.assertEqual(a.text(), "out: tuned within Band III")
+        t, _ = self.run_for(a, 10.0, 3.5, True)
+        self.assertTrue(a.inn)
+        t, changes = self.run_for(a, t, 0.2, True, held=True)
+        self.assertEqual([inn for _t, inn in changes], [False])
+        self.assertEqual(a.text(), "out: a DAB station is playing")
+
+
 class TheRule(unittest.TestCase):
     """notch.wanted on numbers alone, for a 2.4 MS/s span."""
 
-    def at(self, hz, dab="auto", rf="auto", held=False):
-        return notch.wanted(dab, rf, hz - 1.2 * MHZ, hz + 1.2 * MHZ, dab_held=held)
+    def at(self, hz, dab="auto", rf="auto", held=False, overload_in=False):
+        return notch.wanted(dab, rf, hz - 1.2 * MHZ, hz + 1.2 * MHZ, dab_held=held, overload_in=overload_in)
 
-    def test_automatic_on_2_m_puts_only_the_dab_notch_in_and_on_11b_neither(self):
-        self.assertEqual(self.at(145 * MHZ), {"dab_notch": True, "rf_notch": False})
+    def test_automatic_on_2_m_and_on_11b_leaves_both_out(self):
+        self.assertEqual(self.at(145 * MHZ), {"dab_notch": False, "rf_notch": False})
         self.assertEqual(self.at(218.640 * MHZ), {"dab_notch": False, "rf_notch": False})
 
-    def test_band_iii_edges_and_a_span_that_only_overlaps_one(self):
-        self.assertFalse(self.at(174.5 * MHZ)["dab_notch"])         # the span reaches over 174
-        self.assertTrue(self.at(172.5 * MHZ)["dab_notch"])          # wholly below it
-        self.assertFalse(self.at(240.9 * MHZ)["dab_notch"])
-        self.assertTrue(self.at(242 * MHZ)["dab_notch"])
-
-    def test_a_dab_session_takes_it_out_wherever_the_centre_is(self):
-        self.assertFalse(self.at(145 * MHZ, held=True)["dab_notch"])
+    def test_overload_puts_the_dab_notch_in_only_clear_of_band_iii(self):
+        self.assertTrue(self.at(145 * MHZ, overload_in=True)["dab_notch"])
+        self.assertFalse(self.at(174.5 * MHZ, overload_in=True)["dab_notch"])     # the span reaches over 174
+        self.assertTrue(self.at(172.5 * MHZ, overload_in=True)["dab_notch"])      # wholly below it
+        self.assertFalse(self.at(240.9 * MHZ, overload_in=True)["dab_notch"])
+        self.assertTrue(self.at(242 * MHZ, overload_in=True)["dab_notch"])
+        # A DAB session takes it out wherever the centre is.
+        self.assertFalse(self.at(145 * MHZ, held=True, overload_in=True)["dab_notch"])
 
     def test_the_broadcast_notch_is_in_below_60_mhz_only_and_out_over_am_broadcasting(self):
         # 80 m, 20 m, 10 m, 6 m: in (the MW part helps, the FM part costs nothing).
@@ -201,7 +276,8 @@ class NotchesThroughTheApi(unittest.TestCase):
         return sum(1 for e in self.log() if e["what"] == "init")
 
     def radio(self, **cfg):
-        r = make_radio(device="sdrplay", sampleRate=2_400_000, vfo=145_500_000.0, mode="fm",
+        cfg = {"vfo": 145_500_000.0, **cfg}
+        r = make_radio(device="sdrplay", sampleRate=2_400_000, mode="fm",
                        rxGainMode="manual", rxGain=40.0, licenceClass="full", **cfg)
         r.start()
         self.addCleanup(close, r)
@@ -214,41 +290,75 @@ class NotchesThroughTheApi(unittest.TestCase):
         pump(r, 5, until=lambda: {k: r.state()["deviceStatus"].get("options", {}).get(k) for k in want} == want)
         return r.state()["deviceStatus"].get("options", {})
 
+    def notch_view(self, r, until=None) -> dict:
+        pump(r, 6, until=(lambda: until(r.state().get("notches") or {})) if until else None)
+        return r.state().get("notches") or {}
+
     def test_automatic_on_2_m_then_11b_then_80_m_on_an_rspdx(self):
         r = self.radio()
-        self.assertEqual(self.options(r, {"dab_notch": True, "rf_notch": False}),
-                         {"dab_notch": True, "rf_notch": False, "bias_t": False, "hdr": False})
-        last = self.log()[-1]
-        self.assertEqual((last["dx_dab"], last["dx_rf"]), (1, 0))
-        # Block 11B: the DAB notch comes out on its own.
-        r.set(vfo=218_640_000.0)
-        self.assertEqual(self.options(r, {"dab_notch": False}), {"dab_notch": False, "rf_notch": False,
-                                                                  "bias_t": False, "hdr": False})
-        last = self.log()[-1]
-        self.assertEqual((last["what"], last["ext"], last["dx_dab"], last["dx_rf"]),
-                         ("update", EXT1_RSPDX_DAB_NOTCH, 0, 0))
-        # ...back on 2 m it goes in again...
-        r.set(vfo=145_500_000.0)
-        self.assertEqual(self.options(r, {"dab_notch": True})["dab_notch"], True)
-        # ...and on 80 m the broadcast notch goes in as well.
+        pump(r, 1)
+        self.assertEqual(self.options(r, {"dab_notch": False, "rf_notch": False}),
+                         {"dab_notch": False, "rf_notch": False, "bias_t": False, "hdr": False})
+        # On 80 m the broadcast notch goes in, and the DAB notch stays out.
         r.set(vfo=3_650_000.0, mode="lsb")
-        self.assertEqual(self.options(r, {"rf_notch": True})["rf_notch"], True)
+        self.assertEqual(self.options(r, {"rf_notch": True})["dab_notch"], False)
         last = self.log()[-1]
-        self.assertEqual((last["ext"], last["dx_dab"], last["dx_rf"]), (EXT1_RSPDX_RF_NOTCH, 1, 1))
+        self.assertEqual((last["ext"], last["dx_dab"], last["dx_rf"]), (EXT1_RSPDX_RF_NOTCH, 0, 1))
+        # Block 11B: out again.
+        r.set(vfo=218_640_000.0, mode="fm")
+        self.assertEqual(self.options(r, {"rf_notch": False})["dab_notch"], False)
         # Each change was an Update on the running stream: one Init, ever.
         self.assertEqual(self.inits(), 1)
 
+    def overload_for(self, r, seconds):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            self.ctl.stub_overload()
+            pump(r, 0.1)
+
+    def test_overload_outside_band_iii_puts_the_dab_notch_in_and_a_clear_hold_takes_it_out(self):
+        r = self.radio()
+        pump(r, 1)
+        self.overload_for(r, 0.4)                          # at most two windows: still out
+        view = self.notch_view(r, until=lambda v: v.get("dab_notch", {}).get("in"))
+        self.assertFalse(view["dab_notch"]["in"])
+        self.assertFalse(r.dev.notch_want.get("dab_notch"))
+        self.overload_for(r, 5.0)
+        view = self.notch_view(r, until=lambda v: v.get("dab_notch", {}).get("in"))
+        self.assertEqual(view["dab_notch"], {"setting": "auto", "in": True, "why": "overload",
+                                             "text": "in: overload seen at 145.200 MHz"})
+        self.assertTrue(self.options(r, {"dab_notch": True})["dab_notch"])
+        dab = [e for e in self.log() if e["ext"] == EXT1_RSPDX_DAB_NOTCH]
+        self.assertEqual(dab[-1]["dx_dab"], 1)
+        # Clear for the hold (shortened here): out, and it says why.
+        r.dab_auto.hold = 2.0
+        view = self.notch_view(r, until=lambda v: not v.get("dab_notch", {}).get("in", True))
+        self.assertEqual((view["dab_notch"]["in"], view["dab_notch"]["why"]), (False, "clear"))
+        self.assertFalse(self.options(r, {"dab_notch": False})["dab_notch"])
+        self.assertEqual(self.inits(), 1)
+
+    def test_overload_in_band_iii_never_puts_it_in(self):
+        r = self.radio(vfo=218_640_000.0)
+        pump(r, 1)
+        self.overload_for(r, 4.5)
+        view = self.notch_view(r)
+        self.assertEqual((view["dab_notch"]["in"], view["dab_notch"]["why"]), (False, "band_iii"))
+        self.assertFalse(r.dev.notch_want.get("dab_notch"))
+
     def test_on_and_off_override_live_with_no_reopen(self):
         r = self.radio()
-        self.options(r, {"dab_notch": True, "rf_notch": False})
+        pump(r, 1)
+        self.options(r, {"dab_notch": False, "rf_notch": False})
         src = r.dev.src
         self.ctl.stub_clear()
-        # On puts the broadcast notch in on 2 m, for a station near an FM transmitter.
-        r.set(dabNotch="off", rfNotch="on")
-        self.assertEqual(self.options(r, {"dab_notch": False, "rf_notch": True})["rf_notch"], True)
+        # On puts both in on 2 m: for a station near a strong transmitter.
+        r.set(dabNotch="on", rfNotch="on")
+        self.assertEqual(self.options(r, {"dab_notch": True, "rf_notch": True})["rf_notch"], True)
         ups = self.log()
         self.assertEqual(sorted(e["ext"] for e in ups), [EXT1_RSPDX_RF_NOTCH, EXT1_RSPDX_DAB_NOTCH])
-        self.assertEqual((ups[-1]["dx_dab"], ups[-1]["dx_rf"]), (0, 1))
+        self.assertEqual((ups[-1]["dx_dab"], ups[-1]["dx_rf"]), (1, 1))
+        self.assertEqual(self.notch_view(r)["dab_notch"], {"setting": "on", "in": True, "why": "setting",
+                                                            "text": "in: set on"})
         self.assertEqual(self.inits(), 0)
         self.assertIs(r.dev.src, src)                          # the same open source: never reopened
         # On holds the DAB notch in on 11B, where automatic would take it out.
@@ -262,6 +372,7 @@ class NotchesThroughTheApi(unittest.TestCase):
         # What the engine's reconnect does (Engine._device_lost): close,
         # open, re-tune, and nothing else.
         r = self.radio(dabNotch="off", rfNotch="on")
+        pump(r, 0.5)
         self.options(r, {"dab_notch": False, "rf_notch": True})
         self.ctl.stub_clear()
         r.dev.close()

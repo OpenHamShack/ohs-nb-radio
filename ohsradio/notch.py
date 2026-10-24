@@ -7,14 +7,18 @@ multiplex overloads the front end even with the receiver tuned somewhere
 else entirely - 2 m included - because nothing ahead of the LNA stops it.
 SDRplay fit two switchable notches for exactly this, a DAB (Band III)
 notch and a broadcast notch, and until now Radio left both at the API's
-default, off. These two settings switch them, and `auto` puts each in
-wherever it cannot be in the way:
+default, off. These two settings switch them:
 
-- **`dabNotch`** (shack_sdr's `dab_notch`) is in unless the receiver's
-  span touches Band III, 174-240 MHz (`BAND_III`), and out while a DAB
-  session holds the receiver - which centres it on a block, so in Band
-  III anyway; the hold is checked as well so a DAB session never depends
-  on a centring rule elsewhere.
+- **`dabNotch`** (shack_sdr's `dab_notch`) auto is **out by default
+  everywhere**, and goes in only when the RSP reports overload while its
+  span is clear of Band III, 174-240 MHz (`BAND_III`) - `DabAuto` below.
+  Measured on ohs-box (24/10/2026, Store Radio beta.7, RSPdx, Antenna A,
+  145.300 MHz FM, rxGain 40, back-to-back minutes): with the DAB notch in
+  the repeater was about 4 dB weaker (insertion loss) and about 2.5 dB
+  lower over the noise floor, and there were no overloads with it in or
+  out - so on 2 m it cost 2.5 dB and bought nothing. (beta.7's rule put it
+  in everywhere outside Band III.) In Band III, or while a DAB session
+  holds the receiver, it is always out.
 - **`rfNotch`** (shack_sdr's `rf_notch`) is in only while the whole span
   lies below 60 MHz (`RF_AUTO_TOP`), and even there out while it touches
   the LW or MW broadcast bands (`AM_BANDS`). The one switch is both an FM
@@ -68,11 +72,16 @@ Applied live, between two reads on the receive thread, with one
 `sdrplay_api_Update` per switch and no reopen (ohsradio/radio.py
 `_apply_notches`): whenever the centre moves (a dial change that leaves
 the span, a DAB session taking or giving back the receiver, the band
-scan's hops) and whenever either setting changes. A reopen (the radio
+scan's hops), whenever either setting changes, and whenever DabAuto's
+verdict does (Radio._notch_tick asks for a reconfigure). A reopen (the radio
 lost and found again) takes what was last applied, because the device
 hands it to the source it constructs (ohscore/devices/sdrsource.py).
 """
 from __future__ import annotations
+
+from ohsradio.i18n import _
+
+from . import bcastgain
 
 CHOICES = ("auto", "on", "off")
 
@@ -92,9 +101,14 @@ def _touches(lo: float, hi: float, band: tuple[float, float]) -> bool:
     return lo < band[1] and hi > band[0]
 
 
-def auto_dab(lo: float, hi: float, dab_held: bool) -> bool:
-    """Whether `auto` puts the DAB notch in for a span lo..hi Hz."""
-    return not dab_held and not _touches(lo, hi, BAND_III)
+def in_band_iii(lo: float, hi: float) -> bool:
+    return _touches(lo, hi, BAND_III)
+
+
+def auto_dab(lo: float, hi: float, dab_held: bool, overload_in: bool) -> bool:
+    """Whether `auto` puts the DAB notch in for a span lo..hi Hz, given
+    DabAuto's verdict (`overload_in`)."""
+    return overload_in and not dab_held and not in_band_iii(lo, hi)
 
 
 def auto_rf(lo: float, hi: float) -> bool:
@@ -106,8 +120,95 @@ def _pick(setting: str, auto: bool) -> bool:
     return {"on": True, "off": False}.get(str(setting), auto)
 
 
-def wanted(dab_setting: str, rf_setting: str, lo: float, hi: float, dab_held: bool = False) -> dict[str, bool]:
+def wanted(dab_setting: str, rf_setting: str, lo: float, hi: float, dab_held: bool = False,
+           overload_in: bool = False) -> dict[str, bool]:
     """The switches to set, by shack_sdr's names, for the two settings and
-    the device's span lo..hi Hz."""
-    return {"dab_notch": _pick(dab_setting, auto_dab(lo, hi, dab_held)),
+    the device's span lo..hi Hz (`overload_in`: DabAuto's verdict)."""
+    return {"dab_notch": _pick(dab_setting, auto_dab(lo, hi, dab_held, overload_in)),
             "rf_notch": _pick(rf_setting, auto_rf(lo, hi))}
+
+
+# DabAuto (seconds). The debounce is broadcast gain's for wide FM
+# (bcastgain.py WINDOW_S, DEBOUNCE): the SDRplay overload report flickers
+# (Brian's Band III sweep saw it true on blocks whose FIBs were clean), so
+# one report is not enough - it must be there in DEBOUNCE one-second
+# windows running.
+WINDOW_S = bcastgain.WINDOW_S
+DEBOUNCE = bcastgain.DEBOUNCE
+# In, it comes out after this long with no overload at all...
+HOLD_S = 300.0
+# ...but put back in within MEMORY_S of coming out, the next hold is twice
+# as long (up to HOLD_MAX_S): a neighbour that keeps coming back keeps the
+# notch in rather than flapping it every five minutes. Out for MEMORY_S,
+# the hold is HOLD_S again.
+MEMORY_S = 3600.0
+HOLD_MAX_S = 3600.0
+
+
+class DabAuto:
+    """dabNotch auto's verdict (module docstring), driven ten times a
+    second from Radio's supervisor tick with the device's span and whether
+    it reported a new overload since the last look. `inn` is read on the
+    receive thread (one bool, assigned whole)."""
+
+    def __init__(self):
+        self.inn = False
+        self.streak = 0
+        self._win: dict | None = None
+        self.last_over: float | None = None
+        self.out_at: float | None = None
+        self.hold = HOLD_S
+        self.why = "default"
+        self.at_hz: float | None = None
+
+    def tick(self, now: float, over: bool, lo: float, hi: float, dab_held: bool) -> bool:
+        """True when the verdict changed."""
+        if dab_held or in_band_iii(lo, hi):
+            # Never in here, and what was seen elsewhere does not carry in.
+            self._win, self.streak = None, 0
+            why = "dab" if dab_held else "band_iii"
+            if self.inn:
+                self.inn, self.out_at, self.why = False, now, why
+                return True
+            if self.why in ("default", "clear", "band_iii", "dab"):
+                self.why = why
+            return False
+        if self.why in ("band_iii", "dab"):
+            self.why = "default"
+        if self._win is None:
+            self._win = {"t": now, "over": False}
+        w = self._win
+        w["over"] = w["over"] or bool(over)
+        if now - w["t"] < WINDOW_S:
+            return False
+        self._win = None
+        if w["over"]:
+            self.last_over = now
+            if self.inn:
+                return False
+            self.streak += 1
+            if self.streak < DEBOUNCE:
+                return False
+            self.streak = 0
+            if self.out_at is not None and now - self.out_at < MEMORY_S:
+                self.hold = min(self.hold * 2, HOLD_MAX_S)
+            self.inn, self.why, self.at_hz = True, "overload", (lo + hi) / 2
+            return True
+        self.streak = 0
+        if self.inn and now - self.last_over >= self.hold:
+            self.inn, self.out_at, self.why = False, now, "clear"
+            return True
+        if not self.inn and self.out_at is not None and now - self.out_at >= MEMORY_S:
+            self.hold = HOLD_S
+        return False
+
+    def text(self) -> str:
+        if self.why == "overload":
+            return _("in: overload seen at {mhz} MHz").format(mhz=f"{(self.at_hz or 0) / 1e6:.3f}")
+        if self.why == "clear":
+            return _("out: no overload for {minutes:g} min").format(minutes=self.hold / 60)
+        if self.why == "band_iii":
+            return _("out: tuned within Band III")
+        if self.why == "dab":
+            return _("out: a DAB station is playing")
+        return _("out: no overload seen")

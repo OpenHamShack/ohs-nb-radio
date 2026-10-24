@@ -59,11 +59,14 @@ with REG.after("sampleRate"):
     # DAB transmitter 8 km away overloads the RSPdx on 2 m). Live, no
     # restart: each is one API update on the running stream.
     _k("dabNotch", "enum", "auto", "setting", choices=list(notch.CHOICES),
-       help="The SDRplay RSP's DAB notch (about 160-230 MHz), ahead of its LNA: keeps a strong Band III "
-            "transmitter from overloading the receiver wherever it is tuned. Automatic: in, except while the "
-            "receiver is tuned within 174-240 MHz or a DAB station plays. On or off holds it. RSPdx, RSP1A, "
-            "RSP1B and RSPduo only (not the RSPduo's Hi-Z input); on any other radio, the RSP2 and RSP1 "
-            "included, it does nothing.")
+       help="The SDRplay RSP's DAB notch (about 160-230 MHz), ahead of its LNA: for a strong Band III "
+            "transmitter that overloads the receiver wherever it is tuned. In, it costs about 4 dB of signal "
+            "and 2.5 dB over the noise on 2 m (measured on an RSPdx at 145.3 MHz). Automatic: out, until the "
+            "radio reports overload for three seconds running while tuned outside 174-240 MHz; then in, and "
+            "out again after 5 minutes with no overload (longer if it keeps coming back). Always out within "
+            "174-240 MHz and while a DAB station plays. On or off holds it. RSPdx, RSP1A, RSP1B and RSPduo "
+            "only (not the RSPduo's Hi-Z input); on any other radio, the RSP2 and RSP1 included, it does "
+            "nothing.")
     _k("rfNotch", "enum", "auto", "setting", choices=list(notch.CHOICES),
        help="The SDRplay RSP's broadcast notch, ahead of its LNA: one switch for the FM band (about 77-115 MHz) "
             "and MW (about 500-1530 kHz). Automatic: in only while the receiver is tuned below 60 MHz, except "
@@ -303,6 +306,9 @@ with REG.after("txDial"):
                                  "freqHz, text}; {} while none runs."),
         ("stationsAt", "dict", {}, "When each band's station list was last made: {fm, dab}, ISO 8601 UTC or "
                                    "null. Changes when a list does (GET api/fm/stations, api/dab/stations)."),
+        ("notches", "dict", {}, "The SDRplay RSP's notch filters (notch.py), per switch the open radio has: "
+                                "{dab_notch: {setting, in, why, text}, rf_notch: {...}}; text such as \"in: overload "
+                                "seen at 145.300 MHz\". {} for a radio without them."),
         ("broadcastGain", "dict", {}, "The receiver gain a broadcast station (DAB holding the receiver, or wide "
                                       "FM) has in place of the operator's, which rxGain keeps (bcastgain.py): "
                                       "{auto, db, operatorDb, gainModel, adaptive, state, signal, fibBad, overloaded, "

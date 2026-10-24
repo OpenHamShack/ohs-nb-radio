@@ -344,8 +344,9 @@ class ThroughTheRsp(unittest.TestCase):
 
     def test_a_dab_station_plays_at_2_4_ms_with_nothing_dropped(self):
         r, audio = rsp_radio(self)
-        # On 2 m the RSP's DAB notch is in (dabNotch auto, ohsradio/notch.py)...
-        self.assertTrue(wait(r, lambda: r.dev.src.options["dab_notch"]))
+        # dabNotch auto (ohsradio/notch.py): out on 2 m, the stand-in
+        # reporting no overload.
+        self.assertTrue(wait(r, lambda: r.dev.notch_want.get("dab_notch") is False))
         centre = float(sdr.load().dab.block_centre(DAB_BLOCK))
         sess = r.decoders.start("dab", centre, {"service": MP2})
         self.assertTrue(wait(r, lambda: (lambda m: m is not None and m.get("dls") == DLS and m.get("complete"))(

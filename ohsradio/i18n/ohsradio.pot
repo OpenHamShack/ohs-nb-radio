@@ -22,7 +22,7 @@ msgstr ""
 msgid "A recording is playing"
 msgstr ""
 
-#: ohsradio/radio.py:941
+#: ohsradio/radio.py:1000
 msgid "A recording is playing: its gain was fixed when it was recorded."
 msgstr ""
 
@@ -34,7 +34,7 @@ msgstr ""
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1435
+#: ohsradio/radio.py:1494
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -100,12 +100,12 @@ msgstr ""
 msgid "Done: the Pluto now runs as {chip}, which tunes {range}."
 msgstr ""
 
-#: ohsradio/state.py:321
+#: ohsradio/state.py:327
 #, python-brace-format
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
 
-#: ohsradio/radio.py:613
+#: ohsradio/radio.py:618
 #, python-brace-format
 msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
 msgstr ""
@@ -177,12 +177,12 @@ msgstr ""
 msgid "Not scanning now: {why}"
 msgstr ""
 
-#: ohsradio/radio.py:1124
+#: ohsradio/radio.py:1183
 #, python-brace-format
 msgid "Notch filter not changed: {error}"
 msgstr ""
 
-#: ohsradio/radio.py:998
+#: ohsradio/radio.py:1057
 #, python-brace-format
 msgid "Radio is scanning {label} for its station list: it is yours again the moment you use it"
 msgstr ""
@@ -191,7 +191,7 @@ msgstr ""
 msgid "Reachable"
 msgstr ""
 
-#: ohsradio/radio.py:945
+#: ohsradio/radio.py:1004
 msgid "Receiver gain control is automatic: the radio's own AGC follows the station."
 msgstr ""
 
@@ -251,11 +251,11 @@ msgstr ""
 msgid "The CW skimmer stopped."
 msgstr ""
 
-#: ohsradio/radio.py:943
+#: ohsradio/radio.py:1002
 msgid "The Hermes-Lite 2's receive gain is its LNA setting, which stays yours."
 msgstr ""
 
-#: ohsradio/radio.py:868
+#: ohsradio/radio.py:873
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
@@ -320,12 +320,12 @@ msgstr ""
 msgid "The {device} does not receive the FM band"
 msgstr ""
 
-#: ohsradio/radio.py:574
+#: ohsradio/radio.py:579
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz ({radio} MHz through {converter}) is outside it"
 msgstr ""
 
-#: ohsradio/radio.py:577
+#: ohsradio/radio.py:582
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
@@ -338,7 +338,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1393
+#: ohsradio/radio.py:1452
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -365,7 +365,7 @@ msgstr ""
 msgid "Transmitting"
 msgstr ""
 
-#: ohsradio/radio.py:824
+#: ohsradio/radio.py:829
 #, python-brace-format
 msgid "Tuning to {freq} stops {sessions}: the receiver stays on {lo} to {hi} while they run"
 msgstr ""
@@ -379,7 +379,7 @@ msgstr ""
 msgid "Waiting for the radio to restart…"
 msgstr ""
 
-#: ohsradio/radio.py:1037
+#: ohsradio/radio.py:1096
 #, python-brace-format
 msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""
@@ -439,6 +439,20 @@ msgstr ""
 msgid "in range"
 msgstr ""
 
+#: ohsradio/notch.py:207
+#, python-brace-format
+msgid "in: overload seen at {mhz} MHz"
+msgstr ""
+
+#: ohsradio/radio.py:959
+#: ohsradio/radio.py:964
+msgid "in: set on"
+msgstr ""
+
+#: ohsradio/radio.py:966
+msgid "in: tuned below 60 MHz, clear of MW and LW broadcasting"
+msgstr ""
+
 #: ohsradio/plutofix.py:602
 msgid "known once the radio is open"
 msgstr ""
@@ -473,6 +487,32 @@ msgstr ""
 #: ohsradio/localfreq.py:446
 #, python-brace-format
 msgid "now {call}, {location}"
+msgstr ""
+
+#: ohsradio/notch.py:213
+msgid "out: a DAB station is playing"
+msgstr ""
+
+#: ohsradio/notch.py:209
+#, python-brace-format
+msgid "out: no overload for {minutes:g} min"
+msgstr ""
+
+#: ohsradio/notch.py:214
+msgid "out: no overload seen"
+msgstr ""
+
+#: ohsradio/radio.py:959
+#: ohsradio/radio.py:964
+msgid "out: set off"
+msgstr ""
+
+#: ohsradio/radio.py:968
+msgid "out: tuned above 60 MHz or within MW or LW broadcasting"
+msgstr ""
+
+#: ohsradio/notch.py:211
+msgid "out: tuned within Band III"
 msgstr ""
 
 #: ohsradio/plutofix.py:540
@@ -513,7 +553,7 @@ msgstr ""
 msgid "{error}. The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:866
+#: ohsradio/radio.py:871
 #, python-brace-format
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""
@@ -538,12 +578,12 @@ msgstr ""
 msgid "{field} must be text"
 msgstr ""
 
-#: ohsradio/radio.py:769
+#: ohsradio/radio.py:774
 #, python-brace-format
 msgid "{freq} does not fit in the {width} the receiver covers together with the dial ({dial}) and {sessions}"
 msgstr ""
 
-#: ohsradio/radio.py:766
+#: ohsradio/radio.py:771
 #, python-brace-format
 msgid "{freq} is too far from the dial ({dial}): the receiver covers {width} at once, so tune nearer to it first"
 msgstr ""

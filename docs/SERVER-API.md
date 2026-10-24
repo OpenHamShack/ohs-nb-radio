@@ -840,10 +840,20 @@ Radio under "RTL-SDR and SDRplay"; code `ohsradio/notch.py`, tests
 
 | Setting | Values (default `auto`) | `auto` |
 |---|---|---|
-| `dabNotch` | `auto`, `on`, `off` | in, except while the receiver's span touches 174-240 MHz or a DAB session holds the receiver |
+| `dabNotch` | `auto`, `on`, `off` | out, until the RSP reports overload in three one-second windows running while its span is clear of 174-240 MHz; then in, and out again after 5 minutes with no overload (10, 20... up to 60 if it comes back within the hour). Always out in Band III and while a DAB session holds the receiver |
 | `rfNotch` | `auto`, `on`, `off` | in only while the whole span is below 60 MHz and clear of LW (148.5-283.5 kHz) and MW (526.5-1705 kHz); out above 60 MHz |
 
-`on` (in) and `off` (out) hold a notch wherever the receiver is. The span
+`on` (in) and `off` (out) hold a notch wherever the receiver is.
+
+**Measured cost on 2 m** (ohs-box, 24/10/2026, Store Radio beta.7, RSPdx,
+Antenna A, 145.300 MHz FM, rxGain 40, back-to-back minutes): the DAB
+notch in took about 4 dB off the signal and about 2.5 dB off
+signal-to-floor, and there were no overloads with it in or out. So
+`dabNotch` auto leaves it out until overload says it is needed (beta.7
+put it in everywhere outside Band III). The overload count is the
+SDRplay API's (`deviceStatus.overloads`, read as broadcast gain reads
+it); a radio that keeps none - SoapySDR with SoapySDRPlay3 - never gets
+it in on `auto`. The span
 is the RSP's own: its local oscillator plus and minus half the sample rate,
 so through a converter it is the IF the RSP sees. What the switches cover,
 from SDRplay's datasheets (the API specification does not say): on an
@@ -871,6 +881,15 @@ station near a strong FM transmitter.
   `dab_notch`, and `bias_t` and `hdr`, which Radio never changes), e.g.
   `{"rf_notch": false, "dab_notch": false, "bias_t": false, "hdr": false}`
   on an RSPdx tuned to 11B with both on `auto`. Absent for a radio
+  without them.
+- **Why each is in or out** is `notches` in `api/state` and `api/status`,
+  per switch the open RSP has: `{"dab_notch": {"setting": "auto", "in":
+  true, "why": "overload", "text": "in: overload seen at 145.300 MHz"},
+  "rf_notch": {"setting": "auto", "in": false, "why": "band", "text":
+  "out: tuned above 60 MHz or within MW or LW broadcasting"}}`. `why`:
+  `setting` (on or off), and for `dabNotch` auto `default` (no overload
+  seen), `overload`, `clear` (taken out after the hold), `band_iii`,
+  `dab`; for `rfNotch` auto `below_60mhz` or `band`. `{}` for a radio
   without them.
 
 ## Station lists (Radio)
