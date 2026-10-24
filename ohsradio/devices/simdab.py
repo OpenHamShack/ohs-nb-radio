@@ -12,6 +12,12 @@ send it, as in a single-frequency network: their TII codes are two real
 Sound Digital sites' (SITES), and the model's EId, C1CE, happens to be
 Sound Digital's too, so the transmitter lookup (ohsradio/dabtx.py) names
 them from the bundled Ofcom list - Crystal Palace, and Wrotham 8 dB down.
+With a shack_sdr that has it, the ensemble is the model's showcase
+(`testsig_dab(showcase_mjd=)`): the same two services, and everything
+DAB's data side shows - a slide in each service's X-PAD, a programme type
+and language for each, DL Plus on C221, and an SPI service whose logos
+and programme guide (today's, UTC) come a few seconds after a service
+starts playing.
 
 **Made once, then replayed.** The model builds every layer from the audio
 up to OFDM and costs about 0.1 s of CPU per 96 ms frame, so it cannot run
@@ -34,6 +40,7 @@ the time a test takes to start.
 from __future__ import annotations
 
 import threading
+import time
 
 import numpy as np
 
@@ -71,10 +78,14 @@ def loop(fs: float) -> np.ndarray | None:
             if m is None:
                 return None
             from shack_sdr import _native
-            try:
-                raw = _native.testsig_dab(frames=LOOP_FRAMES, rate=DAB_RATE, sites=SITES)
-            except TypeError:
-                raw = _native.testsig_dab(frames=LOOP_FRAMES, rate=DAB_RATE)
+            mjd = int(time.time() // 86_400) + 40_587
+            # The newest shack_sdr first; each older one lacks one more.
+            for kw in ({"sites": SITES, "showcase_mjd": mjd}, {"sites": SITES}, {}):
+                try:
+                    raw = _native.testsig_dab(frames=LOOP_FRAMES, rate=DAB_RATE, **kw)
+                    break
+                except TypeError:
+                    continue
             z = np.frombuffer(raw, np.complex64)
             per = int(round(FRAME_S * DAB_RATE))
             z = z[len(z) - LOOP_FRAMES * per:]          # the lead-in off: whole frames from a null symbol

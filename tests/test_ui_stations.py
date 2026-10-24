@@ -10,6 +10,10 @@ FM stereo and RDS transmitter and its DAB ensemble on the air:
   strongest frequency in wide FM. The DAB list shows each service with its
   ensemble and block; a click starts the DAB session for it, and another
   service on the same block switches that session.
+- **Now playing (DAB):** under the list while a DAB station plays, its
+  name, its DL Plus title and artist, the guide's programme and genre, its
+  logo and its latest slide, all off the simulated ensemble's air; the
+  list then shows the logo beside the station and its programme type.
 
 Nothing here keys."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
@@ -149,6 +153,39 @@ class BroadcastWindow(unittest.TestCase):
         self.assertTrue(view.tune_fm(88_600_000.0))
         self.assertEqual([s for s in r.decoders.sessions() if s.get("holdsReceiver")], [])
         self.assertEqual((r.state()["mode"], r.state()["vfo"]), ("wfm", 88_600_000.0))
+
+    def test_the_playing_dab_station_shows_its_slide_logo_and_what_is_on(self):
+        from shack_sdr import _native
+        try:
+            _native.testsig_dab(1, showcase_mjd=61_337)
+        except TypeError:
+            self.skipTest("shack_sdr without the showcase ensemble")
+        win, bridge, r = self.window(mode="fm", vfo=145_500_000.0)
+        win.show_view("stations")
+        view = win.stations_view
+        view.band.setCurrentIndex(view.band.findData("dab"))
+        self.assertFalse(view.playing.isVisible())
+        view.play_dab("11D", 222_064_000.0, "C221")
+        p = view.playing
+        self.assertTrue(self.settle_until(lambda: p.isVisible() and p.slide.pixmap() is not None
+                                          and not p.slide.pixmap().isNull() and not p.logo.pixmap().isNull()
+                                          and p.on_now.text().startswith("On now:"), 120),
+                        (p.name.text(), p.what.text(), p.on_now.text()))
+        self.assertEqual(p.name.text(), "Shack MP2 Tone")
+        self.assertEqual(p.what.text(), "1 kHz left by Shack MP2 Tone")
+        self.assertIn("Pop music", p.on_now.text())
+        # The list, filled from a scan's record, shows the logo and the type.
+        from ohsradio.bandscan import dab_ensemble
+        (sess,) = [s for s in r.decoders.sessions() if s.get("holdsReceiver")]
+        meta = r.decoders.session(sess["id"])["meta"]
+        r.bandscan.records["dab"]["ensembles"] = [dab_ensemble("11D", 222_064_000.0, meta)]
+        view.refresh()
+        rows = {view.tree.topLevelItem(i).text(0): view.tree.topLevelItem(i) for i in range(view.tree.topLevelItemCount())}
+        self.assertFalse(rows["Shack MP2 Tone"].icon(0).isNull())
+        self.assertEqual(rows["Shack MP2 Tone"].text(4), "Pop music")
+        # Stopped: the panel goes.
+        r.decoders.stop(sess["id"])
+        self.assertTrue(self.settle_until(lambda: not p.isVisible(), 10))
 
 
 if __name__ == "__main__":

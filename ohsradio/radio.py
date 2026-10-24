@@ -82,6 +82,7 @@ from ohsradio.i18n import _
 
 from . import bands, bcastgain, config, guard, notch, power, state, xvtr
 from .bandscan import BandScanner, rds_text
+from ohscore.dabpics import DabPictures
 from .cwskim import CwSkim, off_item
 from .devices import REGISTRY
 from . import plans
@@ -263,6 +264,9 @@ class Radio(Engine):
         # The weekly FM and DAB scan (bandscan.py), told of everything a
         # person does so it knows when the radio is idle.
         self.bandscan = BandScanner(self)
+        # DAB's slides, logos and programme guide (ohscore/dabpics.py), the
+        # logos and guide kept in the data folder across restarts.
+        self.dab_pictures = DabPictures(self.data_dir)
         self.activity_hooks.append(self.bandscan.touch)
         self.st["stationsAt"] = self.bandscan.stations_at()
 

@@ -183,13 +183,21 @@ def merge_fm(found: list[dict]) -> list[dict]:
 
 
 def dab_ensemble(block: str, centre: float, meta: dict) -> dict:
-    """A block's survey as the list keeps it."""
+    """A block's survey as the list keeps it: each service's genre (`pty`,
+    `ptyName`) and language too, which the FIC sends once a second and so
+    a survey usually catches. A logo is added when the list is read
+    (`view`): it comes later, from listening."""
+    from ohscore.decoders import pty_name
     ens = meta.get("ensemble") or {}
-    services = [{"sid": s.get("sid"), "label": s.get("label"), "kind": s.get("kind"),
-                 "bitrate": int(s["bitrate"]) if s.get("bitrate") is not None else None}
-                for s in meta.get("services") or []]
+    services = []
+    for s in meta.get("services") or []:
+        pty = s.get("pty") if isinstance(s.get("pty"), dict) else None
+        services.append({"sid": s.get("sid"), "label": s.get("label"), "kind": s.get("kind"),
+                         "bitrate": int(s["bitrate"]) if s.get("bitrate") is not None else None,
+                         "pty": int(pty["code"]) if pty else None, "ptyName": pty_name(pty),
+                         "language": s.get("language"), "hasSlideshow": bool(s.get("hasSlideshow"))})
     return {"block": block, "freqHz": int(centre), "id": ens.get("id"), "label": ens.get("label"),
-            "services": services}
+            "country": ens.get("country"), "services": services}
 
 
 def _iso(t: float | None) -> str | None:
@@ -261,8 +269,14 @@ class BandScanner:
         rec = self.records[band]
         key = "stations" if band == "fm" else "ensembles"
         status = "scanning" if band in self.running_bands else rec["status"]
+        rows = list(rec[key])
+        pics = getattr(self.radio, "dab_pictures", None)
+        if band == "dab" and pics is not None:
+            # Logos heard since (dabpics.py): paths, made URLs by the server.
+            rows = [dict(e, services=[dict(s, **pics.logo_paths(s.get("sid"))) for s in e.get("services") or []])
+                    for e in rows]
         return {"scannedAt": _iso(rec["scannedAt"]), "nextDue": _iso(self.next_due(band)), "status": status,
-                "statusText": self.status_text(band, status), key: list(rec[key])}
+                "statusText": self.status_text(band, status), key: rows}
 
     def status_text(self, band: str, status: str) -> str:
         if status == "scanning":

@@ -12,13 +12,21 @@ and the station lists the weekly band scan makes (ohsradio/bandscan.py).
   programme tunes to its strongest frequency in wide FM; a click on a DAB
   service starts (or switches) the DAB session for it. It reads the
   engine's scanner directly, as every desktop view reads the engine, and
-  refreshes when `stationsAt` or `bandScan` change.
+  refreshes when `stationsAt` or `bandScan` change. DAB services show
+  their logo (from the ensemble's SPI, once heard) and programme type.
+- **DabNowPlaying**, under the DAB list while a DAB station plays: its
+  logo and name, what is on (DL Plus's title and artist, else the
+  programme text, and the guide's programme), and its latest slide. It
+  looks once a second (the engine's session and its picture store,
+  ohscore/dabpics.py): pictures come a few seconds apart at most, and a
+  feed subscription would only add a second path for the same thing.
 
 Nothing here keys: tuning and DAB sessions are receive-side.
 """
 from __future__ import annotations
 
-from PyQt6.QtCore import QCoreApplication, Qt
+from PyQt6.QtCore import QCoreApplication, Qt, QTimer
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QSizePolicy, QTreeWidget, QTreeWidgetItem,
                              QVBoxLayout, QWidget)
 
@@ -137,6 +145,91 @@ def scan_line(view: dict) -> str:
     return " · ".join(parts)
 
 
+def pixmap(data: bytes | None) -> QPixmap | None:
+    """A picture's bytes (PNG or JPEG) as a pixmap; None for none or a
+    picture Qt cannot read."""
+    if not data:
+        return None
+    pm = QPixmap()
+    return pm if pm.loadFromData(data) and not pm.isNull() else None
+
+
+class DabNowPlaying(QWidget):
+    """The playing DAB station (module docstring)."""
+
+    LOGO = 56
+    SLIDE = (320, 240)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(theme.S3)
+        self.logo = QLabel()
+        self.logo.setFixedSize(theme.px(self.LOGO), theme.px(self.LOGO))
+        self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(self.logo, 0, Qt.AlignmentFlag.AlignTop)
+        col = QVBoxLayout()
+        col.setSpacing(2)
+        self.name = QLabel("")
+        self.name.setFont(theme.font(18, theme.QFont.Weight.DemiBold))
+        self.name.setTextFormat(Qt.TextFormat.PlainText)
+        col.addWidget(self.name)
+        self.what = QLabel("")
+        self.what.setTextFormat(Qt.TextFormat.PlainText)
+        self.what.setWordWrap(True)
+        col.addWidget(self.what)
+        self.on_now = QLabel("")
+        self.on_now.setObjectName("Muted")
+        self.on_now.setTextFormat(Qt.TextFormat.PlainText)
+        self.on_now.setWordWrap(True)
+        col.addWidget(self.on_now)
+        col.addStretch(1)
+        lay.addLayout(col, 1)
+        self.slide = QLabel()
+        self.slide.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.slide.setFixedSize(theme.px(self.SLIDE[0]), theme.px(self.SLIDE[1]))
+        lay.addWidget(self.slide, 0, Qt.AlignmentFlag.AlignTop)
+        self._shown: tuple = ()
+        self.setVisible(False)
+
+    def show_session(self, sess: dict | None, pics) -> None:
+        """A DAB session's view (Decoders.session), or None when none plays."""
+        meta = (sess or {}).get("meta") or {}
+        sid = meta.get("playing")
+        if not sess or not sid:
+            self.setVisible(False)
+            self._shown = ()
+            return
+        svc = next((x for x in meta.get("services") or [] if x.get("sid") == sid), {})
+        dl = meta.get("dlPlus") or {}
+        if dl.get("itemTitle") and dl.get("itemArtist"):
+            what = self.tr("{title} by {artist}").format(title=dl["itemTitle"], artist=dl["itemArtist"])
+        else:
+            what = (dl.get("itemTitle") or meta.get("dls") or "").strip()
+        now = svc.get("now") or {}
+        on = self.tr("On now: {name}").format(name=now["name"]) if now.get("name") else ""
+        if svc.get("ptyName"):
+            on = " · ".join(x for x in (on, svc["ptyName"]) if x)
+        slide = (meta.get("slide") or {}) if (meta.get("slide") or {}).get("sid") == sid else {}
+        key = (sid, svc.get("label"), what, on, slide.get("rev"), pics.has_logo(sid) if pics else False)
+        self.setVisible(True)
+        if key == self._shown:
+            return
+        self._shown = key
+        self.name.setText((svc.get("label") or sid).strip())
+        self.what.setText(what)
+        self.on_now.setText(on)
+        logo = pixmap(pics.logo(sid, "square")[0]) if pics is not None and pics.has_logo(sid) else None
+        self.logo.setPixmap(logo.scaled(self.logo.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                                        Qt.TransformationMode.SmoothTransformation) if logo else QPixmap())
+        got = pics.slide(sid) if pics is not None else None
+        pm = pixmap(got[0]) if got else None
+        self.slide.setPixmap(pm.scaled(self.slide.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                                       Qt.TransformationMode.SmoothTransformation) if pm else QPixmap())
+        self.slide.setToolTip(slide.get("categoryTitle") or "")
+
+
 class StationsView(QWidget):
     """The station lists (module docstring). `radio` is the engine; `say`
     shows a sentence the way the window shows a toast."""
@@ -182,6 +275,13 @@ class StationsView(QWidget):
         self.tree.itemActivated.connect(self._activated)
         self.tree.itemClicked.connect(self._activated)
         lay.addWidget(self.tree, 1)
+        self.playing = DabNowPlaying()
+        lay.addWidget(self.playing)
+        self._pics_rev = None
+        self._tick = QTimer(self)
+        self._tick.setInterval(1000)
+        self._tick.timeout.connect(self._look)
+        self._tick.start()
         self.band.setCurrentIndex(max(0, self.band.findData(prefs.get("stationsBand", FM))))
         self.sort.setCurrentIndex(max(0, self.sort.findData(prefs.get("stationsSort", "name"))))
         for w in (self.band, self.sort, self.genre):
@@ -190,10 +290,28 @@ class StationsView(QWidget):
         self.refresh()
 
     def detach(self):
+        self._tick.stop()
         try:
             self.bridge.changed.disconnect(self._state)
         except (TypeError, RuntimeError):
             pass
+
+    @property
+    def pictures(self):
+        return getattr(self.radio, "dab_pictures", None)
+
+    def _look(self) -> None:
+        """Once a second (DabNowPlaying's docstring): the playing station,
+        and the DAB list again when a logo has come since it was filled."""
+        if not self.isVisible():
+            return
+        held = self._dab_session()
+        full = self.radio.decoders.session(held["id"]) if held is not None else None
+        self.playing.show_session(full if self.band.currentData() == DAB else None, self.pictures)
+        pics = self.pictures
+        if pics is not None and self.band.currentData() == DAB and pics.rev != self._pics_rev:
+            self._pics_rev = pics.rev
+            self.refresh()
 
     @property
     def scanner(self):
@@ -278,8 +396,10 @@ class StationsView(QWidget):
             self.tree.resizeColumnToContents(c)
 
     def _fill_dab(self, ensembles: list[dict]) -> None:
-        self.tree.setColumnCount(4)
-        self.tree.setHeaderLabels([self.tr("Station"), self.tr("Ensemble"), self.tr("Block"), self.tr("Kind")])
+        self.tree.setColumnCount(5)
+        self.tree.setHeaderLabels([self.tr("Station"), self.tr("Ensemble"), self.tr("Block"), self.tr("Kind"),
+                                   self.tr("Type")])
+        pics = self.pictures
         rows = [(s, e) for e in ensembles for s in e.get("services") or []]
         rows.sort(key=lambda r: ((r[0].get("label") or "").casefold(), r[1]["freqHz"]))
         for s, e in rows:
@@ -287,11 +407,15 @@ class StationsView(QWidget):
             if s.get("bitrate"):
                 kind += " " + self.tr("{kbps} kbit/s").format(kbps=s["bitrate"])
             it = QTreeWidgetItem([(s.get("label") or "").strip(), (e.get("label") or "").strip(),
-                                  f"{e['block']}  {mhz(e['freqHz'], 3)}", kind])
+                                  f"{e['block']}  {mhz(e['freqHz'], 3)}", kind, s.get("ptyName") or ""])
             it.setData(0, Qt.ItemDataRole.UserRole, {"band": DAB, "block": e["block"], "freqHz": e["freqHz"],
                                                      "sid": s.get("sid")})
+            if pics is not None and pics.has_logo(s.get("sid")):
+                pm = pixmap(pics.logo(s["sid"], "square")[0])
+                if pm is not None:
+                    it.setIcon(0, QIcon(pm))
             self.tree.addTopLevelItem(it)
-        for c in range(4):
+        for c in range(5):
             self.tree.resizeColumnToContents(c)
 
     # ------------------------------------------------------------ actions

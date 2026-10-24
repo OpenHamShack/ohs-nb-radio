@@ -107,6 +107,43 @@ def dumps(obj) -> bytes:
     return json.dumps(obj, default=_json_default, separators=(",", ":")).encode()
 
 
+def _url_key(k) -> str | None:
+    """The URL key beside a path key: "path" -> "url", "logoPath" -> "logoUrl"."""
+    if k == "path":
+        return "url"
+    if isinstance(k, str) and k.endswith("Path") and len(k) > 4:
+        return k[:-4] + "Url"
+    return None
+
+
+def with_urls(obj, base: str):
+    """`obj` with a URL beside every path the engine hands out for the app's
+    own routes ("path": "api/dab/logos/C221" gains "url":
+    "<base>api/dab/logos/C221"). The engine never knows where the app is
+    served from; the request does (X-Forwarded-Prefix, `_base`), so the URL
+    is made here, per request, and is only ever a path (house rule: no
+    absolute URLs). Only values naming an `api/` route are touched, so a
+    filesystem path can never become a link. The same object comes back
+    when there is nothing to add."""
+    if isinstance(obj, dict):
+        out = None
+        for k, v in obj.items():
+            nv = with_urls(v, base) if isinstance(v, (dict, list)) else v
+            uk = _url_key(k)
+            add = uk is not None and isinstance(v, str) and v.startswith("api/") and uk not in obj
+            if nv is not v or add:
+                if out is None:
+                    out = dict(obj)
+                out[k] = nv
+                if add:
+                    out[uk] = base + v
+        return obj if out is None else out
+    if isinstance(obj, list):
+        new = [with_urls(v, base) if isinstance(v, (dict, list)) else v for v in obj]
+        return obj if all(a is b for a, b in zip(new, obj)) else new
+    return obj
+
+
 def spectrum_item(kind: str, item) -> dict:
     """(t, start_hz, bin_hz, db) as JSON: the bins as centi-dB in int16,
     base64, about a tenth of the bytes of a JSON list."""
@@ -621,7 +658,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # ---------------------------------------------------------- plumbing
     def _send(self, status: int, body, ctype: str = "application/json", extra: dict | None = None) -> None:
-        raw = body if isinstance(body, bytes) else dumps(body)
+        raw = body if isinstance(body, bytes) else dumps(with_urls(body, self._base()))
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(raw)))
@@ -1093,6 +1130,79 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, data, "image/png" if name.lower().endswith(".png") else "application/octet-stream",
                    extra)
 
+    # ---------------------------------------------------------- DAB's pictures
+    # Slides, logos and the programme guide a DAB session received
+    # (ohscore/dabpics.py, docs/SERVER-API.md "DAB pictures"). Radio only.
+    def _dab_pictures(self):
+        pics = getattr(self.srv.radio, "dab_pictures", None)
+        if pics is None:
+            self._error(404, _("This app has no DAB."), "not_found")
+        return pics
+
+    def _dab_sid(self):
+        from ..dabpics import sid_ok
+        sid = unquote(self._session_id()).upper()
+        if not sid_ok(sid):
+            self._error(400, _("A service id is four or eight hexadecimal digits"), "bad_params")
+            return None
+        return sid
+
+    def get_dab_slides(self, who, q):
+        """GET api/dab/slides: the latest slide of each service heard since
+        the radio started, newest first."""
+        pics = self._dab_pictures()
+        if pics is not None:
+            self._send(200, {"slides": [pics.slide_info(sid) for sid in reversed(list(pics.slides))]})
+
+    def get_dab_slide(self, who, q):
+        """GET api/dab/slides/{sid}: that service's latest slide, as the
+        picture it is (JPEG or PNG)."""
+        pics = self._dab_pictures()
+        sid = self._dab_sid() if pics is not None else None
+        if sid is None:
+            return
+        got = pics.slide(sid)
+        if got is None:
+            self._error(404, _("No slide has come from {sid} yet").format(sid=sid), "no_slide")
+            return
+        self._send(200, got[0], got[1])
+
+    def get_dab_logo(self, who, q):
+        """GET api/dab/logos/{sid}[?variant=square|wide]: that service's
+        logo from its ensemble's SPI, kept on disk; the other variant when
+        the one asked for never came."""
+        pics = self._dab_pictures()
+        sid = self._dab_sid() if pics is not None else None
+        if sid is None:
+            return
+        variant = q.get("variant", ["square"])[0]
+        if variant not in ("square", "wide"):
+            self._error(400, _("variant is square or wide"), "bad_params")
+            return
+        got = pics.logo(sid, variant)
+        if got is None:
+            self._error(404, _("No logo has come for {sid} yet").format(sid=sid), "no_logo")
+            return
+        self._send(200, got[0], got[1])
+
+    def get_dab_schedule(self, who, q):
+        """GET api/dab/schedule/{sid}[?date=YYYY-MM-DD]: that service's
+        programmes from SPI, all that are known or those starting on a UTC
+        date."""
+        pics = self._dab_pictures()
+        sid = self._dab_sid() if pics is not None else None
+        if sid is None:
+            return
+        date = q.get("date", [""])[0]
+        if date and not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+            self._error(400, _("date is YYYY-MM-DD"), "bad_params")
+            return
+        progs = pics.schedule(sid, date or None)
+        if progs is None:
+            self._error(404, _("No programme guide has come for {sid} yet").format(sid=sid), "no_schedule")
+            return
+        self._send(200, {"sid": sid, "date": date or None, "programmes": progs})
+
     # ---------------------------------------------------------- the band scan
     # Radio's FM and DAB station lists (ohsradio/bandscan.py,
     # docs/SERVER-API.md "Station lists"). NB has none: 404.
@@ -1446,8 +1556,10 @@ class _Handler(BaseHTTPRequestHandler):
                 pass
             gone.set()
         threading.Thread(target=reader, daemon=True).start()
+        base = self._base()
         try:
-            sock.send_text(json.dumps({"kind": "hello", "status": self.srv.status()}, default=_json_default))
+            sock.send_text(json.dumps(with_urls({"kind": "hello", "status": self.srv.status()}, base),
+                                      default=_json_default))
             state_dropped = 0
             while not gone.wait(0.05):
                 for k, f in feeds.items():
@@ -1466,8 +1578,8 @@ class _Handler(BaseHTTPRequestHandler):
                                     who.get("user", "?"))
                         items = [{"changes": dict(radio.state()), "full": True}]
                     for item in items:
-                        msg = spectrum_item(k, item) if k in SPECTRUM else {"kind": EVENT_KIND.get(k, k), **(
-                            item if isinstance(item, dict) else {"item": item})}
+                        msg = spectrum_item(k, item) if k in SPECTRUM else with_urls({"kind": EVENT_KIND.get(k, k), **(
+                            item if isinstance(item, dict) else {"item": item})}, base)
                         sock.send_text(json.dumps(msg, default=_json_default))
         except (OSError, ConnectionError):
             pass
@@ -1564,6 +1676,7 @@ ROUTES = {
     ("GET", "/api/cwskim"): ("view", _Handler.get_cwskim),
     ("GET", "/api/fm/stations"): ("view", _Handler.get_fm_stations),
     ("GET", "/api/dab/stations"): ("view", _Handler.get_dab_stations),
+    ("GET", "/api/dab/slides"): ("view", _Handler.get_dab_slides),
     ("POST", "/api/scan"): ("control", _Handler.post_scan),
     ("GET", "/api/overpower"): ("view", _Handler.get_overpower),
     ("POST", "/api/overpower/capture"): ("control", _Handler.post_overpower_capture),
@@ -1603,6 +1716,9 @@ PREFIX_ROUTES = {
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
     ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),
     ("GET", "/api/decoders/files/"): ("view", _Handler.get_decoder_file),
+    ("GET", "/api/dab/slides/"): ("view", _Handler.get_dab_slide),
+    ("GET", "/api/dab/logos/"): ("view", _Handler.get_dab_logo),
+    ("GET", "/api/dab/schedule/"): ("view", _Handler.get_dab_schedule),
     ("PUT", "/api/local-frequencies/mine/"): ("control", _Handler.put_local_mine),
     ("DELETE", "/api/local-frequencies/mine/"): ("control", _Handler.delete_local_mine),
 }

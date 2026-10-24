@@ -970,6 +970,12 @@ class Decoders:
                 it = dict(it, whyText=_why_text(it["why"]))
             elif it.get("type") == "meta" and isinstance(it.get("fields"), dict):
                 it = dict(it, fields=self._meta(it["fields"]))
+            elif it.get("type") == "frame":
+                # DAB's slides, logos and guide are kept (dabpics.py) and go
+                # on as their details and path; no picture's bytes ever go
+                # on a feed or into the kept results.
+                pics = self._pictures()
+                it = pics.take(it) if pics is not None else {k: v for k, v in it.items() if k != "raw"}
             elif it.get("type") == "image":
                 # A picture's rows are bytes, which no feed client can read:
                 # base64, as the SSTV events' rows always were; and a saved
@@ -1097,11 +1103,12 @@ class Decoders:
         return view
 
     def _meta(self, fields: dict) -> dict:
-        """A session's feed as clients get it: worded (_worded_meta), then
-        whatever the app adds (Radio names DAB's transmitters from their
-        TII codes: Engine.decoder_meta). What an app adds is never worth the
-        feed: if it fails, the feed goes out without it."""
-        out = _worded_meta(fields)
+        """A session's feed as clients get it: worded (_worded_meta, with
+        Radio's DAB pictures: dabpics.py), then whatever the app adds
+        (Radio names DAB's transmitters from their TII codes:
+        Engine.decoder_meta). What an app adds is never worth the feed: if
+        it fails, the feed goes out without it."""
+        out = _worded_meta(fields, self._pictures())
         add = getattr(self.engine, "decoder_meta", None)
         if add is not None:
             try:
@@ -1109,6 +1116,10 @@ class Decoders:
             except Exception:  # noqa: BLE001 - see above
                 log.warning("the app's addition to a decoder feed failed", exc_info=True)
         return out
+
+    def _pictures(self):
+        """Radio's store of DAB's pictures (dabpics.py); None in NB."""
+        return getattr(self.engine, "dab_pictures", None)
 
     def _vfo_view(self, vfo) -> dict:
         sid, dec = vfo
@@ -1196,16 +1207,33 @@ def _takes_receiver(entry: dict) -> bool:
     return float(entry.get("minRateHz") or entry.get("rateHz") or 0.0) >= RECEIVER_RATE
 
 
-def _worded_meta(fields: dict) -> dict:
+def _worded_meta(fields: dict, pictures=None) -> dict:
     """A DAB feed (a session's `meta`) with each `why` worded beside its
-    code: the feed's own `whyText`, and each service's."""
+    code: the feed's own `whyText`, and each service's; each service's
+    programme type named (`ptyName`, RDS's European table, which DAB shares:
+    shack_sdr.wfm.pty_name), and with Radio's store its logo paths and the
+    latest slide's (dabpics.py)."""
     out = dict(fields)
     out["whyText"] = _why_text(out.get("why")) if out.get("why") else ""
     services = out.get("services")
     if isinstance(services, list):
-        out["services"] = [dict(sv, whyText=_why_text(sv.get("why")) if sv.get("why") else "")
+        out["services"] = [dict(sv, whyText=_why_text(sv.get("why")) if sv.get("why") else "",
+                                ptyName=pty_name(sv.get("pty")))
                            if isinstance(sv, dict) else sv for sv in services]
-    return out
+    return pictures.decorate(out) if pictures is not None else out
+
+
+def pty_name(pty) -> str | None:
+    """A DAB service's programme type ({"code", "id", "dynamic"}) by name,
+    in the app's language; None without one, or under a table we do not
+    know (`id` null: shack_sdr names only the European one)."""
+    if not isinstance(pty, dict) or pty.get("id") is None:
+        return None
+    m = sdr.load()
+    try:
+        return m.wfm.pty_name(pty.get("code")) if m is not None else None
+    except AttributeError:
+        return None
 
 
 def starvation(watch: list[tuple[float, int, int]], was: str | None, cpu: float | None = None) -> str | None:

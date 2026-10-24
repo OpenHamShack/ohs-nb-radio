@@ -271,12 +271,17 @@ class TheScan(unittest.TestCase):
         self.assertEqual([a["hz"] for a in one["alts"]], [91_300_000])
         self.assertFalse(got[("C3B4", 93_500_000)]["best"]["stereo"])
         dab = sc.view("dab")
+        # The simulator's ensemble (shack_sdr's showcase) sends genre,
+        # language, country and SlideShow in its FIC, which the scan's
+        # seconds on the block catch.
         self.assertEqual(dab["ensembles"], [{"block": "11D", "freqHz": 222_064_000, "id": "C1CE",
-                                             "label": "Shack Test Mux", "services": [
+                                             "label": "Shack Test Mux", "country": "GB", "services": [
                                                  {"sid": "C221", "label": "Shack MP2 Tone", "kind": "dab",
-                                                  "bitrate": 128},
+                                                  "bitrate": 128, "pty": 10, "ptyName": "Pop music",
+                                                  "language": "en", "hasSlideshow": True},
                                                  {"sid": "C3A7", "label": "Shack DAB+ Data", "kind": "dab+",
-                                                  "bitrate": 64}]}])
+                                                  "bitrate": 64, "pty": 9, "ptyName": "Varied",
+                                                  "language": "en", "hasSlideshow": True}]}])
         # Everything as it was, the receiver's centre too.
         pump(r, 5, until=lambda: r.centre == self.centre)
         self.assertEqual(self.kept(), self.before)

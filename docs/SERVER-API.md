@@ -55,6 +55,9 @@ the desktop apps.
 | `GET api/decoders` and the routes under it | view, control | decoder sessions, below ("Decoders") |
 | `GET api/events?kinds=…,decoder` | view | the decoder sessions' results, below |
 | `GET api/fm/stations`, `GET api/dab/stations` | view | Radio only (404 `not_found` elsewhere): the station lists the weekly band scan made, below ("Station lists") |
+| `GET api/dab/slides`, `GET api/dab/slides/{sid}` | view | Radio only: the latest SlideShow picture of each DAB service heard, and one service's as the picture itself (`image/jpeg` or `image/png`); below, "DAB pictures and service information" |
+| `GET api/dab/logos/{sid}[?variant=square\|wide]` | view | Radio only: a DAB service's logo from its ensemble's SPI, kept across restarts |
+| `GET api/dab/schedule/{sid}[?date=YYYY-MM-DD]` | view | Radio only: a DAB service's programme guide from SPI |
 | `POST api/scan` | control | Radio only: `{"band": "fm" \| "dab" \| "both"}` scans now; `202 {"bands", "progress"}`, or `400 bad_params`, `409 receiver_busy` / `unsupported` with the sentence, `503 not_running` |
 | `GET api/events?kinds=…,stations` | view | Radio only: `{"kind": "stations", "band", "scannedAt", "count", "t"}` each time a scan has made a band's list anew; not in the default set |
 | `GET api/overpower` | view | QO-100 NB only (404 `not_found` elsewhere): `{"state", "beacon", "marginDb", "capture", "lastCapture", "events": [...]}` - signals over the middle beacon and LEILA sirens of the last 30 minutes, open ones first, each as ENGINE-API `overpower` describes. The same list comes as `overpower` items on `api/events?kinds=…,overpower` (not in the default set) on every change and once a second while anything is active. A `leila` entry is the siren pattern measured on six real sirens; why LEILA marks a station is unknown, so show it as "LEILA?". Tapping an entry only tunes: `POST api/set {"vfo": …}` at Control level, never TX. |
@@ -784,7 +787,151 @@ installed later is picked up after `POST api/decoders/codecs/rescan`.
 **The simulator** carries one ensemble on 11D (222.064 MHz), shack_sdr's
 DAB transmitter model's test ensemble, the one in the example above (old
 DAB C221 with programme text, a 1 kHz tone left and 1.5 kHz right; DAB+
-C3A7), heard when the simulator runs at 2.4 MS/s (`sampleRate`).
+C3A7), heard when the simulator runs at 2.4 MS/s (`sampleRate`). Since
+beta.7 it is the model's showcase: the same two services with a slide in
+each one's X-PAD, a programme type (C221 Pop music, C3A7 Varied) and
+language, DL Plus on C221 (title "1 kHz left", artist "Shack MP2 Tone"),
+and an SPI data service whose logos (both variants of both services)
+and four six-hour programmes of today (UTC) arrive a few seconds after
+a service starts playing - everything the next section describes.
+
+## DAB pictures and service information (Radio)
+
+Everything here comes off air: SlideShow's pictures (ETSI TS 101 499,
+in a service's PAD or a packet-mode component), station logos and the
+programme guide from the ensemble's SPI service (TS 102 818, binary TS
+102 371), and what the FIC says of each service (genre, language,
+announcements, where else it is). **Nothing is ever fetched**: no
+RadioDNS, no internet lookup; a URL a broadcaster sends
+(`clickThroughUrl`) is passed on as text, never followed. Code
+`ohscore/dabpics.py`, shack_sdr README "DAB"; tests
+`tests/test_ham_dab_pictures.py`. A TV shows these; it never needs more
+than view level.
+
+**URLs.** Every `…Url` below is a path under the app's own base: the
+request's `X-Forwarded-Prefix` and then the route
+(`"/apps/radio/api/dab/logos/C221"`), never a host or scheme. Each sits
+beside the `…Path` it was made from (`"api/dab/logos/C221"`, relative to
+the app's base), which the feed and the session carry too: use whichever
+suits the client's base URL handling. The same picture keeps its URL; a
+new slide is told by `slide.rev`, so add `?rev=` to defeat a cache.
+
+**The session's `meta`** (the DAB session above: `GET
+api/decoders/sessions/{id}`, and its `meta` items on the `decoder` feed)
+carries, beside what "DAB" lists:
+
+```json
+{"ensemble": {"id": "C1CE", "label": "Shack Test Mux", "shortLabel": "ShackTes",
+              "ecc": "E1", "country": "GB", "ltoMinutes": 60, "utc": "2026-10-24T12:34:00Z"},
+ "services": [{"sid": "C221", "label": "Shack MP2 Tone", "bitrate": 128, "kind": "dab", "...": "...",
+               "pty": {"code": 10, "id": "pop_music", "dynamic": false}, "ptyName": "Pop music",
+               "language": "en", "userApps": ["slideshow"], "hasSlideshow": true,
+               "announcements": ["traffic", "news"], "clusters": [5],
+               "components": [{"scids": 2, "label": "Shack Sport"}],
+               "alsoOn": {"ensembles": [{"eid": "C182", "khz": [220352], "block": "11C"}],
+                          "fm": [{"pi": "C201", "mhz": [97.6, 104.9]}],
+                          "services": ["C222"], "hardLink": true},
+               "now": {"name": "Shack MP2 Tone Afternoon", "start": "2026-10-24T12:00:00Z",
+                       "durationS": 21600, "description": "Test tones from the Shack"},
+               "next": {"name": "Shack MP2 Tone Evening", "start": "2026-10-24T18:00:00Z",
+                        "durationS": 21600, "description": null},
+               "logoPath": "api/dab/logos/C221", "logoUrl": "/apps/radio/api/dab/logos/C221",
+               "logoWidePath": "api/dab/logos/C221?variant=wide",
+               "logoWideUrl": "/apps/radio/api/dab/logos/C221?variant=wide"}],
+ "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right",
+ "dlPlus": {"itemTitle": "1 kHz left", "itemArtist": "Shack MP2 Tone", "itemAlbum": null,
+            "programmeNow": null, "programmeHost": null, "stationNameLong": null,
+            "itemRunning": true, "itemToggle": true,
+            "tags": [{"type": "item_title", "text": "1 kHz left"}, {"type": "item_artist", "text": "Shack MP2 Tone"}]},
+ "slide": {"sid": "C221", "contentType": "image/png", "name": "slide-c221.png", "categoryTitle": "Shack test card",
+           "categoryId": null, "slideId": null, "clickThroughUrl": null, "width": 320, "height": 240, "size": 816,
+           "rev": 7, "path": "api/dab/slides/C221", "url": "/apps/radio/api/dab/slides/C221"},
+ "announcements": [{"cluster": 5, "types": ["traffic"], "subchannel": 4, "new": true, "services": ["C221"]}],
+ "spi": {"sid": "E1C00001", "subchannel": 3, "state": "listening", "logos": 4, "schedules": 2}}
+```
+
+Per service (each field null, empty or false until the FIC has said):
+
+- `pty`: the programme type (genre) as FIG 0/17 sends it: `code` 0-31,
+  `id` the European RDS/DAB table's code (`pop_music`, `news`, `varied`,
+  …; null under another table), `dynamic` (the type follows the items
+  within the programme rather than the programme as a whole). `ptyName`
+  is it worded, in Radio's language ("Pop music"): show it beside the bit
+  rate. FM's `ptyName` is the same table.
+- `language`: ISO 639 (`"en"`, `"gd"`), FIG 0/5.
+- `userApps`: what the service carries besides sound (FIG 0/13):
+  `slideshow`, `spi`, `journaline`, `tpeg`, …, or `ua_<hex>`.
+  `hasSlideshow` says whether to keep room for a slide.
+- `announcements`: the types of announcement that may interrupt it
+  (FIG 0/18: `alarm`, `traffic`, `transport`, `warning`, `news`,
+  `weather`, `event`, `special_event`, `programme_info`, `sport`,
+  `finance`), and `clusters`. Listed only: Radio never switches to an
+  announcement.
+- `components`: the labels of its secondary components (FIG 1/4, 2/4).
+- `alsoOn` (service following, listed only; nothing retunes): other
+  ensembles carrying it (FIG 0/24) with their frequencies and Band III
+  block (FIG 0/21), FM frequencies with the RDS PI it is linked to (FIG
+  0/6, 0/21), linked DAB services, and whether any link is hard (the same
+  programme rather than a related one).
+- `now` and `next`: from the SPI programme guide, null without one; times
+  ISO UTC.
+- `logoUrl` (square, 128x128 preferred) and `logoWideUrl` (320x240
+  preferred): present only once a logo has come. Labels are FIG 2's
+  (UTF-8) when the ensemble sends one.
+
+Beside the services: `ensemble.ecc`, `country` (ISO 3166, from the ECC
+and the ensemble id), `ltoMinutes` (local time offset) and `utc` (the
+ensemble's clock, to the minute); `dlPlus`, the playing label's DL Plus
+(ETSI TS 102 980), null when the station sends none - show `itemTitle`
+by `itemArtist` when both are there, else `dls`; `slide`, the playing
+service's latest slide, null until one; `announcements`, those on air
+now; `spi`, the ensemble's SPI service (`state` `listening`, `resting`,
+`idle` or `too_wide`), null when it has none.
+
+**Pictures as files.**
+
+- `GET api/dab/slides/{sid}`: the service's latest slide, the picture
+  itself, `Content-Type` `image/jpeg` or `image/png` (at most 450 KB).
+  `404 no_slide` before one; `400 bad_params` for an id that is not four
+  or eight hex digits. Slides are kept in memory only (the latest per
+  service, 32 services at most): a slide is what is on now, and a restart
+  forgets them.
+- `GET api/dab/slides`: `{"slides": [<the slide map above>…]}`, newest
+  first.
+- `GET api/dab/logos/{sid}[?variant=square|wide]`: the logo; the other
+  variant when the one asked for never came; `404 no_logo`. Kept on the
+  app's disk (its data folder's `dab` folder, at most 256 files and 16 MB,
+  the oldest going) so lists show logos after a restart. SPI takes a few
+  minutes of listening on a real ensemble to bring them; they come while
+  a service of that ensemble plays, never during the band scan.
+- `GET api/dab/schedule/{sid}[?date=YYYY-MM-DD]`: `{"sid", "date",
+  "programmes": [{"name", "start", "durationS", "description"}…]}`, oldest
+  first; with `date`, those starting on that UTC day. Kept on disk; a
+  programme that ended more than a day ago is dropped. `404 no_schedule`.
+
+**On the feed** (`api/events?kinds=…,decoder`), besides `meta` items, a
+DAB session sends `frame` items as pictures and guides arrive, never
+with their bytes:
+
+```json
+{"kind": "decoder", "session": "ds_3f2a", "rev": 88, "t": 1792843200.4, "type": "frame", "frame": "slide",
+ "fields": {"sid": "C221", "contentType": "image/png", "name": "slide-c221.png", "...": "...",
+            "path": "api/dab/slides/C221", "url": "/apps/radio/api/dab/slides/C221"}}
+{"kind": "decoder", "...": "...", "frame": "logo",
+ "fields": {"sid": "C221", "variant": "square", "contentType": "image/png", "width": 128, "height": 128,
+            "path": "api/dab/logos/C221", "url": "/apps/radio/api/dab/logos/C221"}}
+{"kind": "decoder", "...": "...", "frame": "schedule",
+ "fields": {"sid": "C221", "programmes": 4, "path": "api/dab/schedule/C221", "url": "/apps/radio/api/dab/schedule/C221"}}
+```
+
+A slide item means: fetch the new picture now (or show the next one in
+turn). A TV that only polls can watch `meta.slide.rev` instead.
+
+**What is not done:** a slide's TriggerTime (a slide is shown when it is
+whole) and categories as a browsable set; SPI's genres, links and
+"advanced" (compressed) files; Journaline and the other data
+applications (listed in `userApps`, not decoded); announcement switching
+and service following (listed only).
 
 ## Broadcast gain (Radio)
 
@@ -993,10 +1140,22 @@ tune: `POST api/set {"changes": {"mode": "wfm", "vfo": best.hz}}`.
 `statusText`, and
 
 ```json
-{"ensembles": [{"block": "11D", "freqHz": 222064000, "id": "C1CE", "label": "Shack Test Mux",
-                "services": [{"sid": "C221", "label": "Shack MP2 Tone", "kind": "dab", "bitrate": 128},
-                             {"sid": "C3A7", "label": "Shack DAB+ Data", "kind": "dab+", "bitrate": 64}]}]}
+{"ensembles": [{"block": "11D", "freqHz": 222064000, "id": "C1CE", "label": "Shack Test Mux", "country": "GB",
+                "services": [{"sid": "C221", "label": "Shack MP2 Tone", "kind": "dab", "bitrate": 128,
+                              "pty": 10, "ptyName": "Pop music", "language": "en", "hasSlideshow": true,
+                              "logoPath": "api/dab/logos/C221", "logoUrl": "/apps/radio/api/dab/logos/C221",
+                              "logoWidePath": "api/dab/logos/C221?variant=wide",
+                              "logoWideUrl": "/apps/radio/api/dab/logos/C221?variant=wide"},
+                             {"sid": "C3A7", "label": "Shack DAB+ Data", "kind": "dab+", "bitrate": 64,
+                              "pty": 9, "ptyName": "Varied", "language": "en", "hasSlideshow": true}]}]}
 ```
+
+`pty` (the code, 0-31) and `ptyName` are the genre to show beside the bit
+rate, `language` ISO 639, `country` ISO 3166; null when the scan's second
+or two on the block did not catch them. `logoUrl` and `logoWideUrl` (and
+their `…Path`) appear once a logo has come from listening to that
+ensemble ("DAB pictures and service information" above); the scan itself
+brings none.
 
 To play one: `POST api/decoders/sessions {"decoder": "dab", "freqHz":
 freqHz, "params": {"block": block, "service": sid}}` ("DAB" above).
