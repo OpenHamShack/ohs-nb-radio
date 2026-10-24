@@ -1147,6 +1147,44 @@ class Radio(Engine):
             out["broadcastGain"] = s["broadcastGain"]
         return out
 
+    def broadcast_station(self) -> dict | None:
+        """The broadcast station being heard (Engine.broadcast_station), as
+        a recording's metadata keeps it (`broadcast` in an audio
+        recording's sidecar, `openhamshack:broadcast` in an IQ one's) and
+        names it (host.recording_name):
+
+        - **DAB**, while a DAB session holds the receiver: `{"kind": "dab",
+          "mode": "DAB" | "DAB+", "label", "shortLabel", "sid", "block",
+          "freqHz" (the block's centre), "ensemble", "eid", "ptyName",
+          "dls", "title", "artist"}` (title and artist from DL Plus), each
+          null until the ensemble has said it.
+        - **Wide FM**: `{"kind": "wfm", "mode": "WFM", "label" (the PS
+          name), "ps", "pi", "rt", "ptyName", "freqHz"}`, null fields until
+          the station's RDS has been heard.
+
+        Read from the state and the session's feed, never from the
+        decoder's thread: cheap enough for twice a second (the audio
+        recording's note loop)."""
+        h = self.held
+        if h is not None and h.get("by") == "dab" and h.get("yields") is None:
+            view = self.decoders.held_view() or {}
+            meta = view.get("meta") or {}
+            sid = meta.get("playing") or (view.get("params") or {}).get("service") or None
+            sv = next((x for x in meta.get("services") or [] if isinstance(x, dict) and x.get("sid") == sid), {})
+            ens = meta.get("ensemble") or {}
+            dlp = meta.get("dlPlus") or {}
+            return {"kind": "dab", "mode": "DAB+" if sv.get("kind") == "dab+" else "DAB",
+                    "label": sv.get("label"), "shortLabel": sv.get("shortLabel"), "sid": sid,
+                    "block": h["block"], "freqHz": h["centre"], "ensemble": ens.get("label"), "eid": ens.get("id"),
+                    "ptyName": sv.get("ptyName"), "dls": meta.get("dls") if sid else None,
+                    "title": dlp.get("itemTitle"), "artist": dlp.get("itemArtist")}
+        s = self.st
+        if s.get("mode") == "wfm":
+            rds = s.get("rds") or {}
+            return {"kind": "wfm", "mode": "WFM", "label": rds.get("ps"), "ps": rds.get("ps"), "pi": rds.get("pi"),
+                    "rt": rds.get("rt"), "ptyName": rds.get("ptyName"), "freqHz": s.get("rxDial")}
+        return None
+
     # ------------------------------------------------------------------ receive
     def _configure_rx(self):
         # The HL2's LNA is its only receive gain, so it gets what NB's

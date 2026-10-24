@@ -24,8 +24,11 @@ import contextlib
 import ctypes.util
 import ipaddress
 import os
+import re
 import shutil
 import sys
+import time
+import unicodedata
 from pathlib import Path
 
 WINDOWS = sys.platform == "win32"
@@ -475,6 +478,68 @@ def safe_filename(name: str) -> str:
     if out.split(".", 1)[0].upper() in _RESERVED_NAMES:
         out = "_" + out
     return out or "_"
+
+
+LABEL_MAX = 40           # a station's name in a file name: DAB's long labels are 16, a few go longer
+
+
+def filename_label(text, limit: int = LABEL_MAX) -> str:
+    """A station's name as part of a file name: "BBC Radio 4" becomes
+    "BBC-Radio-4". Folded to plain ASCII ("Kåre's Hits" is "Kares-Hits")
+    because a recording is copied to phones, SD cards and other people's
+    computers, where an accented name is the first thing to arrive
+    mangled; "&" is "and"; every other run of anything but a letter or a
+    digit is one "-". Cut to `limit`; "" when nothing is left."""
+    s = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()
+    s = s.replace("&", " and ").replace("'", "")
+    s = re.sub(r"[^A-Za-z0-9]+", "-", s).strip("-")
+    return s[:limit].rstrip("-")
+
+
+def mode_name(mode) -> str:
+    """A mode as part of a file name: "USB", "DAB", and DAB+ as "DABplus".
+    A "+" is a space in a URL query, and a recording's id travels in one
+    (api/recordings/file?id=): a client that forgot to encode it would ask
+    for a recording that is not there."""
+    return str(mode or "").upper().replace("+", "plus")
+
+
+def recording_name(app: str, t: float, freq_hz, mode, station: dict | None = None, *, iq: bool = False) -> str:
+    """A recording's base name: the app, its UTC start, then what it is,
+    so a folder of them sorts by time and says what each is at a glance.
+
+    - A broadcast station (`station`, Engine.broadcast_station) is named
+      by its name: `openhamshack-radio-20261024-041948Z-BBC-Radio-4-DAB`,
+      the RDS name for wide FM (`...-SIM-ONE-WFM`).
+    - An IQ recording of a DAB block is the whole block, every station on
+      it, so it is named by the block and its frequency, never one
+      station's name: `...-11B-218.640MHz-DAB`; wide FM's IQ carries the
+      frequency before the station's name (`...-88.600MHz-SIM-ONE-WFM`).
+    - Anything else is the dial and the mode, as it always was: audio to
+      the hertz (`...-14.074000MHz-USB`), IQ to the kilohertz.
+
+    `app` is the app's own name (openhamshack-radio, openhamshack-nb) for
+    both kinds. Until 24/10/2026 audio took the store module's id with its
+    dashes squeezed out (shackradio-...) and IQ the app's name, so one
+    folder held both spellings."""
+    stamp = time.strftime("%Y%m%d-%H%M%SZ", time.gmtime(t))
+    mhz = f"{float(freq_hz) / 1e6:.{3 if iq else 6}f}MHz" if freq_hz else ""
+    bits = [app, stamp]
+    label = filename_label((station or {}).get("label"))
+    if station and station.get("kind") == "dab":
+        block = filename_label(station.get("block"))
+        if iq:
+            bits += [block, mhz]
+        else:
+            bits.append(label or block or mhz)
+    elif station and label:
+        if iq:
+            bits.append(mhz)
+        bits.append(label)
+    else:
+        bits.append(mhz)
+    bits.append(mode_name(mode))
+    return safe_filename("-".join(b for b in bits if b))
 
 
 def recordings_dir(data_dir: Path) -> Path:

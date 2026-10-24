@@ -13,8 +13,8 @@ sound card, api/audio/rx and the recordings get, and what stays at 12 kHz.
 - **The store form:** api/audio/rx announces 48 kHz, mono unless asked
   `?channels=2` (installed Remote builds play one channel only); in a mono
   mode two channels are the same audio on both sides; status and the
-  microphone's format; and recordings at 48 kHz with the channel count
-  they were made with.
+  microphone's format; and recordings at 48 kHz, wide FM's always stereo
+  (a broadcast station's are), with the channel count they were made with.
 """
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import http.client
@@ -402,12 +402,15 @@ class StoreForm(unittest.TestCase):
         self.assertEqual((a["encoding"], a["rate"], a["channels"], a["stereo"]), ("s16le", 48_000, 1, False))
         self.assertEqual(a["tx"], {"encoding": "s16le", "rate": 12_000, "channels": 1})
 
-    def test_recordings_are_48_khz_with_the_channel_count_they_began_with(self):
+    def test_recordings_of_wide_fm_are_48_khz_stereo_even_before_the_pilot(self):
+        # A broadcast station is always recorded in stereo (recording.py
+        # says why): this one has no pilot yet, and the file is still two
+        # channels, so a pilot heard a moment later is not lost to it.
         self.start()
         e = self.record()
-        self.assertEqual((e["sampleRate"], e["channels"]), (48_000, 1))
+        self.assertEqual((e["sampleRate"], e["channels"]), (48_000, 2))
         self.assertEqual(flac_rate_and_channels(Path(self.radio.recordings_dir(), e["parts"]["data"]["name"])),
-                         (48_000, 1))
+                         (48_000, 2))
         stereo_on_air(self.dev)
         self.assertTrue(self.wait(lambda: self.radio.audio_channels() == 2))
         e = self.record()

@@ -3474,8 +3474,10 @@ class Engine:
         folder = Path(folder) if folder is not None else self.recordings_dir()
         try:
             folder.mkdir(parents=True, exist_ok=True)
-            base = sigmf.new_base(folder, self.CONFIG.app.name, time.time(), s["rxDial"], s["mode"])
-            rec = sigmf.Recorder(base, self.geo.fs, self._rec_meta(s), limit_s or None).start()
+            station = self.broadcast_station()
+            mode = station["mode"] if station else s["mode"]
+            base = sigmf.new_base(folder, self.CONFIG.app.name, time.time(), s["rxDial"], mode, station)
+            rec = sigmf.Recorder(base, self.geo.fs, self._rec_meta(s, station), limit_s or None).start()
         except OSError as e:
             raise ValueError(_("Could not record to {folder}: {error}").format(folder=folder, error=e)) from e
         with self.lock:
@@ -3593,9 +3595,19 @@ class Engine:
         `openhamshack:` prefix (NB: the LNB, rxCorr and beacon lock)."""
         return {}
 
-    def _rec_meta(self, s: dict) -> dict:
+    def broadcast_station(self) -> dict | None:
+        """The broadcast station being heard now, for a recording's
+        metadata and name (host.recording_name): Radio's DAB station while
+        a DAB session holds the receiver, or the wide FM station and its
+        RDS (ohsradio/radio.py, which says what is in it). None while
+        there is none, and always in an app with no broadcast reception
+        (QO-100 NB)."""
+        return None
+
+    def _rec_meta(self, s: dict, station: dict | None = None) -> dict:
         """A recording's global metadata (ohscore/sigmf.py adds the format's
-        own fields): enough to analyse it without asking whoever sent it."""
+        own fields): enough to analyse it without asking whoever sent it.
+        `station` is broadcast_station() as the recording started."""
         dev = self.dev
         try:
             dst = dict(dev.status()) if dev is not None else {}
@@ -3613,13 +3625,23 @@ class Engine:
         hw = ", ".join(p for p in (f"{kind} {model}".strip(), f"firmware {fw}" if fw else "",
                                    f"FIR {dst['fir']}" if dst.get("fir") else "") if p)
         os_name = diag._os_name()
+        receive = {k: s.get(k) for k in ("vfo", "rxDial", "mode", "filterLo", "filterHi", "rit", "ritOn", "agc", "nb",
+                                         "nr", "cwPitch", "freedvMode")}
+        what = f"{s['rxDial'] / 1e6:.6f} MHz {str(s['mode']).upper()}"
+        if station:
+            # While DAB holds the receiver the mode in the state is the
+            # operator's from before (put back when DAB stops), and nothing
+            # demodulates it: an 11B capture was listed as "AM". The mode
+            # recorded is what was being received; playing the file back
+            # seeds only a mode the radio has (_play_apply refuses "dab"),
+            # so the operator's own mode stays.
+            receive["mode"] = station["mode"].lower()
+            what = f"{s['rxDial'] / 1e6:.6f} MHz {station['mode']}" + (f", {station['label']}" if station.get("label") else "")
         g = {"core:recorder": app, "core:hw": hw,
-             "core:description": (f"Receive IQ recorded by {app} on {os_name}: {s['rxDial'] / 1e6:.6f} MHz "
-                                  f"{str(s['mode']).upper()}"),
+             "core:description": f"Receive IQ recorded by {app} on {os_name}: {what}",
              "openhamshack:app": self.APP_NAME or self.CONFIG.app.name, "openhamshack:version": version,
              "openhamshack:os": os_name, "openhamshack:start_utc": sigmf.iso_utc(time.time()),
-             "openhamshack:receive": {k: s.get(k) for k in ("vfo", "rxDial", "mode", "filterLo", "filterHi", "rit",
-                                                      "ritOn", "agc", "nb", "nr", "cwPitch", "freedvMode")},
+             "openhamshack:receive": receive,
              "openhamshack:gain": {"mode": s.get("rxGainMode"), "db": s.get("rxGain")},
              "openhamshack:inverted": bool(self.rx_invert),
              "openhamshack:device": dst, "openhamshack:device_context": ctx,
@@ -3627,6 +3649,8 @@ class Engine:
         if s.get("callsign"):
             g["core:author"] = s["callsign"]
             g["openhamshack:callsign"] = s["callsign"]
+        if station:
+            g["openhamshack:broadcast"] = dict(station)
         for k, v in self._rec_extra(s).items():
             g[f"openhamshack:{k}"] = v
         return g

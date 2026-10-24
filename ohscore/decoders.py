@@ -929,6 +929,13 @@ class Decoders:
         n = int(round(block_s * rate))
         return np.zeros((n, 2) if f.channels == 2 else n, np.float32)
 
+    def held_view(self) -> dict | None:
+        """The session holding the receiver as sessions() shows it (without
+        its kept results), or None: what a recording reads its station
+        from (Radio's broadcast_station), twice a second while one runs."""
+        f = self._held()
+        return self._view(f) if f is not None else None
+
     def held_channels(self) -> int:
         """The held session's sound's channels (1 until it has made any)."""
         f = self._held()

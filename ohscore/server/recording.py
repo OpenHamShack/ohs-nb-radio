@@ -13,6 +13,21 @@ Flex share (its README is the contract). What is NB and Radio's own:
   DAB), mono otherwise, and that channel count holds for the whole file: a
   FLAC stream's channel count is in its header, so a later mode change is
   converted to it (StreamAudio.play), never a second format in one file.
+- **A broadcast station is recorded as itself** (24/10/2026, for the TV's
+  DAB Radio): while Radio plays a DAB station or a wide FM one
+  (Engine.broadcast_station) the recording's `mode` is "DAB", "DAB+" or
+  "WFM", its `freqHz` the block's centre or the dial, the sidecar's
+  `broadcast` says which station (name, SId or PI, ensemble, programme
+  type, the text and DL Plus as it started), `changes` carries what the
+  station said as it changed (a small "now playing" history), and the
+  file is named after it (host.recording_name). Always stereo: a
+  station's stereo is known only once its pilot or its first audio frame
+  is heard, and a file's channel count is fixed at its start, so a
+  recording begun in that first moment was mono for good. A mono station
+  in a stereo FLAC costs almost nothing (FLAC codes the second channel as
+  the difference). Before this a DAB recording was named after the dial
+  and the operator's mode from before DAB took the receiver
+  ("...-218.640000MHz-FM").
 - **IQ** is the engine's own SigMF recorder (ohscore/sigmf.py, which the
   desktop app has used since 05/10): the device's stream before the
   engine touches it, ci16, playable again through the "file" device and
@@ -29,12 +44,13 @@ is /data in the store image), which survives updates.
 """
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import threading
 from pathlib import Path
 
-from .. import shacklibs, sigmf
+from .. import host, shacklibs, sigmf
 from ..i18n.text import _
 
 log = logging.getLogger("ohscore.server")
@@ -83,6 +99,43 @@ class _IqHandle:
                 "mode": str(r.meta.get("openhamshack:receive", {}).get("mode") or "").upper() or None}
 
 
+@functools.cache
+def _named(rec):
+    """shack_rec's Recordings (`rec` is the loaded shack_rec), naming an
+    audio recording as this app names its IQ ones (host.recording_name),
+    which shack_rec's own new_id cannot: it takes only the dial and the
+    mode, and squeezes the app's name to letters and digits. A subclass
+    made once per loaded shack_rec, because the library is loaded at run
+    time (shacklibs.rec)."""
+
+    class NamedRecordings(rec.Recordings):
+        def __init__(self, *args, namer, **kw):
+            super().__init__(*args, **kw)
+            self.namer = namer                    # (t, meta) -> base name
+            self._starting = threading.local()    # the meta of the start_audio on this thread
+
+        def start_audio(self, rate: int, channels: int, meta: dict):
+            self._starting.meta = meta
+            try:
+                return super().start_audio(rate, channels, meta)
+            finally:
+                self._starting.meta = None
+
+        def new_id(self, freq_hz=None, mode=None) -> str:
+            meta = getattr(self._starting, "meta", None)
+            if meta is None:
+                return super().new_id(freq_hz, mode)
+            name = self.namer(self.wall(), meta)
+            folder = self.store.folder
+            for i in range(1, 1000):
+                rid = name if i == 1 else f"{name}-{i}"
+                if not any((folder / (rid + suffix)).exists() for suffix in rec.store.LAYOUT):
+                    return rid
+            raise rec.Refused(409, "name_taken", _("Too many recordings started in the same second."))
+
+    return NamedRecordings
+
+
 class ServerRecordings:
     """The store form's recordings: shack_rec's Recordings, the audio tap
     and the engine's IQ recorder."""
@@ -93,8 +146,13 @@ class ServerRecordings:
         if limits is None:
             limits = rec.Limits.from_env(os.environ, limit_bytes=LIMIT_GB * rec.GB)
         kw = {"disk_usage": disk_usage} if disk_usage is not None else {}
-        self.rec = rec.Recordings(folder or radio.recordings_dir(), limits, app=info.app_id,
-                                  kinds=("audio", "iq"), **kw)
+        # Named with the app's own name (openhamshack-radio), as its IQ
+        # recordings and the desktop app's are; the module id (shack-radio)
+        # stays the sidecar's `app`, which is shack_rec's: which module made it.
+        app_id = getattr(getattr(radio, "CONFIG", None), "app", None)
+        self.prefix = app_id.name if app_id is not None else info.app_id
+        self.rec = _named(rec)(folder or radio.recordings_dir(), limits, app=info.app_id, kinds=("audio", "iq"),
+                               namer=self._name, **kw)
         self.Refused = rec.Refused
         self._noting: threading.Thread | None = None
 
@@ -111,16 +169,38 @@ class ServerRecordings:
             self._start_audio()
         return self.rec.status()
 
-    def _facts(self) -> dict:
+    def _name(self, t: float, meta: dict) -> str:
+        return host.recording_name(self.prefix, t, meta.get("freqHz"), meta.get("mode"), meta.get("broadcast"))
+
+    # What of a broadcast station's goes into `changes` as it changes: its
+    # name and the text it sends, so the sidecar says what was on when.
+    NOTED = ("label", "sid", "pi", "ensemble", "dls", "rt", "title", "artist")
+
+    def _station(self) -> dict | None:
+        fn = getattr(self.radio, "broadcast_station", None)
+        return fn() if fn is not None else None
+
+    def _facts(self, station: dict | None = None) -> dict:
         s = self.radio.state()
+        if station:
+            out = {"freqHz": round(float(station.get("freqHz") or s.get("rxDial") or 0)) or None,
+                   "mode": station["mode"]}
+            out.update((k, station[k]) for k in self.NOTED if station.get(k) is not None)
+            return out
         return {"freqHz": round(float(s.get("rxDial") or 0)) or None, "mode": str(s.get("mode") or "").upper() or None}
 
     def _start_audio(self) -> None:
         s = self.radio.state()
-        meta = {**self._facts(), "appName": self.info.name, "version": self.info.version,
-                "station": s.get("callsign") or None, "radio": s.get("device"),
+        station = self._station()
+        facts = self._facts(station)
+        meta = {"freqHz": facts["freqHz"], "mode": facts["mode"], "appName": self.info.name,
+                "version": self.info.version, "station": s.get("callsign") or None, "radio": s.get("device"),
                 "processing": {"nr": s.get("nr"), "nb": s.get("nb"), "agc": s.get("agc")}}
-        fmt = self.audio.rx_format(self.radio.audio_channels())
+        if station:
+            # Nested: `station` is already the operator's callsign, and the
+            # sidecar's own `kind` is shack_rec's ("audio").
+            meta["broadcast"] = dict(station)
+        fmt = self.audio.rx_format(2 if station else self.radio.audio_channels())
         r = self.rec.start_audio(fmt["rate"], fmt["channels"], meta)
         r.on_close(self.audio.tap(r.push, fmt["channels"]))
         t = threading.Thread(target=self._note_loop, args=(r,), name="server-rec-note", daemon=True)
@@ -135,7 +215,7 @@ class ServerRecordings:
             if not self.radio.state().get("running"):
                 r.close(_("the radio stopped"))
                 break
-            r.note(**self._facts())
+            r.note(**self._facts(self._station()))
             r.done.wait(NOTE_EVERY_S)
 
     def _start_iq(self) -> None:

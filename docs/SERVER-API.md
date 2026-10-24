@@ -485,14 +485,68 @@ same on Icom and Flex; what is this app's own:
   rate (`sampleRate`: 48000 for Radio, 12000 for QO-100 NB): lossless
   (a recording can be decoded again later), played by every browser,
   ExoPlayer and AVPlayer; NB's about 30-45 MB an hour, Radio's about four
-  times that. `channels` is 2 when the mode was making stereo as the
-  recording started (wide FM with its pilot, or DAB), else 1, and
+  times that. `channels` is 2 for a broadcast station (below) or when
+  the mode was making stereo as the recording started, else 1, and
   holds for the whole file: a later mode change is converted to it (mono
   on both sides, or stereo averaged). The sidecar `<id>.json`
   has `station` (the callsign), `freqHz` (the receive dial), `mode`,
   `radio` (the device), `processing` (`nr`, `nb`, `agc`), and `changes`
   (frequency and mode as they changed, seconds in). The radio stopping
   ends it (`stopped`: "the radio stopped").
+- **A broadcast station** (Radio, from 24/10/2026): while a DAB session
+  holds the receiver (`rxOwner`), or the mode is `wfm`, a recording is
+  the station's:
+  - **Audio** is always **stereo**, 48 kHz FLAC, whatever the station's
+    stereo flag says as it starts (a station's stereo is known only once
+    its pilot or first audio frame is heard, and the count is fixed for
+    the file; a mono station costs almost nothing more in FLAC). `mode`
+    is `"DAB"`, `"DAB+"` or `"WFM"`; `freqHz` the block's centre (DAB)
+    or the dial (wide FM). The sidecar adds `broadcast`, the station as
+    the recording started:
+
+    ```json
+    {"kind": "dab", "mode": "DAB", "label": "Shack MP2 Tone", "shortLabel": "ShackMP2",
+     "sid": "C221", "block": "11D", "freqHz": 222064000.0,
+     "ensemble": "Shack Test Mux", "eid": "C1CE", "ptyName": "Pop music",
+     "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right",
+     "title": "1 kHz left", "artist": "Shack MP2 Tone"}
+    ```
+
+    (`title`/`artist` are DL Plus's item title and artist), or for wide
+    FM `{"kind": "wfm", "mode": "WFM", "label", "ps", "pi", "rt",
+    "ptyName", "freqHz"}` (`label` is the PS name). A field the station
+    has not sent yet is null. `changes` also carries `label`, `sid`/`pi`,
+    `ensemble`, `dls`/`rt`, `title` and `artist` as each changed, seconds
+    in: what was playing when, a small "now playing" history.
+  - **IQ** is the whole block (every station on it), so its
+    `.sigmf-meta` says `openhamshack:receive.mode` `"dab"` (or `"dab+"`,
+    `"wfm"`) instead of the operator's mode from before DAB took the
+    receiver, and carries the same object as `openhamshack:broadcast`.
+    Played back, it tunes to the block and leaves the operator's mode.
+- **Names** (the id, and the files' base name) are the app's own name,
+  the UTC start, then what it is (host.recording_name):
+
+  | Recording | Id |
+  |---|---|
+  | DAB audio | `openhamshack-radio-20261024-041948Z-BBC-Radio-4-DAB` (`-DABplus` for DAB+; `-11B-DAB` when no station plays) |
+  | DAB IQ | `openhamshack-radio-20261024-041948Z-11B-218.640MHz-DAB` |
+  | wide FM audio | `openhamshack-radio-20261024-041948Z-SIM-ONE-WFM` (`-88.600000MHz-WFM` before RDS is heard) |
+  | wide FM IQ | `openhamshack-radio-20261024-041948Z-88.600MHz-SIM-ONE-WFM` |
+  | anything else | `openhamshack-radio-20261024-041948Z-14.074000MHz-USB` (audio), `...-14.074MHz-USB` (IQ) |
+
+  The station's name is folded to ASCII, `&` is "and", any other run of
+  characters that are not letters or digits one `-`, cut to 40. DAB+ is
+  `DABplus` because a `+` in a query is a space. Clients must still
+  URL-encode an id. Before 24/10/2026 audio ids began with the module's
+  id squeezed (`shackradio-`, `shackqo100nb-`) and IQ ones with the app's
+  name; both kinds now begin `openhamshack-radio-` (`openhamshack-nb-`).
+- **Playing one in a client:** `GET api/recordings/file?id=<id>&part=data`
+  is the FLAC file itself (`Content-Type: audio/flac`, `Content-Disposition:
+  inline`, `Accept-Ranges: bytes`): `Range: bytes=a-b` answers `206` with
+  `Content-Range`, a range past the end `416`, so ExoPlayer, AVPlayer and
+  an `<audio>` element seek in it. It is not WAV: FLAC, 16-bit, at the
+  rate and channels in the listing (`sampleRate`, `channels`): Radio's
+  48000 and, for a broadcast station, 2.
 - **IQ** is the engine's SigMF recording (ENGINE-API "IQ recording"):
   `.sigmf-data` (ci16_le at the device rate, `sampleRate`) and
   `.sigmf-meta`, exactly what the desktop app writes, so it plays back
@@ -513,7 +567,7 @@ Status, from `api/recordings/status` (and inside `api/recordings`):
 
 ```json
 {"recording": true, "kinds": ["audio", "iq"],
- "active": [{"id": "shackqo100nb-20261012-100000Z-10489.750000MHz-USB", "kind": "audio",
+ "active": [{"id": "openhamshack-nb-20261012-100000Z-10489.750000MHz-USB", "kind": "audio",
              "format": "flac", "startUtc": "2026-10-12T10:00:00Z", "seconds": 12.4,
              "bytes": 98304, "maxSeconds": 14400, "maxBytes": 10000000000,
              "droppedSeconds": 0.0, "freqHz": 10489750000, "mode": "USB"}],
@@ -527,7 +581,7 @@ Status, from `api/recordings/status` (and inside `api/recordings`):
 A recording in `api/recordings`'s `recordings` list:
 
 ```json
-{"id": "shackqo100nb-20261012-100000Z-10489.750000MHz-USB", "kind": "audio", "format": "flac",
+{"id": "openhamshack-nb-20261012-100000Z-10489.750000MHz-USB", "kind": "audio", "format": "flac",
  "startUtc": "2026-10-12T10:00:00Z", "endUtc": "2026-10-12T10:05:00Z", "seconds": 300.0,
  "sampleRate": 12000, "channels": 1, "freqHz": 10489750000, "mode": "USB",
  "station": "GM4BRI", "radio": "pluto", "app": "shack-qo100nb", "complete": true,
@@ -700,8 +754,9 @@ stop the session and start one there.
 demodulator's: `api/audio/rx` at 48 kHz, the station's own two channels
 with `?channels=2` and L+R averaged without; `audio.stereo` in status is
 true while the station is stereo. An audio recording made meanwhile is
-the station: 48 kHz, two channels when it began in stereo, `freqHz` the
-block's centre. While the station makes no sound (no sync yet, a DAB+
+the station (Recordings, "A broadcast station"): 48 kHz stereo FLAC,
+`mode` "DAB" or "DAB+", `freqHz` the block's centre, named after the
+station. While the station makes no sound (no sync yet, a DAB+
 station without faad2) the stream carries silence after half a second,
 never a gap.
 

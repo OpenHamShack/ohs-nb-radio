@@ -118,12 +118,12 @@ def paths(base: Path) -> tuple[Path, Path]:
     return base.with_name(base.name + DATA_SUFFIX), base.with_name(base.name + META_SUFFIX)
 
 
-def new_base(folder: Path, app: str, t: float, dial_hz: float, mode: str) -> Path:
-    """A fresh base path in `folder`: app, UTC start, dial and mode, so a
-    folder of recordings sorts by time and says what each is at a glance.
-    Never one that exists (two in the same second get -2, -3...)."""
-    stamp = time.strftime("%Y%m%d-%H%M%SZ", time.gmtime(t))
-    name = host.safe_filename(f"{app}-{stamp}-{dial_hz / 1e6:.3f}MHz-{mode.upper()}")
+def new_base(folder: Path, app: str, t: float, dial_hz: float, mode: str, station: dict | None = None) -> Path:
+    """A fresh base path in `folder`: app, UTC start, dial and mode (or the
+    broadcast `station`: host.recording_name), so a folder of recordings
+    sorts by time and says what each is at a glance. Never one that exists
+    (two in the same second get -2, -3...)."""
+    name = host.recording_name(app, t, dial_hz, mode, station, iq=True)
     folder = Path(folder)
     for i in range(1, 1000):
         base = folder / (name if i == 1 else f"{name}-{i}")

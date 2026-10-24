@@ -155,7 +155,9 @@ to this block's audio at `OUT_RATE`, mono or `(n, 2)`; the engine plays
 that and does not upsample (noise reduction and `_rx_heard` apply only to
 the 12 kHz path). `audio_channels()` says whether the receive audio is
 stereo now (2) or mono (1): a recording made on the store form takes its
-channel count from it when it starts.
+channel count from it when it starts, except a broadcast station's
+(`broadcast_station()`: Radio's DAB station or wide FM), which is always
+recorded in stereo.
 
 The desktop sound card is opened in stereo where the device allows (mono
 otherwise): mono audio is played on both sides, the transmit monitor too,
