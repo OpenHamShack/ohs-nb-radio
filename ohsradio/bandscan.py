@@ -205,8 +205,10 @@ def dab_ensemble(block: str, centre: float, meta: dict) -> dict:
                          "bitrate": int(s["bitrate"]) if s.get("bitrate") is not None else None,
                          "pty": int(pty["code"]) if pty else None, "ptyName": pty_name(pty),
                          "language": s.get("language"), "hasSlideshow": bool(s.get("hasSlideshow"))})
+    # The ECC too, which a RadioDNS look-up names a service by
+    # (ohsradio/radiodns.py); a list made before it has the country only.
     return {"block": block, "freqHz": int(centre), "id": ens.get("id"), "label": ens.get("label"),
-            "country": ens.get("country"), "services": services}
+            "country": ens.get("country"), "ecc": ens.get("ecc"), "services": services}
 
 
 def _iso(t: float | None) -> str | None:
@@ -549,6 +551,8 @@ class BandScanner:
                 r._status(stationsAt=self.stations_at())
                 r._publish("stations", {"t": time.time(), "band": b, "scannedAt": _iso(self.records[b]["scannedAt"]),
                                         "count": len(found)})
+                if b == "dab" and getattr(r, "radiodns", None) is not None:
+                    r.radiodns.nudge()          # new services' logos from RadioDNS, in the background
         finally:
             with self.lock:
                 r.release_receiver(SID)

@@ -276,7 +276,7 @@ class TheScan(unittest.TestCase):
         # language, country and SlideShow in its FIC, which the scan's
         # seconds on the block catch.
         self.assertEqual(dab["ensembles"], [{"block": "11D", "freqHz": 222_064_000, "id": "C1CE",
-                                             "label": "Shack Test Mux", "country": "GB", "services": [
+                                             "label": "Shack Test Mux", "country": "GB", "ecc": "E1", "services": [
                                                  {"sid": "C221", "label": "Shack MP2 Tone", "kind": "dab",
                                                   "bitrate": 128, "pty": 10, "ptyName": "Pop music",
                                                   "language": "en", "hasSlideshow": True},
