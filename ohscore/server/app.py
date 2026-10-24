@@ -42,6 +42,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.parse
+from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import numpy as np
@@ -54,6 +55,7 @@ from . import shack, ws
 from .audio import CHANNELS, MIC_FORMAT
 from .autotx import AutoTx, Refused
 from .recording import server_recordings
+from .timeshift import Gone as TimeshiftGone, Timeshift
 
 log = logging.getLogger("ohscore.server")
 
@@ -204,6 +206,13 @@ class Server:
         # Without shack_rec (a desktop build run with --server) it is
         # NoRecordings, which refuses rather than stopping the server.
         self.recordings = server_recordings(radio, audio, info, **(recordings or {}))
+        # The broadcast station's last minutes (timeshift.py): to listen
+        # behind live (api/audio/rx?behind=) and record from the past. Its
+        # writer runs with the HTTP server (serve); NB never has a station.
+        limits = getattr(getattr(self.recordings, "rec", None), "limits", None)
+        self.timeshift = Timeshift(radio, audio, Path(radio.data_dir) / "timeshift",
+                                   **({"floor_bytes": limits.floor_bytes} if limits is not None else {}))
+        self.recordings.timeshift = self.timeshift
         # The network for a local-frequencies refresh (Radio): None is the
         # real one; a test gives a reader of fixture files.
         self.localfreq_fetch = None
@@ -331,7 +340,8 @@ class Server:
         self.httpd = ThreadingHTTPServer((host, port), Handler)
         self.httpd.daemon_threads = True
         for name, fn in (("lease", self._lease_loop), ("broker", self._broker_loop),
-                         ("digi", self._digi_loop), ("http", self.httpd.serve_forever)):
+                         ("digi", self._digi_loop), ("timeshift", lambda: self.timeshift.run(self.stop_ev)),
+                         ("http", self.httpd.serve_forever)):
             t = threading.Thread(target=fn, name=f"server-{name}", daemon=True)
             t.start()
             self.threads.append(t)
@@ -387,6 +397,8 @@ class Server:
                 "sharedLog": self.shared_log(),
                 # What can be recorded and what is (api/recordings has the rest).
                 "recordings": self.recordings.summary(),
+                # What the timeshift holds (timeshift.py; SERVER-API "Timeshift").
+                "timeshift": self.timeshift.status(),
                 # Whether to show a Decoders view: no scan here (api/decoders).
                 "decoders": st.get("decoders") or self.radio.decoders.status(),
                 # The decoder session holding the receiver ({}: the operator
@@ -1469,11 +1481,12 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(200, self.srv.recordings.status())
 
     def post_recordings_start(self, who, q):
-        kind = str(self._body().get("kind") or "audio")
+        body = self._body()
+        kind = str(body.get("kind") or "audio")
         # What is heard is what is recorded: a band scan gives the receiver back first.
         self.srv.radio.client_activity("recording")
         try:
-            st = self.srv.recordings.start(kind)
+            st = self.srv.recordings.start(kind, body)
         except self.srv.recordings.Refused as e:
             self._refused(e)
             return
@@ -1599,6 +1612,17 @@ class _Handler(BaseHTTPRequestHandler):
         if channels not in CHANNELS:
             self._error(400, _("channels must be 1 or 2"), "bad_channels")
             return
+        if "behind" in q:
+            try:
+                behind = float(q["behind"][0])
+            except ValueError:
+                behind = -1.0
+            if not 0.0 <= behind < 1e6:
+                self._error(400, _("behind must be a number of seconds, 0 or more"), "bad_behind")
+                return
+            if behind > 0:
+                self._audio_behind(channels, behind)
+                return
         a = self.srv.audio
         fmt = a.rx_format(channels)
         silence = bytes(int(fmt["rate"] * IDLE_AUDIO_S) * 2 * channels)
@@ -1627,6 +1651,57 @@ class _Handler(BaseHTTPRequestHandler):
             pass
         finally:
             a.unlisten(lq)
+
+    # A timeshifted stream is sent at the pace it plays, PACE_AHEAD_S ahead
+    # at most: sent as fast as the network takes it, an hour behind would
+    # be an hour of audio into a player that buffers what it is given, and
+    # "behind" would shrink as it did.
+    PACE_AHEAD_S = 1.0
+
+    def _audio_behind(self, channels: int, behind: float) -> None:
+        """api/audio/rx?behind=: the timeshift (timeshift.py) from `behind`
+        seconds ago, in the same format as live, carrying on from there in
+        real time. It ends when the buffer is cleared (the station changed
+        or stopped): the client goes back to live."""
+        ts = self.srv.timeshift
+        try:
+            gen, index, ago = ts.position(behind)
+        except TimeshiftGone:
+            self._error(409, _("Nothing is kept to listen behind live: the timeshift keeps a DAB or wide FM "
+                               "station while it plays"), "no_timeshift")
+            return
+        fmt = self.srv.audio.rx_format(channels)
+        rate = ts.rate
+        utc = ts.utc(index)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", f"audio/L16; rate={fmt['rate']}; channels={channels}")
+            self.send_header("X-Audio-Format", json.dumps(fmt))
+            self.send_header("X-Timeshift", json.dumps({
+                "behindS": round(ago, 3),
+                "startUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(utc)) if utc else None}))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
+            t0, sent = time.monotonic(), 0
+            step = int(rate * 0.1)
+            while not self.srv.stop_ev.is_set():
+                pcm = ts.read(gen, index, step, timeout=IDLE_AUDIO_S)
+                if not len(pcm):
+                    continue
+                index += len(pcm)
+                if channels == 1:
+                    pcm = ((pcm[:, 0].astype(np.int32) + pcm[:, 1]) // 2).astype("<i2")
+                self.wfile.write(pcm.astype("<i2", copy=False).tobytes())
+                sent += len(pcm)
+                ahead = sent / rate - (time.monotonic() - t0)
+                if ahead > self.PACE_AHEAD_S:
+                    self.srv.stop_ev.wait(ahead - self.PACE_AHEAD_S)
+        except TimeshiftGone:
+            pass
+        except (OSError, ConnectionError):
+            pass
 
     def ws_audio_tx(self, who, q):
         """A remote microphone: binary frames of PCM in MIC_FORMAT, used by PTT

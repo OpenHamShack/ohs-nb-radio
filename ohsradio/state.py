@@ -172,6 +172,16 @@ with REG.after("mute"):
     _k("wfmDeemphasis", "enum", 50.0, "control", choices=list(DEEMPHASIS_US), unit="µs",
        help="Wide FM de-emphasis: 50 µs in Europe and most of the world, 75 µs in the Americas. The wrong one "
             "sounds dull or harsh.")
+    # The store form's timeshift (ohscore/server/timeshift.py; Brian,
+    # 24/10/2026, for the TV's DAB Radio). An hour by default: what "I
+    # missed the start of that" usually means, at most 690 MB on the
+    # controller's disk and usually far less.
+    _k("timeshiftMinutes", "int", 60, "setting", lo=0, hi=240, unit="min",
+       help="On a controller: how much of the DAB or wide FM station playing is kept, to listen from behind live "
+            "or record from the past. 0 keeps nothing. Cleared when the station changes or stops.")
+    _k("recordLeadSeconds", "int", 30, "setting", lo=0, hi=300, unit="s",
+       help="On a controller: while a DAB or wide FM station plays, a recording started without saying when "
+            "begins this long ago, from the timeshift, so the moment that made you press Record is in it.")
 _o("txFilterHi", help="Transmit audio high edge (SSB).")
 
 # --- safety -------------------------------------------------------------------

@@ -28,6 +28,14 @@ Flex share (its README is the contract). What is NB and Radio's own:
   the difference). Before this a DAB recording was named after the dial
   and the operator's mode from before DAB took the receiver
   ("...-218.640000MHz-FM").
+- **From the past** (24/10/2026; timeshift.py, SERVER-API "Timeshift"):
+  while a broadcast station plays, an audio recording may start in the
+  timeshift (`fromSecondsAgo`, `fromItemStart`, `lastMinutes`, or the
+  `recordLeadSeconds` setting when nothing is said). The timeshift then
+  feeds it - the past as fast as the recorder's queue takes it, then the
+  live blocks that came meanwhile, then each live block as it is played -
+  instead of its own tap on the audio, so the join loses and repeats
+  nothing. Its start time and name are when its first sample was played.
 - **IQ** is the engine's own SigMF recorder (ohscore/sigmf.py, which the
   desktop app has used since 05/10): the device's stream before the
   engine touches it, ci16, playable again through the "file" device and
@@ -48,10 +56,12 @@ import functools
 import logging
 import os
 import threading
+import time
 from pathlib import Path
 
 from .. import host, shacklibs, sigmf
 from ..i18n.text import _
+from .timeshift import Gone
 
 log = logging.getLogger("ohscore.server")
 
@@ -112,14 +122,20 @@ def _named(rec):
         def __init__(self, *args, namer, **kw):
             super().__init__(*args, **kw)
             self.namer = namer                    # (t, meta) -> base name
-            self._starting = threading.local()    # the meta of the start_audio on this thread
+            self._starting = threading.local()    # the start_audio on this thread: its meta and start time
+            # A recording from the timeshift began in the past: its name
+            # and startUtc are when its first sample was played. Both are
+            # read from `wall` on the starting thread only (the end time is
+            # the writer thread's, and stays the real clock).
+            real = self.wall
+            self.wall = lambda: getattr(self._starting, "utc", None) or real()
 
-        def start_audio(self, rate: int, channels: int, meta: dict):
-            self._starting.meta = meta
+        def start_audio(self, rate: int, channels: int, meta: dict, utc: float | None = None):
+            self._starting.meta, self._starting.utc = meta, utc
             try:
                 return super().start_audio(rate, channels, meta)
             finally:
-                self._starting.meta = None
+                self._starting.meta = self._starting.utc = None
 
         def new_id(self, freq_hz=None, mode=None) -> str:
             meta = getattr(self._starting, "meta", None)
@@ -140,7 +156,8 @@ class ServerRecordings:
     """The store form's recordings: shack_rec's Recordings, the audio tap
     and the engine's IQ recorder."""
 
-    def __init__(self, radio, audio, info, folder: Path | None = None, limits=None, disk_usage=None):
+    def __init__(self, radio, audio, info, folder: Path | None = None, limits=None, disk_usage=None,
+                 timeshift=None):
         rec = shacklibs.rec()
         self.radio, self.audio, self.info = radio, audio, info
         if limits is None:
@@ -155,19 +172,29 @@ class ServerRecordings:
                                namer=self._name, **kw)
         self.Refused = rec.Refused
         self._noting: threading.Thread | None = None
+        self.timeshift = timeshift
 
     # ---------------------------------------------------------------- start
-    def start(self, kind: str) -> dict:
-        """Start recording `kind`; raises shack_rec.Refused."""
+    PAST = ("fromSecondsAgo", "fromItemStart", "lastMinutes")
+
+    def start(self, kind: str, body: dict | None = None) -> dict:
+        """Start recording `kind` (`body`: api/recordings/start's, for where
+        an audio recording starts: PAST); raises shack_rec.Refused."""
+        body = body or {}
         if kind not in ("audio", "iq"):
             self.rec.prepare(kind)                         # says why: bad_kind
         if not self.radio.state().get("running"):
             raise self.Refused(409, "not_running", _("Start the radio before recording"))
         if kind == "iq":
+            if any(body.get(k) not in (None, False) for k in self.PAST):
+                raise self.Refused(400, "bad_params", _("Only audio is kept in the timeshift: IQ records from now"))
             self._start_iq()
-        else:
-            self._start_audio()
-        return self.rec.status()
+            return self.rec.status()
+        past = self._start_audio(body)
+        out = self.rec.status()
+        if past is not None:
+            out["timeshift"] = past
+        return out
 
     def _name(self, t: float, meta: dict) -> str:
         return host.recording_name(self.prefix, t, meta.get("freqHz"), meta.get("mode"), meta.get("broadcast"))
@@ -189,9 +216,53 @@ class ServerRecordings:
             return out
         return {"freqHz": round(float(s.get("rxDial") or 0)) or None, "mode": str(s.get("mode") or "").upper() or None}
 
-    def _start_audio(self) -> None:
+    def _past(self, body: dict, station: dict | None):
+        """Where an audio recording starts (api/recordings/start's PAST
+        fields, or recordLeadSeconds): None for now, else {"gen", "index",
+        "secondsAgo", "untilNow", "why"}, the buffer's position and what
+        was used. Refused when the request cannot be done as asked."""
+        ts = self.timeshift
+        asked = {k: body[k] for k in self.PAST if body.get(k) not in (None, False)}
+        if len(asked) > 1:
+            raise self.Refused(400, "bad_params", _("Give one of fromSecondsAgo, fromItemStart and lastMinutes"))
+        try:
+            if "lastMinutes" in asked or "fromSecondsAgo" in asked:
+                key = "lastMinutes" if "lastMinutes" in asked else "fromSecondsAgo"
+                try:
+                    want = float(asked[key]) * (60.0 if key == "lastMinutes" else 1.0)
+                except (TypeError, ValueError):
+                    want = -1.0
+                if not want >= 0 or (key == "lastMinutes" and want <= 0):
+                    raise self.Refused(400, "bad_params", _("{key} must be a positive number").format(key=key))
+                if ts is None:
+                    raise Gone()
+                gen, index, ago = ts.position(want)
+                why = "" if ago >= want - 0.05 else _(
+                    "The timeshift holds {s:.0f} s: recording from its start").format(s=ago)
+                return {"gen": gen, "index": index, "secondsAgo": ago, "untilNow": key == "lastMinutes", "why": why}
+            if "fromItemStart" in asked:
+                if ts is None:
+                    raise Gone()
+                gen, index, ago, why = ts.item_start()
+                return {"gen": gen, "index": index, "secondsAgo": ago, "untilNow": False, "why": why}
+        except Gone:
+            raise self.Refused(409, "no_timeshift", _(
+                "Nothing is kept to record from the past: the timeshift keeps a DAB or wide FM station while it "
+                "plays")) from None
+        # Nothing asked: while a broadcast station plays, its lead.
+        lead = float(self.radio.st.get("recordLeadSeconds") or 0) if station else 0.0
+        if lead <= 0 or ts is None:
+            return None
+        try:
+            gen, index, ago = ts.position(lead)
+        except Gone:
+            return None
+        return {"gen": gen, "index": index, "secondsAgo": ago, "untilNow": False, "why": ""}
+
+    def _start_audio(self, body: dict | None = None) -> dict | None:
         s = self.radio.state()
         station = self._station()
+        past = self._past(body or {}, station)
         facts = self._facts(station)
         meta = {"freqHz": facts["freqHz"], "mode": facts["mode"], "appName": self.info.name,
                 "version": self.info.version, "station": s.get("callsign") or None, "radio": s.get("device"),
@@ -200,11 +271,37 @@ class ServerRecordings:
             # Nested: `station` is already the operator's callsign, and the
             # sidecar's own `kind` is shack_rec's ("audio").
             meta["broadcast"] = dict(station)
-        fmt = self.audio.rx_format(2 if station else self.radio.audio_channels())
-        r = self.rec.start_audio(fmt["rate"], fmt["channels"], meta)
-        r.on_close(self.audio.tap(r.push, fmt["channels"]))
+        utc = None
+        if past is not None:
+            meta["fromSecondsAgo"] = round(past["secondsAgo"], 2)
+            utc = self.timeshift.utc(past["index"])
+        # From the timeshift it is the buffer's two channels; a broadcast
+        # station's is stereo anyway (the module docstring).
+        fmt = self.audio.rx_format(2 if station or past is not None else self.radio.audio_channels())
+        r = self.rec.start_audio(fmt["rate"], fmt["channels"], meta, utc=utc)
+        # The station as it starts, at 0 s: before any of the past is in.
+        r.note(**facts)
+        if past is not None:
+            try:
+                f = self.timeshift.follow(
+                    past["gen"], past["index"], r.push, until_now=past["untilNow"],
+                    # The recorder drops what does not fit its queue: the
+                    # past is handed over no faster than it is written.
+                    room=lambda: r.queued < r.cap // 2,
+                    on_end=lambda why: r.close(why or _("the timeshift's minutes are all in it")))
+                r.on_close(lambda: self.timeshift.unfollow(f))
+            except Gone:                                    # cleared since: from now instead
+                past = {**past, "secondsAgo": 0.0, "why": _("The timeshift was cleared as the recording "
+                                                             "started: recording from now")}
+                r.on_close(self.audio.tap(r.push, fmt["channels"]))
+        else:
+            r.on_close(self.audio.tap(r.push, fmt["channels"]))
         t = threading.Thread(target=self._note_loop, args=(r,), name="server-rec-note", daemon=True)
         t.start()
+        if past is None:
+            return None
+        return {"fromSecondsAgo": round(past["secondsAgo"], 1), "startUtc": utc and time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ", time.gmtime(utc)), "untilNow": past["untilNow"], "why": past["why"]}
 
     def _note_loop(self, r) -> None:
         """Frequency and mode changes into the audio recording's sidecar.

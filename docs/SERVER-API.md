@@ -63,14 +63,14 @@ the desktop apps.
 | `GET api/overpower` | view | QO-100 NB only (404 `not_found` elsewhere): `{"state", "beacon", "marginDb", "capture", "lastCapture", "events": [...]}` - signals over the middle beacon and LEILA sirens of the last 30 minutes, open ones first, each as ENGINE-API `overpower` describes. The same list comes as `overpower` items on `api/events?kinds=…,overpower` (not in the default set) on every change and once a second while anything is active. A `leila` entry is the siren pattern measured on six real sirens; why LEILA marks a station is unknown, so show it as "LEILA?". Tapping an entry only tunes: `POST api/set {"vfo": …}` at Control level, never TX. |
 | `GET`/`POST`/`DELETE api/smeter/calibrate` | view / control / control | Radio only (404 `not_found` elsewhere, like `api/overpower` above): the S-meter calibration table, below. |
 | `POST api/overpower/capture` | control | save the last 20 s of receive IQ now (the LEILA evidence ring; `leilaCapture` must be on): `202 {"ok": true}`, the file then appears in Recordings as `…-LEILA`; `409 nothing_to_save` with the sentence why not. Receive only. |
-| `GET api/audio/rx[?channels=1\|2]` | view | receive audio, raw PCM over a long-lived response, its format in the headers before any audio: `Content-Type: audio/L16; rate=<rate>; channels=<n>` and `X-Audio-Format: {"encoding": "s16le", "rate": <rate>, "channels": <n>}`. The rate is the app's: **48000 for Radio** (since 23/10/2026), 12000 for QO-100 NB. **Mono unless `?channels=2`** (below, "Receive audio format"); `400 bad_channels` for anything but 1 or 2 |
+| `GET api/audio/rx[?channels=1\|2][&behind=<s>]` | view | receive audio, raw PCM over a long-lived response, its format in the headers before any audio: `Content-Type: audio/L16; rate=<rate>; channels=<n>` and `X-Audio-Format: {"encoding": "s16le", "rate": <rate>, "channels": <n>}`. The rate is the app's: **48000 for Radio** (since 23/10/2026), 12000 for QO-100 NB. **Mono unless `?channels=2`** (below, "Receive audio format"); `400 bad_channels` for anything but 1 or 2. Radio: `behind=<s>` plays the timeshift from that long ago (below, "Timeshift"), `409 no_timeshift` without one |
 | `GET api/audio/tx` | transmit | WebSocket: binary frames of PCM are the microphone while it is open (voice modes; keying is still `api/ptt`), always **12 kHz mono s16le** in both apps; the first text frame is `{"kind": "hello", "format": {"encoding": "s16le", "rate": 12000, "channels": 1}}` |
 | `POST api/shack/pad/action` | control (transmit for `power`) | the controller's input host: `{"action", "kind", "step"}` from `<app>/pad-actions.json`; answers the pad faces. `ptt` is refused here: a pad keys through `api/ptt` like any client. |
 | `GET api/shack/busy` | the platform | `{"busy": <on air>, "why"}` for the update gate |
 | `POST api/shack/release` | the platform | the broker asks for the radio back: `409 {"onAir": true}` while keyed (unless `"stop": true`), else `202` and the radio stops |
 | `GET api/recordings` | view | the recordings, newest first, and the status below (Recordings) |
 | `GET api/recordings/status` | view | what is recording now, the last that ended, disk use and limits |
-| `POST api/recordings/start {"kind": "audio" \| "iq"}` | control | start recording; `400 bad_kind`, `409 already_recording`/`not_running`/`cannot_record`, `507 low_disk` |
+| `POST api/recordings/start {"kind": "audio" \| "iq", "fromSecondsAgo"?, "fromItemStart"?, "lastMinutes"?}` | control | start recording; audio may start in the past (Radio: "Timeshift"); `400 bad_kind`/`bad_params`, `409 already_recording`/`not_running`/`cannot_record`/`no_timeshift`, `507 low_disk` |
 | `POST api/recordings/stop {"kind"?}` | control | stop that kind, or both; the status with `stopped` |
 | `GET api/recordings/file?id=&part=data\|meta[&download=1]` | view | one file of a recording; `Range: bytes=…` answers `206` |
 | `POST api/recordings/delete {"id"}` | control | delete a recording (`409 recording_active` while it records) |
@@ -595,6 +595,90 @@ IQ rate, no `channels`, and parts `….sigmf-data`
 (`application/octet-stream`) and `….sigmf-meta` (`application/json`).
 To play: `api/recordings/file?id=<id>&part=data` (FLAC); to save:
 add `&download=1`.
+
+## Timeshift (Radio)
+
+While a broadcast station plays - a DAB station holding the receiver, or
+wide FM - the controller keeps its last `timeshiftMinutes` (a setting, 60
+by default, 0 for off, at most 240) of receive audio on disk, so a client
+can listen from behind live and a recording can start in the past (Brian,
+24/10/2026, for the TV's DAB Radio). ohscore/server/timeshift.py has the
+decisions.
+
+- **What is kept** is what `api/audio/rx` sends, as two channels at 48
+  kHz, lossless, compressed in the app's own format (about 40 % of raw
+  PCM on band-limited noise, 20 % for a mono station, in measurements on
+  synthetic audio). The folder
+  (`timeshift` in the data folder) never holds more than the same audio
+  as raw PCM would take (11.5 MB a minute) and keeps the recordings'
+  free-space floor (`RECORDINGS_MIN_FREE_GB`): below it the timeshift
+  stops and `timeshift.why` says so.
+- **One station's, and nothing survives a restart.** It is cleared and
+  starts again when the station changes (another DAB service or block,
+  another wide FM frequency), when it stops or the radio does, when the
+  setting changes to 0, and whenever the app starts. A stream behind live
+  ends when it is cleared; the client goes back to live.
+
+`api/status` `timeshift`:
+
+```json
+{"available": true, "startUtc": "2026-10-24T04:10:00Z", "lengthS": 1834.5, "capS": 3600,
+ "station": {"kind": "dab", "mode": "DAB", "label": "Shack MP2 Tone", "sid": "C221", "block": "11D", "...": "..."},
+ "itemStartUtc": "2026-10-24T04:38:12Z"}
+```
+
+`station` is the same object as a recording's `broadcast` (Recordings),
+as it is now; `itemStartUtc` is when the current DL Plus item began, null
+when unknown (none sent, or the one on now began before the buffer:
+DL Plus arrives a few seconds after the sound, so the first item heard
+after tuning in counts as begun before it). `why` appears when it
+stopped for a reason (low disk). `available` is false, `lengthS` 0, while
+nothing is kept. The server keeps no per-client position: a client
+tracks its own.
+
+**Listening behind live: `GET api/audio/rx?behind=<seconds>[&channels=2]`.**
+The same raw PCM stream as live, in the same format and headers, starting
+that many seconds ago (clamped to what is kept) and carrying on in real
+time from there. It is sent at the pace it plays, at most a second ahead,
+so a player's buffer never fills with minutes of it. It adds a header:
+
+    X-Timeshift: {"behindS": 30.0, "startUtc": "2026-10-24T04:40:00Z"}
+
+(`behindS`: how far behind it actually starts, after clamping). A client
+does everything by opening a new stream:
+
+- **pause:** stop reading and close; note the wall-clock time;
+- **resume:** `behind=` the old offset plus the seconds paused;
+- **back or forward 30 s:** `behind=` the offset plus or minus 30;
+- **catch up to live:** no `behind` (or `behind=0`): the live stream.
+
+`400 bad_behind` for a negative or unreadable value; `409 no_timeshift`
+while nothing is kept.
+
+**Recording from the past:** `POST api/recordings/start` with `"kind":
+"audio"` and one of:
+
+| Field | Starts at |
+|---|---|
+| `"fromSecondsAgo": 45` | that long ago, clamped to what is kept |
+| `"fromItemStart": true` | the start of the current DL Plus item (DAB); with none known, the buffer's start (an item on since before it) or now (no item), and `why` says which |
+| `"lastMinutes": 5` | that long ago, and **ends at now**: a finished recording of the last minutes, made at once (FLAC is written at 20-35 times real time on shack, so five minutes take 10-15 s; meanwhile it is the audio recording that is running) |
+| none of them | `recordLeadSeconds` ago (a setting, 30 by default, 0-300), only while a broadcast station plays; otherwise now, as always |
+
+The recording is then the ordinary one: the past, then on into live with
+nothing lost or repeated at the join, stopped as usual (except
+`lastMinutes`, which stops itself: `stopped` "the timeshift's minutes are
+all in it"). Its `startUtc` and its name are when its first sample was
+played; the sidecar adds `fromSecondsAgo`. The answer is the status, plus:
+
+```json
+"timeshift": {"fromSecondsAgo": 30.0, "startUtc": "2026-10-24T04:40:00Z", "untilNow": false, "why": ""}
+```
+
+`why` is "" when it started where asked, else the sentence saying where
+it did. Refused: `400 bad_params` for more than one of the three, a
+negative or unreadable number, or any of them with `"kind": "iq"` (IQ is
+not kept); `409 no_timeshift` when one is asked for and nothing is kept.
 
 ## Transmitting
 
