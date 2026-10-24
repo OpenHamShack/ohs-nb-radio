@@ -172,7 +172,7 @@ class BroadcastWindow(unittest.TestCase):
                                           and p.on_now.text().startswith("On now:"), 120),
                         (p.name.text(), p.what.text(), p.on_now.text()))
         self.assertEqual(p.name.text(), "Shack MP2 Tone")
-        self.assertEqual(p.what.text(), "1 kHz left by Shack MP2 Tone")
+        self.assertEqual(p.what.text(), "1 kHz left by " + "Shack MP2 Tone")
         self.assertIn("Pop music", p.on_now.text())
         # The list, filled from a scan's record, shows the logo and the type.
         from ohsradio.bandscan import dab_ensemble

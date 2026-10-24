@@ -290,7 +290,12 @@ class StationsView(QWidget):
         self.refresh()
 
     def detach(self):
-        self._tick.stop()
+        # A theme change rebuilds the window, and by then Qt may have
+        # deleted the old view's timer with its children.
+        try:
+            self._tick.stop()
+        except RuntimeError:
+            pass
         try:
             self.bridge.changed.disconnect(self._state)
         except (TypeError, RuntimeError):
