@@ -26,6 +26,7 @@ import json
 import tempfile
 import time
 import unittest
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 from ohscore import sdr
@@ -518,6 +519,65 @@ class NbHasNone(test_server.ServerTest):
         for method, path in (("GET", "/api/fm/stations"), ("GET", "/api/dab/stations"), ("POST", "/api/scan")):
             s, a = self.req(method, path, {"band": "fm"} if method == "POST" else None, level="control")
             self.assertEqual((s, a["code"]), (404, "not_found"), path)
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class DabDwell(unittest.TestCase):
+    """A block's dwell (bandscan docstring, "DAB"): listened on while the
+    list is not complete or a service has no programme type, up to
+    DAB_MAX_S; the genre that comes late is kept."""
+
+    def scan(self, answers):
+        from types import SimpleNamespace
+        from unittest import mock
+        import numpy as np
+        radio = SimpleNamespace(geo=SimpleNamespace(fs=2_400_000.0), st={"scanHour": 3})
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        sc = BandScanner(radio, folder=Path(tmp.name))
+        sc.dab_blocks = ["12A"]
+        heard = []
+
+        def capture(seconds, centre):
+            heard.append(seconds)
+            return np.zeros(int(seconds * 1000), np.complex64)
+
+        calls = []
+
+        def survey(iq, fs, give_up_s=1.0, wait_s=0.0):
+            calls.append(len(iq) / 1000)
+            return answers[min(len(calls), len(answers)) - 1]
+        dab = SimpleNamespace(BLOCKS={"12A": 223_936_000}, survey=survey)
+        with mock.patch.object(sc, "_tune"), mock.patch.object(sc, "_progress"), \
+                mock.patch.object(sc, "_capture", side_effect=capture), \
+                mock.patch.object(sdr, "load", return_value=SimpleNamespace(dab=dab, wfm=sdr.load().wfm)):
+            return sc._scan_dab(), heard, calls
+
+    @staticmethod
+    def meta(complete, pty):
+        return {"sync": True, "complete": complete, "ensemble": {"id": "C1D8", "label": "Glasgow"},
+                "services": [{"sid": "C0C0", "label": "talkSPORT", "kind": "dab", "bitrate": 64,
+                              "pty": {"code": 4, "id": "sport", "dynamic": False} if pty else None}]}
+
+    def test_a_late_programme_type_is_waited_for_and_kept(self):
+        incomplete = {"meta": self.meta(False, False), "completeS": None, "detailsS": None}
+        untyped = {"meta": self.meta(True, False), "completeS": 1.4, "detailsS": None}
+        typed = {"meta": self.meta(True, True), "completeS": 1.4, "detailsS": 2.6}
+        out, heard, calls = self.scan([incomplete, untyped, typed])
+        self.assertEqual(heard, [bandscan.DAB_FIRST_S, bandscan.DAB_MORE_S, bandscan.DAB_MORE_S])
+        self.assertEqual(out[0]["services"][0]["ptyName"], "Sport")
+
+    def test_a_type_never_sent_costs_the_cap_and_no_more(self):
+        untyped = {"meta": self.meta(True, False), "completeS": 0.6, "detailsS": None}
+        out, heard, _ = self.scan([untyped])
+        self.assertAlmostEqual(sum(heard), bandscan.DAB_MAX_S)
+        self.assertEqual(out[0]["services"][0]["label"], "talkSPORT")
+        self.assertIsNone(out[0]["services"][0]["ptyName"])
+
+    def test_a_block_whose_types_came_with_its_labels_is_left_at_once(self):
+        typed = {"meta": self.meta(True, True), "completeS": 0.6, "detailsS": 0.6}
+        _, heard, _ = self.scan([typed])
+        self.assertEqual(heard, [bandscan.DAB_FIRST_S])
 
 
 if __name__ == "__main__":

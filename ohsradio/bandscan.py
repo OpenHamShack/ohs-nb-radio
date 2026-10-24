@@ -54,8 +54,16 @@ rate the radio runs at:
   hops; +-0.35 MHz at 1.2 MS/s, twenty-six).
 - **DAB:** each Band III block (5A-13F, EN 300 401's table as shack_sdr
   holds it), the receiver's centre on the block's unused middle carrier,
-  DAB_FIRST_S of IQ to `dab.survey`, and DAB_MORE_S more for a block that
-  synced but whose list was not complete. Needs 2.048 MS/s or more.
+  DAB_FIRST_S of IQ to `dab.survey`, then DAB_MORE_S more at a time, up
+  to DAB_MAX_S in all, for a block that synced while its list is not
+  complete or a service has no programme type yet. Needs 2.048 MS/s or
+  more. Beta.8 listened at most twice (2.4 s) and kept no genre (nor, for
+  seven, a label) for twelve of 12A's 31 services: that block's list
+  takes 1.3-1.4 s on a clean capture, and the second capture is not
+  continuous with the first, so the decoder resynchronises across the
+  seam. The types arrive with the labels on every local block, so the
+  wait for them costs nothing there; a block where a service never sends
+  one listens to DAB_MAX_S (6 s).
 
 **Merged by programme.** FM stations with the same PI are one programme:
 the strongest frequency is its `best`, the rest its `alts`; one without RDS
@@ -104,6 +112,7 @@ FM_EDGE_HZ = 250_000.0                # fm_reach: measured, see the docstring
 DAB_RATE = 2_048_000.0
 DAB_FIRST_S = 1.2                     # FIC read 0.15-0.2 s in, list complete 0.7-0.8 s (shack_sdr README)
 DAB_MORE_S = 1.2
+DAB_MAX_S = 6.0                       # the most a block holding an ensemble is listened to (docstring)
 WINDOW_S = 3600.0                     # the nightly attempt's window after scanHour
 SLACK_S = 2 * 3600.0                  # "a week" is the same night a week later (docstring)
 STALL_S = 20.0                        # wall clock with no samples at all: the receiver has stopped (_capture)
@@ -591,12 +600,15 @@ class BandScanner:
             self._progress("dab", 100 * i / len(blocks), "listening", text, centre)
             self._tune(centre, self._label("dab"))
             iq = self._capture(DAB_FIRST_S, centre)
-            got = dab.survey(iq, fs, give_up_s=1.0)
+            heard = DAB_FIRST_S
+            got = dab.survey(iq, fs, give_up_s=1.0, wait_s=DAB_MAX_S)
             meta = got.get("meta") or {}
-            if meta.get("sync") and not meta.get("complete"):
-                # Synced but the list is not whole yet: listen on.
-                more = self._capture(DAB_MORE_S, centre)
-                got = dab.survey(np.concatenate([iq, more]), fs, give_up_s=1.0)
+            # Synced, but the list not whole or a service with no programme
+            # type yet: listen on, a little at a time (docstring).
+            while meta.get("sync") and got.get("detailsS") is None and heard + DAB_MORE_S <= DAB_MAX_S + 1e-9:
+                iq = np.concatenate([iq, self._capture(DAB_MORE_S, centre)])
+                heard += DAB_MORE_S
+                got = dab.survey(iq, fs, give_up_s=1.0, wait_s=DAB_MAX_S)
                 meta = got.get("meta") or {}
             if meta.get("ensemble"):
                 out.append(dab_ensemble(name, centre, meta))
