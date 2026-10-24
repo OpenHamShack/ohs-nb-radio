@@ -100,7 +100,14 @@ class PinnedOnTheSimulator(unittest.TestCase):
         return self.r.state()["span"]
 
     def settled(self):
-        pump(self.r, 5, until=lambda: self.r.pending_centre is None)
+        # Until the move is published as well as made: the receive thread
+        # (Radio._rx_done) clears pending_centre first, then sets the centre,
+        # retunes the device and sets the notches, and only then puts the
+        # new span in the status. Waiting for pending_centre alone, a loaded
+        # host read the new centre against the old span between the two
+        # (the beta.8 suite: 14.167 MHz against 14.175 MHz).
+        pump(self.r, 5, until=lambda: self.r.pending_centre is None
+             and self.span().get("centreHz") == self.r.centre)
         return self.r.centre
 
     def assert_clear(self, centre, *items):
