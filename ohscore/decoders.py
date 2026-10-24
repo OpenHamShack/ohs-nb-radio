@@ -951,6 +951,7 @@ class Decoders:
         if now >= self._watch_due:
             self._watch_due = now + 1.0
             self._watch(now, vfo, fixed)
+            self._refresh_now_next(fixed)
         items = []
         # The engine's host, and each held session's own.
         for host in [self.host, *(f.host for f in fixed.values() if f.held)]:
@@ -1116,6 +1117,35 @@ class Decoders:
             except Exception:  # noqa: BLE001 - see above
                 log.warning("the app's addition to a decoder feed failed", exc_info=True)
         return out
+
+    def _refresh_now_next(self, fixed: dict) -> None:
+        """Once a second: a held DAB session whose services' now or next has
+        changed since its feed last said - a programme boundary passed, or
+        a schedule arrived (dabpics.py decorate) - gets a fresh `meta` on
+        the feed, so a client that only follows the feed sees it. The
+        decoder's own meta changes only with what it hears, so nothing else
+        would send it. Marked `refresh` and numbered with the session's
+        current rev: it is no new result of the decoder's."""
+        if self._pictures() is None:
+            return
+        for f in fixed.values():
+            if not f.held:
+                continue
+            st = self._status_of(f.id, f.host)
+            meta = st.get("meta")
+            if not isinstance(meta, dict) or not isinstance(meta.get("services"), list):
+                continue
+            fields = self._meta(meta)
+            sig = tuple((sv.get("sid"), (sv.get("now") or {}).get("start"), (sv.get("next") or {}).get("start"))
+                        for sv in fields["services"] if isinstance(sv, dict))
+            last = getattr(f, "now_next_sig", None)
+            f.now_next_sig = sig
+            if last is None or sig == last:
+                continue
+            out = {"session": f.id, "rev": st.get("rev", 0), "t": time.time(), "type": "meta", "fields": fields,
+                   "refresh": True}
+            f.results.append(out)
+            self.engine._publish("decoders", out)
 
     def _pictures(self):
         """Radio's store of DAB's pictures (dabpics.py); None in NB."""

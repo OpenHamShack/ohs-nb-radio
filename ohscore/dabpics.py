@@ -251,14 +251,54 @@ class DabPictures:
             progs = [p for p in progs if str(p.get("start", "")).startswith(date)]
         return progs
 
+    def now_next(self, sid, t: float | None = None) -> tuple[dict | None, dict | None]:
+        """What a service has on at UTC `t` (now, from the clock) and what
+        comes next, from its stored schedule; (None, None) without one."""
+        t = self.clock() if t is None else t
+        with self.lock:
+            e = self.schedules.get(sid)
+            progs = list(e["programmes"]) if e else []
+        now = nxt = None
+        for p in sorted(progs, key=lambda p: _ts(p.get("start"))):
+            start = _ts(p.get("start"))
+            dur = float(p.get("durationS") or 0)
+            if start <= t and (dur == 0 or t < start + dur):
+                now = p
+            elif start > t and nxt is None:
+                nxt = p
+        return now, nxt
+
     def decorate(self, meta):
-        """A DAB session's meta with each service's logo paths and the
-        latest slide's path (a copy; anything but a DAB meta as it was)."""
+        """A DAB session's meta with each service's logo paths, its now and
+        next from the stored schedule, and the latest slide's path (a copy;
+        anything but a DAB meta as it was).
+
+        Now and next: the decoder works them out only from the programme
+        files its own session has heard, which on a real carousel can take
+        minutes after the start (BBC National's on 12B: the tablet's beta.8
+        check had Radio 4 playing five minutes with null now and next while
+        api/dab/schedule already answered from disk). The store keeps every
+        schedule heard, across sessions and restarts, so it decides
+        whenever it has a programme for the time; the decoder's value
+        stands only where the store has none. The time is UTC, from the
+        store's clock, so a view fetched later is current even when the
+        decoder has sent no new meta (Decoders.tick also re-sends one when
+        now or next changes)."""
         if not isinstance(meta, dict) or not isinstance(meta.get("services"), list):
             return meta
         out = dict(meta)
-        out["services"] = [dict(s, **self.logo_paths(s.get("sid"))) if isinstance(s, dict) else s
-                           for s in meta["services"]]
+        t = self.clock()
+        services = []
+        for s in meta["services"]:
+            if not isinstance(s, dict):
+                services.append(s)
+                continue
+            sv = dict(s, **self.logo_paths(s.get("sid")))
+            now, nxt = self.now_next(s.get("sid"), t)
+            if now is not None or nxt is not None:
+                sv["now"], sv["next"] = now, nxt
+            services.append(sv)
+        out["services"] = services
         slide = meta.get("slide")
         if isinstance(slide, dict) and sid_ok(slide.get("sid")):
             # The decoder's meta can name a slide a moment before the

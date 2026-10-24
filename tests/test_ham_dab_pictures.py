@@ -111,6 +111,71 @@ class TheStore(unittest.TestCase):
         self.assertNotIn("logoPath", meta["services"][0], "the meta given is not changed")
 
 
+class NowAndNext(unittest.TestCase):
+    """Now and next from the stored schedule (the tablet's 12B check: the
+    guide on disk, Radio 4 playing, and now/next null for five minutes)."""
+
+    PROGS = [
+        {"name": "Selection of BBC World Service Programmes", "start": "2026-10-24T00:00:00Z", "durationS": 16200,
+         "description": "BBC Radio 4 joins the BBC World Service."},
+        {"name": "News Summary", "start": "2026-10-24T04:30:00Z", "durationS": 240, "description": None},
+        {"name": "Farming Today", "start": "2026-10-24T04:34:00Z", "durationS": 900, "description": None},
+    ]
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        from datetime import datetime, timezone
+        self.now = datetime(2026, 10, 24, 3, 10, tzinfo=timezone.utc).timestamp()
+        self.pics = DabPictures(Path(self.tmp.name), clock=lambda: self.now)
+        self.pics.take(frame("schedule", t=self.now, sid="C224", programmes=self.PROGS))
+
+    def test_the_meta_gains_now_and_next_by_the_clock_from_the_stored_schedule(self):
+        meta = {"services": [{"sid": "C224", "now": None, "next": None}, {"sid": "C221", "now": None, "next": None}]}
+        c224, c221 = self.pics.decorate(meta)["services"]
+        self.assertEqual(c224["now"]["name"], "Selection of BBC World Service Programmes")
+        self.assertEqual(c224["next"]["name"], "News Summary")
+        self.assertIsNone(c221["now"], "no schedule: the decoder's (none) stands")
+        # The clock passes a boundary: the same meta, decorated later.
+        self.now += 80 * 60  # 04:30
+        c224 = self.pics.decorate(meta)["services"][0]
+        self.assertEqual((c224["now"]["name"], c224["next"]["name"]), ("News Summary", "Farming Today"))
+        # After a restart, the same from disk.
+        again = DabPictures(Path(self.tmp.name), clock=lambda: self.now)
+        self.assertEqual(again.decorate(meta)["services"][0]["now"]["name"], "News Summary")
+
+    def test_the_feed_is_sent_a_fresh_meta_when_now_or_next_changes(self):
+        from ohscore.decoders import Decoders, _Fixed
+        published = []
+        meta = {"services": [{"sid": "C224", "now": None, "next": None}], "playing": "C224"}
+
+        class Host:
+            def poll(self, n):
+                return []
+
+            def status(self, sid):
+                return {"meta": meta, "rev": 41, "state": "synced"}
+
+        engine = type("E", (), {"dab_pictures": self.pics, "st": {}, "_publish": lambda e, k, it: published.append(it)})()
+        d = Decoders(engine)
+        d.host = Host()
+        f = _Fixed("ds_1", "dab", 225_648_000.0, {}, "meta")
+        f.held, f.host = True, Host()
+        d.fixed["ds_1"] = f
+        d.tick()
+        self.assertEqual(published, [], "nothing changed yet")
+        self.now += 80 * 60
+        d._watch_due = 0.0
+        d.tick()
+        (it,) = published
+        self.assertEqual((it["type"], it["refresh"], it["rev"]), ("meta", True, 41))
+        self.assertEqual(it["fields"]["services"][0]["now"]["name"], "News Summary")
+        self.assertEqual(list(f.results)[-1], it)
+        d._watch_due = 0.0
+        d.tick()
+        self.assertEqual(len(published), 1, "sent once per change")
+
+
 class Urls(unittest.TestCase):
     def test_paths_become_urls_under_the_prefix_and_nothing_else_changes(self):
         obj = {"services": [{"sid": "C221", "logoPath": "api/dab/logos/C221"}],
