@@ -59,10 +59,16 @@ class ListeningSim(HamSim):
     def __init__(self, cfg, fs=2_400_000.0, stations=(), receive_only=True):
         super().__init__(cfg, fs)
         self.stations = list(stations)
+        self.receive_only = receive_only
         self.k = 0
         if not receive_only:
             # The transmitting simulator over the same range, for the guard.
             self.kind, self.can_tx, self.tx_refusal = "sim", True, ""
+
+    def at_rate(self, fs):
+        """The same receiver and stations opened at another rate, as the
+        engine reopens a real one (Engine._make_device; Radio's ADS-B)."""
+        return ListeningSim(self.cfg, fs, self.stations, self.receive_only)
 
     def _generate(self, m):
         y = super()._generate(m)

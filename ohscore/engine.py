@@ -526,6 +526,11 @@ class Engine(metaclass=_EngineType):
                       data_from_env=bool(data_dir) or bool(self.CONFIG.app.getenv("DATA")))
         self.decoders = Decoders(self)
         self._inj_audio, self._inj_device = audio, device
+        # A rate a held session reopens the radio at (Radio's ADS-B: its
+        # restart_at), None for the operator's own `sampleRate`, which is
+        # never changed for it. Read by _make_device at every start.
+        self.rate_override: float | None = None
+        self._inj_fs = getattr(device, "fs", None)
         if audio is not None:
             # Before start(): the store's server announces this backend's
             # format to a listener who connects while the radio is off.
@@ -971,7 +976,7 @@ class Engine(metaclass=_EngineType):
             return
         self.stop_ev.clear()
         self.st["keyed"] = False
-        self.dev = self.play or self._inj_device or self.DEVICES.make(self.cfg)
+        self.dev = self.play or self._make_device()
         if self.receive_only and self.dev.can_tx:
             # On the instance, before open(): the device then opens exactly
             # as it does for any run (a Pluto's open() leaves its transmitter
@@ -1068,6 +1073,20 @@ class Engine(metaclass=_EngineType):
             t = threading.Thread(target=fn, name=f"{self.THREAD_PREFIX}-{name}", daemon=True)
             self.threads.append(t)
             t.start()
+
+    def _make_device(self):
+        """The device start() opens: the configured one at the operator's
+        rate or at `rate_override`. A test's injected device is kept, or,
+        for an override, swapped for its own copy at that rate (`at_rate`)
+        and back again to its first rate."""
+        fs = self.rate_override
+        if self._inj_device is not None:
+            want = fs if fs is not None else self._inj_fs
+            at_rate = getattr(self._inj_device, "at_rate", None)
+            if want is not None and at_rate is not None and float(self._inj_device.fs) != float(want):
+                self._inj_device = at_rate(float(want))
+            return self._inj_device
+        return self.DEVICES.make(self.cfg if fs is None else {**self.cfg, "sampleRate": fs})
 
     def _log_device_open(self) -> None:
         """Once per open: what was opened, at what rate, and anything the

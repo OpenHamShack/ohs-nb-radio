@@ -94,7 +94,7 @@ from .sequencer import Sequencer, SequencerError, make_output
 # the decoder sessions' results (ohscore/decoders.py). Never in the
 # server's default set, so a client gets them only when it asks.
 # stations: a band scan's list changed (bandscan.py), likewise only when asked.
-FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders", "stations", "ais")
+FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders", "stations", "ais", "adsb")
 # How long after a re-centring the receive channel is taken to hold the
 # new centre's samples (Radio._rx_settled): a device read and the analysis
 # bank's overlap are a few tens of milliseconds at every supported rate;
@@ -290,6 +290,14 @@ class Radio(Engine):
         self.ais = AisService(self)
         self.mapdata = mapdata
         self.st["ais"] = self.ais.view()
+        # Aircraft on the same map (adsb.py): ADS-B on 1090 MHz, while a
+        # client has the aircraft map open; it may reopen the radio at a
+        # faster rate (restart_at), never on its own threads.
+        from .adsb import AdsbService
+        self.adsb = AdsbService(self)
+        self.st["adsb"] = self.adsb.view()
+        self.restart_lock = threading.Lock()
+        self.restarting = False
         self.map_tiles = mapdata.TileCache(Path(self.data_dir) / "maptiles",
                                            lambda: bool(self.st.get("mapOnlineTiles", True)),
                                            lambda: int(self.st.get("mapTileCacheMb", 200)),
@@ -943,6 +951,7 @@ class Radio(Engine):
     def _app_tick(self, now: float) -> None:
         self.bandscan.tick()
         self.ais.tick()
+        self.adsb.tick()
         self.map_tiles.save()
         self._broadcast_tick(now)
         self._notch_tick(now)
@@ -976,10 +985,11 @@ class Radio(Engine):
     def _dab_held(self) -> str | None:
         """What holds the receiver where the DAB notch must stay out: "dab"
         (it would notch the station itself), "ais" (162 MHz is inside its
-        >30 dB stopband, 160-230 MHz: ais.py), else None."""
+        >30 dB stopband, 160-230 MHz: ais.py), "adsb" (both notches out
+        whatever their settings: adsb.py), else None."""
         h = self.held
         by = h.get("by") if h is not None else None
-        return by if by in ("dab", "ais") else None
+        return by if by in ("dab", "ais", "adsb") else None
 
     def _notch_view(self, lo: float, hi: float) -> dict:
         """`notches` in api/state and api/status: per switch the device has,
@@ -1002,7 +1012,36 @@ class Radio(Engine):
             else:
                 why, text = "band", _("out: tuned above 60 MHz or within MW or LW broadcasting")
             out["rf_notch"] = {"setting": setting, "in": bool(want.get("rf_notch")), "why": why, "text": text}
+        if self._dab_held() == "adsb":
+            for v in out.values():
+                v["why"], v["text"] = "adsb", _("out: ADS-B is listening at 1090 MHz")
         return out
+
+    def restart_at(self, fs: float | None) -> None:
+        """Reopen the radio with its device at `fs` S/s, or (None) at the
+        operator's own `sampleRate`, which is never changed: what Radio's
+        ADS-B does for a receiver whose filter at the operator's rate is
+        too narrow for Mode S (adsb.py). The device is closed and opened
+        again under the same broker claim (the server, not the engine, holds
+        that). A recording in progress ends, as any stop ends one. Never
+        from the radio's own threads: stop() joins them. If the device will
+        not open at `fs`, it is opened at the operator's rate again and the
+        DeviceError raised."""
+        with self.restart_lock:
+            self.restarting = True
+            try:
+                self.rate_override = fs
+                self.stop()
+                try:
+                    self.start()
+                except DeviceError:
+                    if fs is None:
+                        raise
+                    self.rate_override = None
+                    self.start()
+                    raise
+            finally:
+                self.restarting = False
 
     # ------------------------------------------------------------ broadcast gain
     # A DAB session holding the receiver, or wide FM, plays with a gain of
@@ -1019,7 +1058,7 @@ class Radio(Engine):
     def _broadcast_key(self):
         h = self.held
         if h is not None:
-            return (h["by"], h["session"]) if h.get("by") in ("dab", "ais") else None
+            return (h["by"], h["session"]) if h.get("by") in ("dab", "ais", "adsb") else None
         return ("wfm",) if self.st["mode"] == "wfm" else None
 
     def _broadcast_tick(self, now: float) -> None:
@@ -1044,10 +1083,11 @@ class Radio(Engine):
             count = ds.get("overloads")
             count = int(count) if isinstance(count, (int, float)) else None
             if bg.key != key or bg.wanted is None:
-                # AIS keeps the operator's gain until overload says
-                # otherwise (ais.py): a weak-signal service, not a multiplex.
+                # AIS and ADS-B keep the operator's gain until overload
+                # says otherwise (ais.py, adsb.py): weak-signal services,
+                # not a multiplex.
                 bg.begin(key, now, ds.get("gainModel") or "db", ds.get("rfgrRange"), float(s["rxGain"]),
-                         "overloaded" in ds or "overloads" in ds, from_operator=key[0] == "ais")
+                         "overloaded" in ds or "overloads" in ds, from_operator=key[0] in ("ais", "adsb"))
                 self.log.info("broadcast gain for %s: %g (the operator's %g; %s model, %s)", key[0], bg.gain,
                               bg.operator, bg.ladder.model, "backs off on overload" if bg.adaptive else "fixed")
             else:
@@ -1134,10 +1174,12 @@ class Radio(Engine):
                  "{rate:g} kS/s").format(least=wfm.WFM_RATE / 1000, device=self._kind(), rate=fs / 1000)
 
     def stop(self) -> None:
-        if self.running:
+        if self.running and not self.restarting:
             # The receiver back as it was while the radio still runs, so the
             # engine's own save on the way out writes the operator's dial.
+            # Not for restart_at's own reopen, which a session asked for.
             self.ais.end("radio_stopped")
+            self.adsb.end("radio_stopped")
         super().stop()
         self.map_tiles.save(force=True)
         self.pin = None
@@ -1253,6 +1295,10 @@ class Radio(Engine):
         lo, hi = self._notch_span()
         want = notch.wanted(self.st["dabNotch"], self.st["rfNotch"], lo, hi, dab_held=self._dab_held(),
                             overload_in=self.dab_auto.inn)
+        if self._dab_held() == "adsb":
+            # Both out while ADS-B holds the receiver, whatever their
+            # settings (adsb.py).
+            want = {k: False for k in want}
         # Only what changes: each switch is an Update of its own, and one
         # already where it should be needs none.
         had = getattr(dev, "notch_want", {})

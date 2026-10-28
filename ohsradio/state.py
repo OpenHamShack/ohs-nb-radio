@@ -297,6 +297,10 @@ with REG.after("scanIdleMinutes"):
 with REG.after("radioDnsLogos"):
     _k("aisKeepMinutes", "int", 60, "setting", lo=1, hi=1440, unit="min",
        help="How long a ship stays on the AIS map after it was last heard.")
+    # Aircraft on the same map (ohsradio/adsb.py), likewise only while a
+    # client has it open.
+    _k("adsbKeepMinutes", "int", 5, "setting", lo=1, hi=60, unit="min",
+       help="How long an aircraft stays on the ADS-B map after it was last heard.")
     _k("mapOnlineTiles", "bool", True, "setting",
        help="Show OpenStreetMap's map under the ships when Radio has internet: Radio fetches only the map "
             "pictures a screen is showing, keeps them for a while, and serves them itself, so no screen goes to "
@@ -353,6 +357,9 @@ with REG.after("txDial"):
                                       "the operator's gain stands; {} while none plays."),
         ("ais", "dict", {}, "The AIS session (ais.py): {state (idle, running), why, text, clients, startedAt, "
                             "endsInS, vessels, rev, frames, channelA, channelB, damaged, ...}; GET api/ais/session."),
+        ("adsb", "dict", {}, "The ADS-B session (adsb.py): {state (idle, running), why, text, clients, startedAt, "
+                             "endsInS, centreHz, rateHz, aircraft, rev, messages, df17, aircraftSeen, ...}; GET "
+                             "api/adsb/session."),
         ("rds", "dict", None, "Wide FM: the station's RDS as the receiver decoded it (shack_sdr), "
                               "{pi, ps, rt, pty, ptyName, ta, tp, ct, af, stereo, ts}; null until a station's "
                               "programme identification is heard, and again on every retune."),

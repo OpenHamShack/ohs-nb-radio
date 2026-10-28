@@ -266,7 +266,11 @@ class RtlSdrDevice(SourceDevice):
 
 class SdrplayDevice(SourceDevice):
     kind = source = "sdrplay"
-    RATES = (2_400_000.0,)
+    # 2.4 MS/s is the operator's (Settings offers no other). 6 MS/s only
+    # ever comes from Radio's ADS-B session (ohsradio/adsb.py), for the 5 MHz
+    # IF filter SDRplay's API takes at that rate (shack_sdr bw_for_rate):
+    # at 2.4 the 1.536 MHz filter cuts Mode S's bits away.
+    RATES = (2_400_000.0, 6_000_000.0)
     GR_RANGE = (20.0, 59.0)
     # The front-end notches Radio switches (ohsradio/notch.py); shack_sdr's
     # other two options, bias-T and HDR, are never touched (module

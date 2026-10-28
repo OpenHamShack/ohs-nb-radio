@@ -24,7 +24,9 @@ default, off. These two settings switch them:
   lower over the noise floor, and there were no overloads with it in or
   out - so on 2 m it cost 2.5 dB and bought nothing. (beta.7's rule put it
   in everywhere outside Band III.) Within 150-240 MHz, or while a DAB or
-  AIS session holds the receiver, it is always out.
+  AIS session holds the receiver, it is always out. While ADS-B holds it
+  (1090 MHz), both notches are out whatever their settings (Radio
+  _apply_notches; Brian's brief for ADS-B, 28/10/2026).
 - **`rfNotch`** (shack_sdr's `rf_notch`) is in only while the whole span
   lies below 60 MHz (`RF_AUTO_TOP`), and even there out while it touches
   the LW or MW broadcast bands (`AM_BANDS`). The one switch is both an FM
@@ -173,7 +175,7 @@ class DabAuto:
 
     def tick(self, now: float, over: bool, lo: float, hi: float, dab_held) -> bool:
         """True when the verdict changed. `dab_held`: what holds the
-        receiver where the notch must stay out - "dab", "ais" (Radio
+        receiver where the notch must stay out - "dab", "ais", "adsb" (Radio
         _dab_held), True for DAB - or nothing."""
         if dab_held or in_stopband(lo, hi):
             # Never in here, and what was seen elsewhere does not carry in.
@@ -182,10 +184,10 @@ class DabAuto:
             if self.inn:
                 self.inn, self.out_at, self.why = False, now, why
                 return True
-            if self.why in ("default", "clear", "stopband", "dab", "ais"):
+            if self.why in ("default", "clear", "stopband", "dab", "ais", "adsb"):
                 self.why = why
             return False
-        if self.why in ("stopband", "dab", "ais"):
+        if self.why in ("stopband", "dab", "ais", "adsb"):
             self.why = "default"
         if self._win is None:
             self._win = {"t": now, "over": False}
@@ -225,4 +227,6 @@ class DabAuto:
             return _("out: a DAB station is playing")
         if self.why == "ais":
             return _("out: AIS is listening at 162 MHz, inside this notch's stopband")
+        if self.why == "adsb":
+            return _("out: ADS-B is listening at 1090 MHz")
         return _("out: no overload seen")

@@ -1039,7 +1039,8 @@ class _Handler(BaseHTTPRequestHandler):
     REFUSAL_STATUS = {"bad_params": 400, "unknown_decoder": 404, "unknown_session": 404,
                       "decoder_unavailable": 409, "outside_span": 409, "receiver_busy": 409, "on_air": 409,
                       "span_pinned": 409, "bad_client": 400, "too_many_clients": 429,
-                      "rate_too_low": 409, "out_of_range": 409, "too_many_sessions": 429, "not_running": 503}
+                      "rate_too_low": 409, "out_of_range": 409, "too_many_sessions": 429, "not_running": 503,
+                      "device_error": 503}
 
     def get_decoders(self, who, q):
         d = self.srv.radio.decoders
@@ -1350,6 +1351,86 @@ class _Handler(BaseHTTPRequestHandler):
         v = a.table.vessel(mmsi)
         if v is None:
             self._error(404, _("No vessel {mmsi} has been heard lately").format(mmsi=mmsi), "unknown_vessel")
+            return
+        self._send(200, v)
+
+    # api/adsb (docs/SERVER-API.md "ADS-B"): Radio's aircraft, on the same
+    # map as its ships, shaped as api/ais is. NB has none and answers 404.
+    def _adsb(self):
+        a = getattr(self.srv.radio, "adsb", None)
+        if a is None:
+            self._error(404, _("This app has no ADS-B."), "not_found")
+        return a
+
+    def get_adsb_session(self, who, q):
+        a = self._adsb()
+        if a is not None:
+            self._send(200, a.view())
+
+    def post_adsb_session(self, who, q):
+        """POST api/adsb/session {"client": id[, "dropSessions": true]}: this
+        client has the aircraft map open - start ADS-B, or keep it running.
+        Again at least every leaseS seconds while the map is open. Starting
+        may reopen the radio at a faster rate (a second or two)."""
+        from ..decoders import Refused as DecoderRefused
+        a = self._adsb()
+        if a is None:
+            return
+        b = self._body()
+        if a.state != "running" and self.srv.digi.remote is not None:
+            # Armed, the next over would key wherever ADS-B had taken the
+            # receiver; the operator disarms first, as for AIS and DAB.
+            self._error(409, _("Not while automatic transmit is armed: switch it off first"), "on_air")
+            return
+        try:
+            view = a.join(b.get("client"), drop_sessions=b.get("dropSessions") is True)
+        except DecoderRefused as e:
+            more = {"sessions": e.sessions} if e.sessions is not None else {}
+            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+            return
+        self._send(200, view)
+
+    def delete_adsb_session(self, who, q):
+        """DELETE api/adsb/session?client=id: this client closed the map.
+        ?all=1: stop ADS-B now, whoever has the map open."""
+        a = self._adsb()
+        if a is None:
+            return
+        if q.get("all", [""])[0] in ("1", "true"):
+            a.end("stopped")
+            log.info("ADS-B stopped by %s", who.get("user", "?"))
+            self._send(200, a.view())
+            return
+        self._send(200, a.leave(q.get("client", [""])[0]))
+
+    def get_adsb_aircraft(self, who, q):
+        """GET api/adsb/aircraft[?since=rev]: every aircraft, or what changed."""
+        a = self._adsb()
+        if a is None:
+            return
+        try:
+            since = int(q["since"][0]) if "since" in q else None
+        except ValueError:
+            self._error(400, _("since must be a whole number"), "bad_params")
+            return
+        st = a.table.station
+        loc = self.srv.radio.state().get("locator") or ""
+        self._send(200, {**a.table.view(since), "session": a.view(),
+                         "keepMinutes": int(self.srv.radio.state().get("adsbKeepMinutes", 5)),
+                         "station": {"locator": loc or None, "lat": st[0] if st else None,
+                                     "lon": st[1] if st else None}})
+
+    def get_adsb_one(self, who, q):
+        a = self._adsb()
+        if a is None:
+            return
+        icao = self._session_id().upper()
+        if not re.match(r"^~?[0-9A-F]{6}$", icao):
+            self._error(400, _("An ICAO address is six hexadecimal digits"), "bad_params")
+            return
+        v = a.table.aircraft(icao)
+        if v is None:
+            self._error(404, _("No aircraft {icao} has been heard lately").format(icao=icao), "unknown_aircraft")
             return
         self._send(200, v)
 
@@ -1955,6 +2036,10 @@ ROUTES = {
     ("POST", "/api/ais/session"): ("control", _Handler.post_ais_session),
     ("DELETE", "/api/ais/session"): ("control", _Handler.delete_ais_session),
     ("GET", "/api/ais/vessels"): ("view", _Handler.get_ais_vessels),
+    ("GET", "/api/adsb/session"): ("view", _Handler.get_adsb_session),
+    ("POST", "/api/adsb/session"): ("control", _Handler.post_adsb_session),
+    ("DELETE", "/api/adsb/session"): ("control", _Handler.delete_adsb_session),
+    ("GET", "/api/adsb/aircraft"): ("view", _Handler.get_adsb_aircraft),
     ("GET", "/api/map/info"): ("view", _Handler.get_map_info),
     ("GET", "/api/map/land"): ("view", _Handler.get_map_land),
     ("POST", "/api/decoders/sessions"): ("control", _Handler.post_decoder_session),
@@ -1976,6 +2061,7 @@ ROUTES = {
 PREFIX_ROUTES = {
     ("GET", "/api/decoders/sessions/"): ("view", _Handler.get_decoder_session),
     ("GET", "/api/ais/vessels/"): ("view", _Handler.get_ais_vessel),
+    ("GET", "/api/adsb/aircraft/"): ("view", _Handler.get_adsb_one),
     ("GET", "/api/map/tiles/"): ("view", _Handler.get_map_tile),
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
     ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),

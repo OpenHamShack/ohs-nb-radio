@@ -1886,9 +1886,158 @@ Isle - real bursts on both channels, decoded like a ship's, positions every
 few seconds and names every half minute. Open the map with the radio on
 the simulator and they appear within a minute.
 
+## ADS-B (Radio)
+
+Aircraft on the same map as the ships (Brian, 28/10/2026). Radio decodes
+ADS-B - Mode S extended squitters on 1090 MHz, with what an aircraft's
+other replies add - **only while a client has the aircraft map open**,
+keeps a table of every aircraft it believes in, and serves it. Shaped
+exactly like "AIS" above: read that first; only the differences are
+spelled out here. Code `ohsradio/adsb.py` (and shack_sdr's `adsb`
+decoder); tests `tests/test_ham_adsb.py`. Receive only: nothing here keys.
+
+**The session.** `POST api/adsb/session {"client": "<id>"}` (control),
+again at least every `leaseS` (30) seconds while the map is open;
+`DELETE api/adsb/session?client=<id>` closing it; `DELETE
+api/adsb/session?all=1` (control) to end it at once. It ends `lingerS`
+(60 s) after the last client, and the receiver goes back exactly as it
+was. A client with both maps open runs one session or the other, never
+both: each holds the whole receiver, so starting ADS-B while AIS runs is
+`409 receiver_busy` (and the reverse).
+
+**The receiver.** While it runs ADS-B holds the receiver like AIS:
+`rxOwner` is `{"by": "adsb", "session": "adsb", "block": "ADS-B",
+"freqHz": 1090000000, ...}`; a tune or key-up is refused `409
+receiver_busy` ("The receiver is listening to ADS-B for the aircraft map:
+close the map, or stop ADS-B, to tune or change mode"). The receiver's
+centre is **1090.000 MHz exactly** (no dial offset), so all of Mode S's
+2 MHz is in the band.
+
+**The rate.** Mode S needs a wide IF filter: an SDRplay RSP filters to
+1.536 MHz below 5 MS/s, which cuts Mode S away (a real capture at 2.4
+MS/s gave no ADS-B message at all: shack_sdr README, ADS-B). So the
+session **reopens an RSP at 6 MS/s** (5 MHz filter), and any other
+receiver at 2.4 MS/s if it runs slower (an RTL-SDR at 2.4 is what
+dump1090 uses); a Hermes-Lite 2 cannot (`409 rate_too_low`). The reopen
+closes and opens the device under the same broker claim, takes a second
+or two (the POST answers when ADS-B is listening at 1090 MHz), and ends a
+recording in progress; when the session ends the radio is reopened at the
+operator's own `sampleRate`, which is never changed. `rateHz` in the
+session view says the rate it runs at. A recording started while ADS-B
+holds the receiver (`POST api/recordings/start {"kind": "iq"}`) is at that
+rate and centre, and its SigMF says so.
+
+Every answer of the session routes is the session view (also `adsb` in
+`api/state` and `api/status`, and `session` items on the feed):
+
+```json
+{"state": "running", "why": null, "text": "Listening to ADS-B on 1090 MHz",
+ "clients": 1, "startedAt": "2026-10-28T09:20:31Z", "endsInS": null,
+ "centreHz": 1090000000.0, "rateHz": 6000000.0, "leaseS": 30.0, "lingerS": 60.0,
+ "aircraft": 6, "rev": 412, "messages": 1525, "df17": 1135, "aircraftSeen": 6}
+```
+
+- `state`, `why`, `text`, `clients`, `endsInS` as AIS's. `messages`: Mode
+  S messages that passed their parity this session (`df17` of them
+  extended squitters); `aircraftSeen`: aircraft that came onto the map.
+- **Refusals** as AIS's (`400 bad_client`, `409 span_pinned` with
+  `sessions` and `dropSessions`, `409 receiver_busy`, `409 on_air`, `409
+  decoder_unavailable`, `429 too_many_clients`, `503 not_running` "Start
+  the radio to see aircraft"), and `409 rate_too_low` (this receiver
+  cannot run at 2.4 MS/s) and `503 device_error` (the receiver would not
+  open at the faster rate; it is back at the operator's rate). Every one
+  is refused before the radio is reopened. A view-level client may read
+  the table but not start ADS-B.
+- **Gain and notches:** the operator's gain stands unless the receiver
+  reports overload (as AIS); both RSP notches are out while ADS-B runs,
+  whatever their settings (`notches.*.why: "adsb"`).
+
+**What is shown.** An aircraft appears only once the decoder believes in
+it: an address confirmed by two extended squitters whose parity is
+exact, a position from an even/odd pair that the next position confirms,
+within 500 km of the station (the station profile's locator), and nothing
+impossible (over 1000 kn, an impossible jump). Expect the first aircraft
+a few seconds after the map opens, not the first second. Real air sends
+far more noise than aircraft through any decoder; this is why nothing
+invented appears.
+
+**The aircraft.** `GET api/adsb/aircraft` (view):
+
+```json
+{"rev": 412, "full": true, "removed": [], "keepMinutes": 5,
+ "station": {"locator": "IO75RL", "lat": 55.479, "lon": -4.542},
+ "session": {...the session view...},
+ "aircraft": [{"icao": "F00202", "source": "adsb", "callsign": "SIM202",
+               "category": "A5", "categoryText": "Heavy aircraft",
+               "squawk": "4521", "emergency": "none", "emergencyText": null,
+               "lat": 55.47402, "lon": -4.34406, "positionAt": "2026-10-28T09:21:04Z",
+               "altBaro": 37000, "altGeo": 37175, "groundSpeed": 459.8, "track": 286.4,
+               "heading": null, "airspeed": null, "airspeedType": null,
+               "verticalRate": 0, "verticalRateSource": "baro", "onGround": false,
+               "adsbVersion": 2, "distanceKm": 12.47, "bearingDeg": 92.5,
+               "lastHeard": "2026-10-28T09:21:04Z", "lastHeardTs": 1793178064.4,
+               "firstHeard": "2026-10-28T09:20:35Z", "messages": 37, "rssiDb": -35.8,
+               "rev": 410}]}
+```
+
+- One entry per ICAO address (six hex digits; a `~` first for an
+  anonymous or TIS-B address), **nearest first**. A field is `null` until
+  heard: an aircraft's callsign comes every five seconds or so, so it may
+  appear first as its address.
+- Units: degrees (`lat` north, `lon` east), feet (`altBaro`, barometric;
+  `altGeo`, GNSS height), knots (`groundSpeed`, `airspeed`), degrees true
+  (`track`, over the ground; `heading`, where the aircraft points, sent
+  with an air speed), feet a minute (`verticalRate`, `verticalRateSource`
+  `baro` or `geo`). `airspeedType`: `ias` or `tas`. `onGround`: from
+  surface positions and the replies' flight status.
+- `category`: DO-260B's emitter category ("A1" light ... "A5" heavy, "A7"
+  rotorcraft, "B1" glider, "C1" emergency vehicle on the ground, ...;
+  `categoryText` in the server's language) - for the symbol.
+- `squawk`: the Mode A code. `emergency`: `none`, `general`, `lifeguard`,
+  `minfuel`, `nordo`, `unlawful`, `downed` - from the aircraft's own
+  emergency report or its squawk (7500, 7600, 7700); `emergencyText` in
+  words, `null` for none. **Show an emergency unmistakably.**
+- `source`: `adsb`, `adsr` (rebroadcast) or `tisb` (radar, rebroadcast).
+- `rssiDb`: its signal, dB full scale; `messages`: how many it has sent us.
+- `distanceKm`, `bearingDeg` as AIS's.
+- An aircraft not heard for `adsbKeepMinutes` (a setting, 1-60, default
+  5) is dropped. **The table is not kept over a restart**, unlike the
+  vessels': aircraft move on in minutes.
+
+**Keeping up** exactly as AIS: `GET api/adsb/aircraft?since=<rev>` answers
+what changed after it (`aircraft`) and what was dropped (`removed`, ICAO
+addresses), `full: false`. Live, `GET api/events?kinds=adsb` (not in the
+default set) sends:
+
+- `{"kind": "adsb", "type": "aircraft", "rev", "aircraft": {...as above}}`
+  - an aircraft's whole entry, at most once a second each.
+- `{"kind": "adsb", "type": "removed", "rev", "icao"}` - dropped by age.
+- `{"kind": "adsb", "type": "session", "session": {...}}`.
+
+`GET api/adsb/aircraft/{icao}` (view): one aircraft as above plus
+`track`, its recent positions oldest first, `[{"t", "lat", "lon",
+"altBaro", "groundSpeed", "track"}]` - a point when it has moved 500 m or
+10 s have passed, the last 240. `404 unknown_aircraft` when it is not in
+the table; `400 bad_params` for something that is not an address.
+
+**The map** is the same `api/map/*` as the ships' (below): draw aircraft
+over it by `lat`/`lon`, rotated by `track`.
+
+Simulator: Radio's simulator puts six fictional aircraft (addresses
+F000xx, callsigns SIM...) around Glasgow Prestwick
+(`ohsradio/devices/simadsb.py`): a jet on approach to runway 30, a heavy
+overflying at FL370, a light aircraft in the circuit, a departure from
+Glasgow climbing south-west, a helicopter over the Firth of Clyde, and an
+aircraft taxiing on Prestwick's apron - real Mode S replies, keyed by
+shack_sdr's transmitter, earned by the decoder like any aircraft. Open
+the map with the radio on the simulator and they appear within seconds.
+
+**Not done:** MLAT, ACARS and VDL2; Comm-B contents (an aircraft's
+selected altitude, heading and so on, in DF20/21).
+
 ## Map (Radio)
 
-What to draw the ships on: **land that is always there**, bundled with
+What to draw the ships and aircraft on: **land that is always there**, bundled with
 Radio, and **OpenStreetMap's map** when the controller has internet,
 fetched and cached by Radio and served through its own route - the client
 never touches the internet. Code `ohsradio/mapdata.py`; data
