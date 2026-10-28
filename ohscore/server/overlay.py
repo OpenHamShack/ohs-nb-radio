@@ -12,8 +12,8 @@ Layers, and where each comes from:
 
 | layer | kind | source |
 |---|---|---|
-| band | segment | shack_bandplan's plan in force for the station profile (the same context the transmit guard judges with, txguard.GUARD) |
-| dial | dial, passband, tx | the radio's state: the dial, the passband the scopes draw (dsp.demod.passband), the transmit dial while keyed |
+| band | segment | the plan in force for the station profile (txguard.GUARD's shack_bandplan context) |
+| dial | dial, passband, tx | the state: the dial, the passband the scopes draw, the transmit dial when keyed |
 | channels | channel | Radio's local frequencies (api/local-frequencies), all but the beacons |
 | beacons | beacon | the NCDXF/IARU beacons in the same list (its `beacon` category) |
 | stations | station | the band scan's FM and DAB lists (api/fm/stations, api/dab/stations) |
@@ -171,7 +171,8 @@ class Overlay:
             detail = " · ".join(x for x in (e.get("sub") or "", e.get("notes") or "") if x)
             out.append(_item("lf:" + e["id"], "beacon" if beacon else "channel", "beacons" if beacon else "channels",
                              f, f, e["name"], source="local-frequencies:" + e.get("source", ""), detail=detail,
-                             role=("beacon." if beacon else "channel.") + _role_part(cat),
+                             role="beacon." + _role_part(e.get("source") or cat) if beacon
+                             else "channel." + _role_part(cat),
                              actions=[_tune(f, e["mode"])]))
         return out
 

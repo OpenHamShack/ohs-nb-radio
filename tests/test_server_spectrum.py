@@ -383,7 +383,7 @@ class RadioSpectrum(unittest.TestCase):
         # The NCDXF beacons are the beacons layer, not channels.
         s, a = self.req("GET", "/api/overlay/v1?loHz=14000000&hiHz=14350000")
         b = [i for i in a["items"] if i["id"] == "lf:ncdxf:20m:14100000"]
-        self.assertEqual([(i["kind"], i["layer"]) for i in b], [("beacon", "beacons")])
+        self.assertEqual([(i["kind"], i["layer"], i["role"]) for i in b], [("beacon", "beacons", "beacon.ncdxf")])
         # A radio that has never run has no span to default to.
         for q in ("", "?loHz=2&hiHz=1", "?loHz=x&hiHz=1"):
             s, a = self.req("GET", "/api/overlay/v1" + q)
