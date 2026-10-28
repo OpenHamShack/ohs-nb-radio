@@ -50,8 +50,8 @@ import numpy as np
 from ..engine import ReceiverHeld, SpanPinned, TxRefused
 from ..padactions import PAD_TX_ACTIONS
 from ..i18n.text import _
-from .. import smeter_cal
-from . import shack, ws
+from .. import shacklibs, smeter_cal
+from . import overlay, shack, spectrum, ws
 from .audio import CHANNELS, MIC_FORMAT
 from .autotx import AutoTx, Refused
 from .recording import server_recordings
@@ -225,6 +225,11 @@ class Server:
             scan.listeners = audio.listeners
             scan.probes.append(self._scan_busy)
         audio.on_listen = lambda: radio.client_activity("listener")
+        # spectrum/1 and overlay/1 (spectrum.py, overlay.py): the client
+        # count and per-stream levels every socket shares, and the
+        # overlay's sources.
+        self.spectrum = spectrum.Shared()
+        self.overlay = overlay.Overlay(radio)
 
     def _scan_busy(self) -> str:
         """The band scan's reasons to wait that only the server knows."""
@@ -1865,6 +1870,62 @@ class _Handler(BaseHTTPRequestHandler):
                 radio.unsubscribe(f)
             sock.close()
 
+    def ws_spectrum(self, who, q):
+        """spectrum/1 and overlay/1 on one WebSocket (spectrum.py; SERVER-API
+        "spectrum/1"). The old wide/zoom on api/events are untouched."""
+        try:
+            shacklibs.spectrum()
+        except shacklibs.SharedLibraryMissing as e:
+            # A desktop build run with --server (recording.py NoRecordings
+            # says why it carries no server-only library).
+            self._error(503, _("The spectrum feed is not available in this installation: {why}").format(why=e),
+                        "spectrum_unavailable")
+            return
+        if not ws.handshake(self):
+            return
+        sock = ws.Socket(self.rfile, self.wfile)
+        shared = self.srv.spectrum
+        if not shared.join():
+            # The ninth client (§2.4): told why, as a text frame on the
+            # socket it opened, then closed (1013, try again later).
+            try:
+                sock.send_text(json.dumps({"type": "error", "code": "busy", "message": _(
+                    "{app} already serves {n} spectrum clients; try again when one has gone.").format(
+                    app=self.srv.info.name, n=spectrum.MAX_CLIENTS)}))
+            except (OSError, ConnectionError):
+                pass
+            sock.close(1013)
+            return
+        try:
+            spectrum.Session(self.srv.radio, sock, shared, self.srv.overlay).run()
+        except (OSError, ConnectionError):
+            pass
+        finally:
+            shared.leave()
+            sock.close()
+
+    def get_overlay(self, who, q):
+        """overlay/1's snapshot over HTTP (CLIENT-UI-PLAN §3.1): the same
+        message the socket sends on subscribe, for loHz..hiHz (default the
+        wide scope's span) plus half a span either side."""
+        try:
+            lo = float(q["loHz"][0]) if q.get("loHz") else None
+            hi = float(q["hiHz"][0]) if q.get("hiHz") else None
+        except ValueError:
+            lo = hi = -1.0
+        if lo is None and hi is None:
+            try:
+                lo, hi = self.srv.radio.wide_span()
+            except (AttributeError, TypeError):
+                lo = hi = None          # the radio has never started: no span yet
+        if lo is None or hi is None or not (0 <= lo < hi):
+            self._error(400, _("loHz and hiHz must be frequencies in Hz, loHz below hiHz."), "bad_range")
+            return
+        # dumps without with_urls: an item's action paths stay paths, as on
+        # the socket (overlay.py).
+        self._send(200, dumps({"type": "overlay", "rev": 0, "op": "snapshot",
+                               "items": self.srv.overlay.items(lo, hi)}))
+
     def get_audio_rx(self, who, q):
         """Receive audio as raw PCM over a long-lived response, its format
         in the headers (GUIDE 2: announced up front). Mono unless the
@@ -2031,6 +2092,8 @@ ROUTES = {
     ("POST", "/api/log"): ("control", _Handler.post_log),
     ("GET", "/api/log.adi"): ("view", _Handler.get_adif),
     ("GET", "/api/events"): ("view", _Handler.ws_events),
+    ("GET", "/api/spectrum/v1"): ("view", _Handler.ws_spectrum),
+    ("GET", "/api/overlay/v1"): ("view", _Handler.get_overlay),
     ("GET", "/api/audio/rx"): ("view", _Handler.get_audio_rx),
     ("GET", "/api/audio/tx"): ("transmit", _Handler.ws_audio_tx),
     ("GET", "/api/shack/busy"): ("view", _Handler.get_shack_busy),
