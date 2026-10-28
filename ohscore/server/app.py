@@ -1078,8 +1078,14 @@ class _Handler(BaseHTTPRequestHandler):
 
     def post_decoder_session_params(self, who, q):
         """POST api/decoders/sessions/{id} {"params": {...}}: change a
-        running session live (DAB's service)."""
+        running session live (DAB's service). And POST
+        api/decoders/sessions/{id}/listen {"listen": true|false}: hear the
+        session instead of the demodulator, or the demodulator again."""
         from ..decoders import Refused as DecoderRefused
+        parts = urlsplit(self.path).path.rstrip("/").split("/")
+        if parts[-1] == "listen" and len(parts) >= 2:
+            self._listen(who, parts[-2])
+            return
         b = self._body()
         params = b.get("params")
         if not isinstance(params, dict):
@@ -1092,6 +1098,21 @@ class _Handler(BaseHTTPRequestHandler):
             self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code)
             return
         log.info("decoder session %s set by %s: %s", sid, who.get("user", "?"), params)
+        self._send(200, sess)
+
+    def _listen(self, who, sid: str) -> None:
+        from ..decoders import Refused as DecoderRefused
+        on = self._body().get("listen", True)
+        if not isinstance(on, bool):
+            self._error(400, _("listen is true or false"), "bad_params")
+            return
+        try:
+            sess = self.srv.radio.decoders.listen(sid, on)
+        except DecoderRefused as e:
+            self._error(404 if e.code == "unknown_session" else 409, str(e), e.code)
+            return
+        log.info("decoder session %s %s by %s", sid, "listened to" if on else "no longer listened to",
+                 who.get("user", "?"))
         self._send(200, sess)
 
     def _session_id(self) -> str:

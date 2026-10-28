@@ -1813,7 +1813,15 @@ class Engine:
             # the decoders below get `audio` as demodulated - they do better
             # on the raw passband than on audio a gain mask has worked on.
             heard = self._rx_heard(self.nr(audio, self.demod.gain))
-            if not (s["mode"] == "freedv" and self.decoder is not None):
+            listened = self.decoders.listened()
+            if listened is not None:
+                # A decoder session listened to (DMR's voice): its sound
+                # instead of the demodulator's, as a held session's is.
+                sound = self.decoders.listen_audio(len(audio) / AUDIO_RATE, self.OUT_RATE)
+                if sound is not None:
+                    with self.play_lock:
+                        self.audio.play(sound * np.float32(vol))
+            elif not (s["mode"] == "freedv" and self.decoder is not None):
                 # At OUT_RATE: the demodulator's own (wide FM's 48 kHz, never
                 # through 12 kHz and back) or this block brought up to it.
                 hi = self.heard_hi if self.heard_hi is not None else self._to_out(heard, self.out_up)

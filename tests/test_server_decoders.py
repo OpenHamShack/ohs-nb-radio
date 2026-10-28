@@ -7,7 +7,8 @@ rescan, the `decoder` events on api/events, and decoders in api/status.
 Then milestone 2's: a PSK session's several channels (skipped while the
 Rust PSK decoder is switched off, ohscore/sdr.py; then psk is not offered),
 and an SSTV session's picture - its rows on api/events as base64, the PNG on
-api/decoders/files."""
+api/decoders/files. And `listen`: a DMR session on the simulated repeater
+put on api/audio/rx in place of the demodulator, its levels and refusals."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import json
 import tempfile
@@ -284,6 +285,37 @@ class PskAndSstvApi(test_server.ServerTest):
         self.assertEqual([x["name"] for x in files["files"]], [done["file"]])
         s, png2 = self.req("GET", f"/api/decoders/files/{done['file']}?download=1", level="view")
         self.assertEqual((s, png2), (200, png))
+
+    @unittest.skipUnless(sdr.load() is not None and any(e["id"] == "dmr" for e in sdr.load().catalogue()),
+                         "no shack_sdr with DMR for this machine")
+    def test_listen_puts_a_session_on_the_receive_audio(self):
+        from ohsradio.devices import simdmr
+        self.radio.set(vfo=simdmr.FREQ, mode="fm")
+        s, dmr = self.req("POST", "/api/decoders/sessions", {"decoder": "dmr", "freqHz": simdmr.FREQ},
+                          level="control")
+        self.assertEqual(s, 201, dmr)
+        self.assertEqual((dmr["panel"], dmr["listening"]), ("slots", False))
+        path = f"/api/decoders/sessions/{dmr['id']}/listen"
+        s, a = self.req("POST", path, {"listen": True}, level="view")
+        self.assertEqual((s, a["needs"]), (403, "control"))
+        s, a = self.req("POST", path, {"listen": "yes"}, level="control")
+        self.assertEqual((s, a["code"]), (400, "bad_params"))
+        s, a = self.req("POST", "/api/decoders/sessions/ds_none/listen", {"listen": True}, level="control")
+        self.assertEqual((s, a["code"]), (404, "unknown_session"))
+        s, rtty = self.req("POST", "/api/decoders/sessions", {"decoder": "rtty", "freqHz": simdmr.FREQ + 50_000},
+                           level="control")
+        s, a = self.req("POST", f"/api/decoders/sessions/{rtty['id']}/listen", {"listen": True}, level="control")
+        self.assertEqual((s, a["code"]), (409, "no_audio"))
+        s, a = self.req("POST", path, {"listen": True}, level="control")
+        self.assertEqual((s, a["listening"]), (200, True))
+        st = self.req("GET", "/api/status", level="view")[1]["decoders"]
+        self.assertEqual(st["listening"], dmr["id"])
+        s, sessions = self.req("GET", "/api/decoders", level="view")
+        self.assertEqual({x["id"]: x["listening"] for x in sessions["sessions"]},
+                         {dmr["id"]: True, rtty["id"]: False})
+        s, a = self.req("POST", path, {"listen": False}, level="control")
+        self.assertEqual((s, a["listening"]), (200, False))
+        self.assertIsNone(self.req("GET", "/api/status", level="view")[1]["decoders"]["listening"])
 
 
 if __name__ == "__main__":

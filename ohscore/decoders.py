@@ -90,6 +90,16 @@ made beyond decoderFilesKeep are deleted (prune_files). Pictures from
 before the host named them (sstv.py's sstv_<mode>_NNNN.png) are the
 operator's to delete: they are listed, never pruned.
 
+**Listening to a session** (RADIO-SDR-PLAN §4.4 `listen`, built with DMR,
+28/10/2026). A fixed session whose decoder makes sound (DMR's voice) can
+be listened to: its sound then replaces the demodulator's on the ordinary
+receive audio at the app's rate, exactly as a held session's does, so
+every listener and every recording hears it with no new path. One session
+at a time; another chosen takes over, `listen(sid, False)` or stopping it
+gives the demodulator back. What its ring had queued before is dropped, so
+the voice is heard live, not seconds late. Never saved: after a restart
+the radio is heard, not a decoder the operator had forgotten.
+
 **A session that is fed but decodes nothing says so.** The supervisor
 compares each session's `fed` and `dropped` over STARVED_S: when the host
 dropped nearly all of it the session's `why` is `decoder_behind` (the
@@ -168,6 +178,8 @@ def _why_text(code: str | None) -> str:
         "fic_errors": _("DAB heard, but too weak to read the station list."),
         "service_not_found": _("This station is not on this block."),
         "needs_codec:faad2": faad2_sentence(),
+        "needs_codec:mbelib": mbelib_sentence(),
+        "no_audio": _("This decoder makes no sound to listen to."),
         "codec_config": _("faad2 could not play this station's sound."),
         "codec_open": _("faad2 could not play this station's sound."),
         "unsupported_protection": _("This station uses a coding Radio cannot read."),
@@ -189,6 +201,19 @@ def faad2_sentence() -> str:
         return _("Needs faad2: ask your controller's administrator to install it (Controller › Optional "
                  "libraries) to hear DAB+ stations.")
     return _("Needs faad2: install it to hear DAB+ stations. Radio never includes it: see Help › Codecs.")
+
+
+def mbelib_sentence() -> str:
+    """Why a DMR call is silent without mbelib, for where this runs (as
+    faad2_sentence). Everything else - the IDs, talkgroup, talker alias,
+    messages - decodes without it."""
+    if hostlibs.controller_too_old():
+        return hostlibs.update_sentence()
+    if host.STORE:
+        return _("Calls are shown, but their voice needs mbelib: ask your controller's administrator to install "
+                 "it (Controller › Optional libraries).")
+    return _("Calls are shown, but their voice needs mbelib: install it to hear them. Radio never includes it: "
+             "see Help › Codecs.")
 
 
 class Refused(ValueError):
@@ -272,6 +297,8 @@ class Decoders:
         self._vfo_watch: collections.deque = collections.deque()
         self._vfo_starved: str | None = None
         self._watch_due = 0.0
+        # The session listened to instead of the demodulator (docstring).
+        self.listening: str | None = None
 
     # ------------------------------------------------------------ lifecycle
     def open(self, realtime: bool = True) -> None:
@@ -298,6 +325,7 @@ class Decoders:
             fixed = list(self.fixed.values())
             self.fixed.clear()
             self.vfo = None
+            self.listening = None
         # The first codec scan (scan_codecs_later) writes its probe cache
         # into the data folder: let it finish, within a second, so nothing
         # is written there after the radio has stopped.
@@ -603,6 +631,8 @@ class Decoders:
     def stop(self, sid: str) -> bool:
         with self.lock:
             f = self.fixed.pop(sid, None)
+            if self.listening == sid:
+                self.listening = None
         if f is None:
             return False
         if f.held:
@@ -633,6 +663,43 @@ class Decoders:
         if f is None or not f.held:
             return {}
         return self._status_of(f.id, f.host).get("stats") or {}
+
+    def listen(self, sid: str, on: bool = True) -> dict:
+        """Hear session `sid` instead of the demodulator (on), or the
+        demodulator again (off). Raises Refused unknown_session, or
+        no_audio for a decoder that makes no sound. The session's view."""
+        with self.lock:
+            f = self.fixed.get(sid)
+            if f is None:
+                raise Refused("unknown_session", _("There is no decoder session called {id}").format(id=sid))
+            if on and "audio" not in f.outputs:
+                raise Refused("no_audio", _("{decoder} makes no sound to listen to")
+                              .format(decoder=f.decoder.upper()))
+            if on and f.held:
+                on = False          # it is already what is heard
+            was, self.listening = self.listening, (sid if on else (None if self.listening == sid else self.listening))
+        if on and was != sid and f.host is not None:
+            # What the ring queued before is old: drop it, so it is live.
+            try:
+                f.host.audio(sid, max_s=60.0)
+            except Exception:  # noqa: BLE001 - gone since: nothing to drop
+                pass
+            f.dry = 0.0
+        if was != self.listening:
+            log.info("listening to %s", f"decoder session {self.listening}" if self.listening else "the radio")
+            self._publish_status()
+        return self._view(f)
+
+    def listened(self) -> _Fixed | None:
+        """The session listened to, if it still runs."""
+        with self.lock:
+            return self.fixed.get(self.listening) if self.listening else None
+
+    def listen_audio(self, block_s: float, rate: int) -> np.ndarray | None:
+        """The receive thread: the listened session's sound since the last
+        block at `rate`, as held_audio gives a held session's."""
+        f = self.listened()
+        return self._sound(f, block_s, rate) if f is not None else None
 
     def background(self) -> list[_Fixed]:
         """The sessions that pin the span: fixed ones on frequencies of
@@ -822,7 +889,7 @@ class Decoders:
             n = len(self.fixed) + (1 if self.vfo is not None else 0)
             missing = None if self._codecs is None else [c["id"] for c in self._codecs if c["state"] != "found"]
         return {"available": sdr.available(), "sessions": n, "cpuMax": self.limits()["cpuMax"],
-                "codecsMissing": missing}
+                "codecsMissing": missing, "listening": self.listening}
 
     # ------------------------------------------------------------ the engine's threads
     def rx(self, X: np.ndarray, starts: np.ndarray, utc: float) -> None:
@@ -904,7 +971,11 @@ class Decoders:
         at `rate`, mono (n,) or stereo (n, 2) as it was made; silence for the
         block once it has given none for DRY_S; None for a block to pass
         over without playing (its sound is in the next one)."""
-        f = self._held()
+        return self._sound(self._held(), block_s, rate)
+
+    def _sound(self, f: _Fixed | None, block_s: float, rate: int) -> np.ndarray | None:
+        """A session's sound for one block of the receive thread (held_audio,
+        listen_audio)."""
         host = f.host if f is not None else None
         if host is None:
             return None
@@ -1101,7 +1172,7 @@ class Decoders:
         state, why = _starved_view(state, why, f.starved)
         view = {"id": f.id, "decoder": f.decoder, "freqHz": f.freq, "params": dict(f.params), "state": state,
                 "why": why, "whyText": _why_text(why), "since": _iso(st.get("since")), "rev": st.get("rev", 0),
-                "stats": _stats(stats), "panel": f.panel}
+                "stats": _stats(stats), "panel": f.panel, "listening": self.listening == f.id}
         if f.held:
             view.update(holdsReceiver=True, block=f.block)
         if f.held or f.panel == "meta" or "meta" in f.outputs:
