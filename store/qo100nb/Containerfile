@@ -43,13 +43,13 @@ COPY tools/vendor/ /tmp/vendor/
 RUN cd /tmp/vendor \
     && site="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
     && mkdir -p "$site" \
-    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec; do \
+    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec shack_spectrum; do \
          f="$(ls ${w}-*.whl)"; \
          want="$(sed -n "s/^$(echo $w | tr _ -)==.*--hash=sha256:\([0-9a-f]*\).*/\1/p" requirements.lock)"; \
          echo "$want  $f" | sha256sum -c - || exit 1; \
          python3 -m zipfile -e "$f" "$site"; \
        done \
-    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec; shack_bandplan.load()" \
+    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum; shack_bandplan.load()" \
     && arch="$(uname -m)" \
     && f="$(ls shack_sdr-*-manylinux_*_${arch}.whl)" \
     && want="$(sed -n "s/^shack-sdr==.*--hash=sha256:\([0-9a-f]*\).*_${arch}$/\1/p" shack-sdr.lock)" \

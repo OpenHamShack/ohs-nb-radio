@@ -46,9 +46,15 @@
 # unzipping each and searching its strings).
 # No behaviour change, so every wheel's files are otherwise identical to
 # the ones they replace.
+# shack-spectrum, new, built as ~/ohs-libs tools/build.sh builds, from
+# ohs-libs main f9809f2: the server encoder for spectrum/1 (CLIENT-UI-PLAN.md
+# §2) - the binary row, per-client decimation, the levels window and
+# latest-wins sending - for api/spectrum/v1. Like shack-rec only the store
+# form's server uses it, so only the store images carry it.
 shack-rec==0.1.0 --hash=sha256:fb8807781161f72b5768c685ca805d6eb14b983a6ec468b6744cf6f65ad8ec82
 shack-cw==0.1.0 --hash=sha256:458f3fa9f3f83dfda0031dbce453f40f89d95ae21a2716c7e005db04f52a877f
 shack-bandplan==0.1.0 --hash=sha256:591a1cb85f3ecd64af5d5c5f198d9aa47696436c9ee72fa66b106c16c75cc44d
 shack-client==0.1.0 --hash=sha256:3a7c9985151ec2c4c2fba253eb4f83ada065cc112675b7bdf8ee4145c0683b32
 shack-pad==0.1.0 --hash=sha256:682b9b3e69e371f9b146d7573589d94cbb2ea92d3ee7d156da4149326a156724
 shack-i18n==0.1.0 --hash=sha256:856e39f6ab83ffc8290975d791091678aa44c332f96ecec2576540f8fedb00e5
+shack-spectrum==0.2.0 --hash=sha256:c7730cabfc50926bc8a1699ec998c7031170d22278dd482f2d568ad0def51cc6
