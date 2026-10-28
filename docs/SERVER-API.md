@@ -1920,15 +1920,27 @@ session **reopens an RSP at 6 MS/s** (5 MHz filter), and any other
 receiver at 2.4 MS/s if it runs slower (an RTL-SDR at 2.4 is what
 dump1090 uses); a Hermes-Lite 2 cannot (`409 rate_too_low`). The reopen
 closes and opens the device under the same broker claim, takes a second
-or two (the POST answers when ADS-B is listening at 1090 MHz), and ends a
-recording in progress; when the session ends the radio is reopened at the
-operator's own `sampleRate`, which is never changed. `rateHz` in the
-session view says the rate it runs at. A recording started while ADS-B
-holds the receiver (`POST api/recordings/start {"kind": "iq"}`) is at that
-rate and centre, and its SigMF says so.
+or two, and ends a recording in progress; when the session ends the radio
+is reopened at the operator's own `sampleRate`, which is never changed.
+A device the driver has not yet given back (an RSP the SDRplay service is
+still releasing) is asked for again after 0.5, 1, 2, 4 and 8 s before the
+reopen fails. The POST answers only when the device itself is at 1090 MHz
+at the session's rate and its samples are from there, and `deviceStatus`
+in `api/state` already says so. `rateHz` in the session view says the
+rate it runs at. A recording started while ADS-B holds the receiver
+(`POST api/recordings/start {"kind": "iq"}`) is at that rate and centre,
+and is named and described as ADS-B, not by the operator's mode from
+before: `...-1090.000MHz-ADS-B`, `core:description` "1090.000000 MHz
+ADS-B", `openhamshack:receive.mode` "ads-b", and `openhamshack:service`
+`{"kind": "adsb", "mode": "ADS-B", "freqHz"}` (never
+`openhamshack:broadcast`, which is DAB's and wide FM's). An AIS session's
+recordings likewise say AIS. At 6 MS/s an IQ recording is 24 MB/s.
 
 Every answer of the session routes is the session view (also `adsb` in
-`api/state` and `api/status`, and `session` items on the feed):
+`api/state` and `api/status`, and `session` items on the feed). It is
+always there in Radio, idle or not: after the radio stops it says
+`"state": "idle", "why": "radio_stopped"`; `GET api/adsb/session` answers
+it whether the radio runs or not:
 
 ```json
 {"state": "running", "why": null, "text": "Listening to ADS-B on 1090 MHz",

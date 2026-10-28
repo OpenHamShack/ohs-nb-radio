@@ -316,6 +316,26 @@ class Reopening(unittest.TestCase):
         self.assertEqual((ds.get("rxLo", ds.get("rxIf")), ds["fs"]), (1_090_000_000.0, 6_000_000.0))
         self.assertEqual((r.dev.rx_if, r.geo.fs), (1_090_000_000.0, 6_000_000.0))
 
+    def test_a_recording_is_named_and_described_as_what_is_held(self):
+        r = self.radio()
+        for join, end, mode in ((r.adsb.join, r.adsb.end, "ADS-B"), (r.ais.join, r.ais.end, "AIS")):
+            join("tv-1")
+            path = r.start_recording(folder=Path(r._tmp.name) / "rec")
+            self.assertTrue(wait(r, lambda: r.rec is not None and r.rec.written > 0, 10))
+            r.stop_recording()
+            meta = path.with_suffix(".sigmf-meta") if path.suffix == ".sigmf-data" else \
+                Path(str(path) + ".sigmf-meta")
+            self.assertTrue(wait(r, lambda: meta.exists() and not r.rec_closing, 10), meta)
+            g = json.loads(meta.read_text())["global"]
+            self.assertTrue(meta.name.endswith(f"MHz-{mode}.sigmf-meta"), meta.name)
+            self.assertIn(f"MHz {mode}", g["core:description"])
+            self.assertEqual(g["openhamshack:receive"]["mode"], mode.lower())
+            self.assertEqual(g["openhamshack:service"]["kind"], mode.lower().replace("-", ""))
+            self.assertNotIn("openhamshack:broadcast", g)
+            end("stopped")
+            self.assertTrue(wait(r, lambda: r.running and r.geo.fs == 2_400_000.0 and not r.restarting, 30))
+
+
 @unittest.skipUnless(has_adsb(), "no shack_sdr with ADS-B for this machine")
 class OtherReceivers(unittest.TestCase):
     def test_a_receiver_that_is_no_rsp_runs_at_2_4_and_is_not_reopened(self):
@@ -439,6 +459,8 @@ class OverTheApi(unittest.TestCase):
         self.assertEqual((s, e["code"]), (400, "bad_params"))
         s, a = self.req("GET", "/api/state", level="view")
         self.assertEqual(a["adsb"]["state"], "running")
+        s, a = self.req("GET", "/api/status", level="view")
+        self.assertEqual((a["adsb"]["state"], a["ais"]["state"]), ("running", "idle"))
         s, a = self.req("DELETE", "/api/adsb/session?client=tv-1")
         self.assertEqual((s, a["clients"]), (200, 0))
         s, a = self.req("DELETE", "/api/adsb/session?all=1")

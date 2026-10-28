@@ -385,6 +385,9 @@ class Server:
                 # True while a claim the broker lost is being taken back:
                 # radioError is then a passing state, not a fault.
                 "reconnecting": self.reclaim is not None,
+                # Radio's map sessions (docs/SERVER-API.md "AIS", "ADS-B"),
+                # as api/state has them; absent in an app with none (NB).
+                **{k: st[k] for k in ("ais", "adsb") if k in st},
                 "device": st.get("device"), "mode": st.get("mode"), "vfo": st.get("vfo"),
                 "txDial": st.get("txDial"), "simulator": bool(st.get("simWhy")),
                 "broker": self.broker.view() if self.broker is not None else None,
