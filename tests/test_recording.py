@@ -104,6 +104,39 @@ class RecorderAlone(unittest.TestCase):
         check_core(self, m, rec.data_path)
         self.assertEqual(m["global"]["openhamshack:clipped"], 0)
 
+    def test_what_is_written_is_synced_and_dropped_from_the_page_cache(self):
+        # In a container the page cache counts against its memory limit, and
+        # a 6 MS/s capture lost blocks while the cgroup reclaimed it (sigmf
+        # docstring). What the writer has written leaves the cache in whole,
+        # contiguous ranges from the start, and the file is still exactly
+        # what was pushed.
+        dropped = []
+        real = getattr(os, "posix_fadvise", None)
+
+        def fadvise(fd, offset, length, advice):
+            dropped.append((offset, length, advice))
+            if real is not None:
+                real(fd, offset, length, advice)
+
+        rng = np.random.default_rng(5)
+        x = ((rng.integers(-2048, 2048, 1 << 20) + 1j * rng.integers(-2048, 2048, 1 << 20)) / 2048) \
+            .astype(np.complex64)                                   # 4 MB a block as ci16
+        with mock.patch.object(sigmf, "DROP_EVERY_BYTES", 8 << 20), \
+                mock.patch.object(sigmf.os, "posix_fadvise", fadvise, create=True):
+            rec = sigmf.Recorder(self.dir / "p", FS, {}, queue_s=1e9).start()
+            for _ in range(10):
+                self.assertTrue(rec.push(x, (1090e6, 1090e6), time.time()))
+            rec.close()
+            self.assertTrue(rec.wait(30))
+        self.assertEqual([d[2] for d in dropped], [os.POSIX_FADV_DONTNEED] * len(dropped))
+        self.assertEqual([(o, n) for o, n, _ in dropped], [(0, 8 << 20), (8 << 20, 8 << 20), (16 << 20, 8 << 20),
+                                                          (24 << 20, 8 << 20), (32 << 20, 8 << 20)])
+        m, y = load(self.dir / "p")
+        self.assertEqual(len(y), 10 << 20)
+        np.testing.assert_array_equal(y[:1 << 20], x)
+        np.testing.assert_array_equal(y[-(1 << 20):], x)
+        check_core(self, m, rec.data_path)
+
     def test_over_full_scale_is_clipped_and_counted(self):
         x = np.array([0.5, 1.5, -2.0 + 0.25j], np.complex64)
         rec = sigmf.Recorder(self.dir / "c", FS, {}).start()

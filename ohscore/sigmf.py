@@ -47,6 +47,16 @@ META_EVERY seconds while it runs and when it ends, each time whole and
 renamed into place, so a crash still leaves a file that describes what
 was written.
 
+**What is written leaves the page cache** (DROP_EVERY_BYTES): every 32 MB
+the writer flushes and syncs what it has written and asks the kernel to drop
+those pages. In a container the page cache counts against its memory
+limit: Store Radio has memory.high 768 MB, and an ADS-B capture at 6 MS/s
+(24 MB/s) on ohs-box (28/10/2026) lost 3.5 s in 46 blocks, one every few
+seconds, while the receive side lost nothing and the NVMe disk was idle -
+the cgroup throttled the writer while it reclaimed its own dirty cache.
+Under the same limits on shack the simulator dropped too, and with this
+not at all. Only the writer waits for the sync, behind its queue.
+
 Never imports Qt: the engine records, the window only asks it to.
 """
 from __future__ import annotations
@@ -74,6 +84,7 @@ DATATYPE = "ci16_le"
 SCALE = 32768.0              # ci16 value / SCALE = the engine's sample (full scale 1.0)
 BYTES_PER_SAMPLE = 4         # ci16: two int16
 QUEUE_S = 2.0                # seconds of samples the writer may fall behind before blocks are dropped
+DROP_EVERY_BYTES = 32 << 20  # written data synced and dropped from the page cache this often (docstring)
 META_EVERY = 10.0            # s between rewrites of the .sigmf-meta while recording
 TRACK_EVERY = 1.0            # s between points of a tracked value (rxCorr)
 GAP_S = 1.0                  # a block arriving this much later than the samples imply starts a new capture
@@ -200,6 +211,8 @@ class Recorder:
         self.expect_utc = None       # where the next block should start if nothing was lost
         self.next_track = 0.0
         self.sha = hashlib.sha512()
+        self.unsynced = 0            # bytes written since the last _drop_cache
+        self.synced_to = 0           # file offset already synced and dropped
         self.thread = threading.Thread(target=self._run, name="ohscore-rec", daemon=True)
 
     def start(self) -> "Recorder":
@@ -372,7 +385,22 @@ class Recorder:
         self.f.write(data)
         self.sha.update(data)
         self.written += _samples(x)
+        self.unsynced += len(data)
+        if self.unsynced >= DROP_EVERY_BYTES:
+            self._drop_cache()
         self.clipped += clipped
+
+    def _drop_cache(self) -> None:
+        """Sync what is written and let the kernel drop it from the page
+        cache (module docstring). Where the platform has no fadvise (macOS,
+        Windows) only the flush happens; their apps run in no container."""
+        self.f.flush()
+        fd = self.f.fileno()
+        end = self.f.tell()
+        os.fdatasync(fd) if hasattr(os, "fdatasync") else os.fsync(fd)
+        if hasattr(os, "posix_fadvise"):
+            os.posix_fadvise(fd, self.synced_to, end - self.synced_to, os.POSIX_FADV_DONTNEED)
+        self.synced_to, self.unsynced = end, 0
 
     def _write_meta(self, final: bool = False) -> None:
         with self.cond:
