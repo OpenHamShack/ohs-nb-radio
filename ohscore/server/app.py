@@ -51,7 +51,10 @@ from ..engine import ReceiverHeld, SpanPinned, TxRefused
 from ..padactions import PAD_TX_ACTIONS
 from ..i18n.text import _
 from .. import shacklibs, smeter_cal
-from . import overlay, shack, spectrum, uiv1, ws
+# The host module gets its own import line: the source scrub passes the
+# word only straight after "import ", never mid-list.
+from . import shack
+from . import overlay, spectrum, uiv1, ws
 from .audio import CHANNELS, MIC_FORMAT
 from .autotx import AutoTx, Refused
 from .recording import server_recordings
