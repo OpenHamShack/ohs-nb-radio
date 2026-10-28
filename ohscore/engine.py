@@ -1908,20 +1908,26 @@ class Engine:
     # dial where the operator put it: what the transmit guard judges, what
     # a client shows and what a key-up returns to stay theirs throughout.
     def hold_receiver(self, sid: str, by: str, centre: float, label: str, min_rate: float, *,
-                      yields=None, feed=None, keep: tuple = (), dial: bool = True) -> None:
+                      yields=None, feed=None, keep: tuple = (), dial: bool = True, texts: dict | None = None) -> None:
         """Give the receiver to session `sid` (a `by` decoder on `label`,
         centred on `centre` Hz, needing `min_rate` S/s). Raises
-        decoders.Refused with the code and sentence when it cannot."""
+        decoders.Refused with the code and sentence when it cannot.
+
+        `texts` words a holder other than DAB (whose sentences are the
+        defaults): "tune" and "transmit", what a refused set() or key-up
+        says while it holds; "on_air", why it cannot start while
+        transmitting; "busy", what someone else wanting the receiver is
+        told while it has it."""
         # One that gives way gives way to this one, before the lock: giving
         # way puts settings back through set().
         self.preempt_receiver(by)
         with self.lock:
-            why = self._hold_refusal(centre, min_rate)
+            why = self._hold_refusal(centre, min_rate, texts or {})
             if why is not None:
                 raise Refused(*why)
             prior = {k: self.st[k] for k in self.HOLD_PRIOR + tuple(keep) if k in self.st}
             self.held = {"session": sid, "by": by, "block": label, "centre": float(centre), "prior": prior,
-                         "yields": yields, "feed": feed, "dial": dial}
+                         "yields": yields, "feed": feed, "dial": dial, "texts": dict(texts or {})}
         try:
             if dial:
                 self._set_holding(vfo=float(centre))
@@ -2031,6 +2037,9 @@ class Engine:
         gives way refuses neither; its sentence says what it is doing."""
         if h.get("yields") is not None:
             return self._yielding_why(h)
+        own = (h.get("texts") or {}).get(doing)
+        if own:
+            return own
         if doing == "transmit":
             return _("The receiver is playing DAB from block {block}: stop the DAB station to transmit").format(
                 block=h["block"])
@@ -2042,18 +2051,20 @@ class Engine:
         return _("The receiver is busy on {label}; it is yours again the moment you use it").format(
             label=h["block"])
 
-    def _hold_refusal(self, centre: float, min_rate: float) -> tuple[str, str] | None:
+    def _hold_refusal(self, centre: float, min_rate: float, texts: dict | None = None) -> tuple[str, str] | None:
         """(code, sentence) when the receiver cannot be held now, else None
-        (called under the lock)."""
+        (called under the lock). `texts` as hold_receiver's."""
+        texts = texts or {}
         if not self.HOLDS_RECEIVER:
             return "decoder_unavailable", _("This app's receiver stays on its own frequencies and cannot play DAB")
         if not self.running or self.dev is None:
             return "not_running", _("Start the radio before adding a decoder")
         if self.st["keyed"] or (self.tx_thread is not None and self.tx_thread.is_alive()):
-            return "on_air", _("Not while transmitting: DAB takes the receiver to Band III")
+            return "on_air", texts.get("on_air") or _("Not while transmitting: DAB takes the receiver to Band III")
         if self.held is not None:
-            return "receiver_busy", _("A DAB station on block {block} already has the receiver: stop it "
-                                      "first").format(block=self.held["block"])
+            busy = (self.held.get("texts") or {}).get("busy")
+            return "receiver_busy", busy or _("A DAB station on block {block} already has the receiver: stop it "
+                                              "first").format(block=self.held["block"])
         if self.play is not None:
             return "receiver_busy", _("Not while a recording is playing: stop it first")
         fs = float(self.geo.fs)
