@@ -54,6 +54,17 @@ Comment: AD1C's country file, read for the FT8 Country column: Big CTY,
  below; the publisher's copyright line names no holder ("Copyright (c)
  1994-"), and the files are AD1C's.
 
+Files: ohsradio/data/mapland/*
+Copyright: OpenStreetMap contributors
+License: ODbL-1.0
+Comment: The ship map's bundled land (ohsradio/mapdata.py): a derived
+ database of OpenStreetMap's land polygons, from osmdata.openstreetmap.de,
+ cut to Great Britain and Ireland and simplified by tools/mapland-build.py
+ (land.LICENCE.txt beside it says how). Offered under the Open Database
+ License 1.0, https://opendatacommons.org/licenses/odbl/1-0/; any map
+ showing it credits "(c) OpenStreetMap contributors"
+ (https://www.openstreetmap.org/copyright).
+
 License: MIT
  Permission is hereby granted, free of charge, to any person obtaining a
  copy of this software and associated documentation files (the
