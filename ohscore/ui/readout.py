@@ -58,6 +58,9 @@ class Readout(QWidget):
         self.setFixedHeight(theme.px(TALL_H))
         # Where the digits were last painted: a click there opens the editor.
         self.digits_rect = QRectF()
+        # The dial label as last painted ('' for none, or no room): what the
+        # operator was shown, which the tests read.
+        self.label_shown = ""
         self.flash = Anim(self)
         self.kbd_focus = False
         self.edit = QLineEdit(self)
@@ -174,7 +177,7 @@ class Readout(QWidget):
 
     def _changed(self, ch):
         if any(k in ch for k in ("vfo", "txDial", "rit", "ritOn", "xit", "xitOn", "split", "segment", "keyed")
-               + self.bridge.face.secondary_keys + self.bridge.face.on_air_keys):
+               + self.bridge.face.secondary_keys + self.bridge.face.on_air_keys + self.bridge.face.dial_label_keys):
             self.update()
 
     def set_step(self, step: int):
@@ -313,12 +316,30 @@ class Readout(QWidget):
         big = self._big_px()
         face = self.bridge.face
         seg = face.segment_at(vfo)
+        shown = ""
         if not tight:
             # Tight has no caption line: the digits turn red on the air,
             # as in every form, and the TX tile beside them says ON AIR.
             p.setFont(theme.caps(10.5))
             p.setPen(theme.c("tx") if keyed else theme.c("text3"))
-            p.drawText(QRectF(2, 0, self.width() - 4, theme.px(16)), Qt.AlignmentFlag.AlignVCenter, self.title())
+            title = self.title()
+            p.drawText(QRectF(2, 0, self.width() - 4, theme.px(16)), Qt.AlignmentFlag.AlignVCenter, title)
+            # What the dial is on (Radio: a repeater the operator entered,
+            # an airfield, a marine channel), after the title on its line:
+            # beside the digits it names, smaller than they are and in the
+            # second text colour, cut short rather than pushing anything.
+            # Tight has no caption line, so no room for it there.
+            label = face.dial_label(st)
+            if label:
+                x0 = 2 + QFontMetricsF(p.font()).horizontalAdvance(title) + theme.px(14)
+                room = self.width() - 2 - x0
+                fl = theme.font(11.5, theme.QFont.Weight.Medium)
+                text = QFontMetricsF(fl).elidedText(label, Qt.TextElideMode.ElideRight, room)
+                if room > theme.px(40) and text:
+                    p.setFont(fl)
+                    p.setPen(theme.c("text2"))
+                    p.drawText(QRectF(x0, 0, room, theme.px(16)), Qt.AlignmentFlag.AlignVCenter, text)
+                    shown = text
         hz = int(round(vfo))
         f_big = self._font(big)
         f_small = self._font(big * 0.62)
@@ -364,6 +385,7 @@ class Readout(QWidget):
                 self.cells.append((r, place))
                 x += cw
         self.digits_rect = QRectF(0, y_top, x, big)
+        self.label_shown = shown
         # The app's second line (NB: the uplink), then the chips: under the
         # digits in two rows, beside them in Tight.
         row_h = float(theme.px(20))

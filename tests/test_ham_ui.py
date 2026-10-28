@@ -230,6 +230,28 @@ class Window(unittest.TestCase):
         st = radio.state()
         self.assertEqual((st["rxDial"], st["txDial"]), (145_050_000.0, 145_650_000.0))
 
+    def test_the_readout_names_what_the_dial_is_on(self):
+        """dialLabel's text beside the readout's title: shown on an entry,
+        gone off it, and not in Tight's one line, which has no caption."""
+        win, bridge, radio, _ = self.window(locator="IO75TU")
+        bridge.set(mode="fm", vfo=145_712_500.0)
+        radio.localfreq.mine.add({"name": "Repeater One", "freqHz": 145_712_500, "mode": "fm",
+                                  "category": "repeater", "sub": "Hilltop"}, ("fm",))
+        r = win.readout
+        self.settle_until(lambda: (r.repaint(), r.label_shown)[1] != "")
+        self.assertEqual(r.label_shown, "Repeater One · Hilltop · FM")
+        bridge.set(vfo=145_750_000.0)
+        self.settle_until(lambda: (r.repaint(), r.label_shown)[1] == "")
+        self.assertEqual(r.label_shown, "")
+        bridge.set(vfo=145_712_500.0)
+        self.settle_until(lambda: (r.repaint(), r.label_shown)[1] != "")
+        self.assertNotEqual(r.label_shown, "")
+        form = r.form
+        r.set_form("tight")
+        r.repaint()
+        self.assertEqual(r.label_shown, "")
+        r.set_form(form)
+
     def test_the_offset_field_sets_minus_and_plus(self):
         win, bridge, radio, _ = self.window()
         toasts = []

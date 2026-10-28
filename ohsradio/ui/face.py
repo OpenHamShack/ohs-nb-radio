@@ -157,6 +157,11 @@ class HamFace(Face):
         name = b.name.replace("m", " m").replace("c m", " cm") if b else "Frequency"
         return f"{name} · MHz"
 
+    def dial_label(self, st: dict) -> str:
+        return (st.get("dialLabel") or {}).get("text", "")
+
+    dial_label_keys = ("dialLabel",)
+
     def digit_groups(self, hz: int) -> list[tuple[str, int | None, str]]:
         hz = max(0, int(hz))
         mhz, rest = divmod(hz, 1_000_000)

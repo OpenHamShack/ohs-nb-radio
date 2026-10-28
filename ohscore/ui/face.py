@@ -113,6 +113,15 @@ class Face:
     # IC-9700 frequency): the readout repaints on them too.
     secondary_keys: tuple = ()
 
+    def dial_label(self, st: dict) -> str:
+        """What the dial is on, said small beside the readout's title
+        ("GB3XX · Somewhere · FM"), or ''. Radio's names a repeater the
+        operator entered or a bundled channel (dialLabel); NB has none."""
+        return ""
+
+    # State keys dial_label() reads: the readout repaints on them.
+    dial_label_keys: tuple = ()
+
     def parse_freq(self, text: str) -> float:
         """A typed frequency -> dial Hz; ValueError with a sentence."""
         raise NotImplementedError
