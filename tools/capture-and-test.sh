@@ -19,7 +19,11 @@
 # own session again). --drop-sessions also lets the tune stop background
 # decoder sessions that pin the span, which leave the saved sessions for
 # good (SERVER-API "The pinned span"). It never transmits, and refuses while
-# the radio is on the air.
+# the radio is on the air. A dropped holder is stopped before anything is
+# saved, and the dial is read only once rxOwner is empty again: an ended
+# AIS or ADS-B session keeps the receiver for its linger (60 s), and read
+# during it "before" would be the session's 162 MHz. Each wait for the
+# receiver to come back (there, and after its own session) allows 90 s.
 #
 # On the box (BOX_HOST in ~/.config/openhamshack/box-update.conf; this
 # repository is public) tools/box_api.py does the work as root with the
@@ -143,7 +147,11 @@ box_py() {
     else
         local q="" x
         for x in "$@"; do q="$q $(printf '%q' "$x")"; done
-        ssh -tt -q "$BOX_HOST" "sudo python3$q"
+        # The box's "Could not chdir to home directory" arrives on the
+        # terminal's stdout under -tt, so it is filtered there; the status
+        # is ssh's (the helper's), not grep's.
+        ssh -tt -q "$BOX_HOST" "sudo python3$q" | grep --line-buffered -v 'Could not chdir'
+        return "${PIPESTATUS[0]}"
     fi
 }
 

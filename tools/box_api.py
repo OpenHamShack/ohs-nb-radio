@@ -155,6 +155,17 @@ def _wait(cond, seconds: float, step: float = 0.5) -> bool:
     return cond()
 
 
+# An AIS or ADS-B session ended with DELETE still holds the receiver for
+# its linger (60 s on ohs-box, 28/10/2026), and every tune or session POST
+# in that window is 409 receiver_busy; so wait for rxOwner to clear, with
+# room over the linger.
+GIVE_BACK_S = float(os.environ.get("OHS_CAPTURE_GIVE_BACK_S", "90"))
+
+
+def _given_back(api: "Api") -> bool:
+    return _wait(lambda: not api.call("GET", "status").get("rxOwner"), GIVE_BACK_S)
+
+
 def _restart(api: Api) -> None:
     """A sample rate takes effect when the radio restarts (state.py's
     restart=True): stop and start it, as Settings does."""
@@ -182,6 +193,31 @@ def capture(api: Api, a) -> int:
         say(f"refused: the receiver is held by {owner.get('by')} ({owner.get('text') or owner.get('block')});",
             "pass --drop-sessions to stop it first")
         return 3
+    if owner:
+        # Stopped first, and the dial read only once it is given back: read
+        # while a session holds the receiver, "before" would be the
+        # session's tuning (162 MHz for AIS) and the restore would put the
+        # receiver there rather than where the operator had it. This is the
+        # one change made outside the restore below, with --drop-sessions as
+        # its consent; what was stopped is not started again.
+        by = owner.get("by")
+        try:
+            if by in ("ais", "adsb"):
+                say("stopping", by, api.call("DELETE", f"{by}/session?all=1").get("state"))
+            elif by == "dab" and owner.get("session"):
+                api.call("DELETE", f"decoders/sessions/{owner['session']}")
+                say("stopped the DAB session", owner["session"])
+            else:
+                say(f"refused: cannot stop what holds the receiver ({by})")
+                return 3
+        except ApiError as e:
+            say("error stopping what holds the receiver:", e)
+            return 1
+        if not _given_back(api):
+            say("the receiver was not given back within", GIVE_BACK_S, "s; nothing else was changed")
+            return 1
+        st = api.call("GET", "state")
+        status = api.call("GET", "status")
     before = {k: st.get(k) for k in SAVED}
     if a.rate:
         before["sampleRate"] = st.get("sampleRate")
@@ -194,17 +230,6 @@ def capture(api: Api, a) -> int:
     rate_changed = False
     rc = 1
     try:
-        if owner:
-            by = owner.get("by")
-            if by in ("ais", "adsb"):
-                say("stopping", by, api.call("DELETE", f"{by}/session?all=1").get("state"))
-            elif by == "dab" and owner.get("session"):
-                api.call("DELETE", f"decoders/sessions/{owner['session']}")
-                say("stopped the DAB session", owner["session"])
-            else:
-                raise RuntimeError(f"cannot stop what holds the receiver ({by})")
-            if not _wait(lambda: not api.call("GET", "status").get("rxOwner"), 15):
-                raise RuntimeError("the receiver was not given back")
         if a.rate and int(a.rate) != int(st.get("sampleRate") or 0):
             api.call("POST", "set", {"changes": {"sampleRate": int(a.rate)}})
             rate_changed = True
@@ -218,10 +243,18 @@ def capture(api: Api, a) -> int:
             api.call("POST", "set", {"changes": {"vfo": a.freq, "mode": "fm"}, **drop})
         elif a.decoder == "dab":
             got = api.call("POST", "decoders/sessions", {"decoder": "dab", "freqHz": a.freq, "params": {}, **drop})
+            if not got.get("id"):
+                raise RuntimeError("the DAB session started with no id")
             session = ("dab", got.get("id"))
         else:
-            got = api.call("POST", f"{a.decoder}/session", {"client": CLIENT, **drop}, timeout=60)
+            # Marked before the POST: one that timed out here may still have
+            # started there, and closing a session we never joined is harmless.
+            # A refusal (409 receiver_busy, rate_too_low...) raises, so nothing
+            # is ever recorded on a session that did not start.
             session = (a.decoder, None)
+            got = api.call("POST", f"{a.decoder}/session", {"client": CLIENT, **drop}, timeout=60)
+            if got.get("state") != "running":
+                raise RuntimeError(f"the {a.decoder} session is {got.get('state')}: {got.get('text') or got.get('why')}")
             say(a.decoder, "session", got.get("state"), "centre", got.get("centreHz"), "rate", got.get("rateHz"))
 
             def keepalive(kind=a.decoder):
@@ -299,7 +332,7 @@ def _restore(api, a, before, running, session, recording, rate_changed, rec_id, 
             step(f"close the {kind} session", close)
 
         def given_back():
-            if not _wait(lambda: not api.call("GET", "status").get("rxOwner"), 20):
+            if not _given_back(api):
                 raise RuntimeError("something still holds it")
         step("the receiver given back", given_back)
     if rate_changed:

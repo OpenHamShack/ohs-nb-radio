@@ -146,6 +146,42 @@ class CaptureAndTest(unittest.TestCase):
         self.assertIn("ais/session", self.fake.paths("DELETE"))
         self.assertEqual(self.fake.owner, {})
 
+    # Ending an AIS or ADS-B session holds the receiver for the session's
+    # linger (60 s on ohs-box), refusing every tune meanwhile (28/10/2026).
+
+    def test_dropping_a_session_restores_the_operators_dial_not_the_sessions(self):
+        self.fake._hold("ais", 162000000, "ais")
+        self.fake.linger_s = 1.5
+        operator = {**self.fake.st, **self.fake.prior}        # 145.5 MHz USB, not AIS's 162 MHz
+        res = self.run_it("--yes-receiver", "--drop-sessions", "--no-test", "dmr", "430900000", "1")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertEqual(self.fake.st, operator)
+        self.assertFalse(self.fake.recorded_while_held)
+
+    def test_a_session_that_will_not_let_go_stops_the_run_before_anything_else(self):
+        self.fake._hold("adsb", 1090000000, "adsb")
+        self.fake.linger_s = 30
+        res = self.run_it("--yes-receiver", "--drop-sessions", "dmr", "430900000", "1",
+                          OHS_CAPTURE_GIVE_BACK_S="1")
+        self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
+        self.assertIn("not given back", res.stdout)
+        self.assertNotIn("set", self.fake.paths("POST"))
+        self.assertNotIn("recordings/start", self.fake.paths("POST"))
+
+    def test_its_own_session_is_waited_out_before_the_dial_goes_back(self):
+        self.fake.linger_s = 1.5
+        res = self.run_it("--yes-receiver", "--antenna", "A", "--no-test", "ais", "162000000", "1")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertRestored()
+
+    def test_a_refused_session_aborts_before_recording(self):
+        self.fake.fail["POST ais/session"] = (409, "receiver_busy")
+        res = self.run_it("--yes-receiver", "--antenna", "A", "ais", "162000000", "1")
+        self.assertEqual(res.returncode, 1, res.stdout + res.stderr)
+        self.assertIn("receiver_busy", res.stdout)
+        self.assertNotIn("recordings/start", self.fake.paths("POST"))
+        self.assertRestored()
+
     def test_on_the_air_is_refused(self):
         self.fake.on_air = True
         res = self.run_it("--yes-receiver", "dmr", "430900000", "1")

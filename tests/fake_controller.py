@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -34,7 +35,10 @@ class FakeRadio:
         self.clients: set[str] = set()
         self.recording: str | None = None
         self.n = 0
-        self.fail = {}            # "recordings/start" -> (status, code): refuse that route
+        self.fail = {}            # "recordings/start" or "POST ais/session" -> (status, code): refuse it
+        self.linger_s = 0.0       # an ended AIS/ADS-B session holds the receiver this long, as the app's does
+        self.release_at = None
+        self.recorded_while_held = False
         self.extra = {}           # GET path -> JSON answered (smoke checks)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -64,10 +68,21 @@ class FakeRadio:
 
     def _hold(self, by: str, freq: int, session: str) -> None:
         self.prior = {"vfo": self.st["vfo"], "mode": self.st["mode"]}
-        self.owner = {"by": by, "session": session, "freqHz": freq, "text": f"held by {by}"}
+        self.owner = {"by": by, "session": session, "freqHz": freq, "text": f"held by {by}", "prior": dict(self.prior)}
+        self.release_at = None
         self.st["vfo"] = freq
 
+    def _end_session(self) -> None:
+        """What the app does when its last client goes: hold on for the
+        linger, then give the receiver back."""
+        self.clients.clear()
+        if self.linger_s:
+            self.release_at = self.release_at or time.monotonic() + self.linger_s
+        else:
+            self._release()
+
     def _release(self) -> None:
+        self.release_at = None
         if self.owner:
             self.st.update(self.prior)
         self.owner, self.prior = {}, {}
@@ -81,8 +96,10 @@ class FakeRadio:
     # ---------------------------------------------------------- routes
 
     def route(self, method: str, path: str, q: dict, body: dict) -> tuple[int, dict]:
+        if self.release_at and time.monotonic() >= self.release_at:
+            self._release()
         for key, (status, code) in self.fail.items():
-            if path == key:
+            if key in (path, f"{method} {path}"):
                 return status, {"error": f"refused by the test ({code})", "code": code}
         if method == "GET" and path in self.extra:
             return 200, self.extra[path]
@@ -103,6 +120,7 @@ class FakeRadio:
             if self.recording:
                 return 409, {"error": "already", "code": "already_recording"}
             self.n += 1
+            self.recorded_while_held = self.recorded_while_held or bool(self.release_at)
             self.recording = f"openhamshack-radio-2026102{self.n}-{self.st['vfo']}"
             return 200, {"active": [{"kind": "iq", "id": self.recording}]}
         if method == "POST" and path == "recordings/stop":
@@ -124,7 +142,7 @@ class FakeRadio:
             if path != f"{kind}/session":
                 continue
             if method == "POST":
-                if self.owner and self.owner.get("by") != kind:
+                if self.owner and (self.owner.get("by") != kind or self.release_at):
                     return 409, {"error": "The receiver is busy", "code": "receiver_busy"}
                 if not self.owner:
                     self._hold(kind, freq, kind)
@@ -133,9 +151,11 @@ class FakeRadio:
             if method == "DELETE":
                 if q.get("all") == ["1"]:
                     if self.owner.get("by") == kind:
-                        self._release()
+                        self._end_session()
                 else:
                     self.clients.discard(q.get("client", [""])[0])
+                    if self.owner.get("by") == kind and not self.clients:
+                        self._end_session()
                 return 200, self._session_view(kind)
         if method == "POST" and path == "decoders/sessions" and body.get("decoder") == "dab":
             if self.owner:
