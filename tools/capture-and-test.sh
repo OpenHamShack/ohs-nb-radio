@@ -1,6 +1,6 @@
 #!/bin/bash
 # Record real air on the controller's receiver and run a decoder's real-file
-# test on it, from shack, with no session relaying messages.
+# test on it, from the development host, with no session relaying messages.
 #
 #   tools/capture-and-test.sh --yes-receiver [--drop-sessions] [--rate S/s]
 #       [--antenna A|B|C] [--keep-on-box] [--no-test]
