@@ -274,7 +274,7 @@ msgstr ""
 msgid "Could not read {file}: {error}"
 msgstr ""
 
-#: ohscore/engine.py:3561
+#: ohscore/engine.py:3565
 #, python-brace-format
 msgid "Could not record to {folder}: {error}"
 msgstr ""
@@ -580,7 +580,7 @@ msgstr ""
 msgid "Playing DAB takes the receiver to Band III and stops {sessions}"
 msgstr ""
 
-#: ohscore/engine.py:3789
+#: ohscore/engine.py:3801
 #, python-brace-format
 msgid "Playing {name}, recorded {when}. Transmit is off until you go back to the radio."
 msgstr ""
@@ -640,12 +640,12 @@ msgstr ""
 msgid "Recording is not available in this installation: {why}"
 msgstr ""
 
-#: ohscore/engine.py:3650
+#: ohscore/engine.py:3654
 #, python-brace-format
 msgid "Recording saved ({reason}): {name}, {took}, {size}. Send both files, .sigmf-data and .sigmf-meta."
 msgstr ""
 
-#: ohscore/engine.py:3652
+#: ohscore/engine.py:3656
 #, python-brace-format
 msgid "Recording saved: {name}, {took}, {size}. Send both files, .sigmf-data and .sigmf-meta."
 msgstr ""
@@ -741,7 +741,7 @@ msgstr ""
 msgid "Stop"
 msgstr ""
 
-#: ohscore/engine.py:3757
+#: ohscore/engine.py:3769
 msgid "Stop recording before playing a recording"
 msgstr ""
 
@@ -1591,7 +1591,7 @@ msgstr ""
 msgid "this installation has no decoder library for this computer (shack-sdr); install the package built for your computer's processor"
 msgstr ""
 
-#: ohscore/engine.py:3649
+#: ohscore/engine.py:3653
 msgid "time limit"
 msgstr ""
 
@@ -1653,7 +1653,7 @@ msgstr ""
 msgid "{device} is not held for transmitting"
 msgstr ""
 
-#: ohscore/engine.py:3645
+#: ohscore/engine.py:3649
 #, python-brace-format
 msgid "{error}. {took} were saved as {file}."
 msgstr ""
@@ -1789,22 +1789,22 @@ msgstr ""
 msgid "{mode} is for listening only: nothing is ever transmitted in it"
 msgstr ""
 
-#: ohscore/engine.py:3972
+#: ohscore/engine.py:3984
 #, python-brace-format
 msgid "{mode}: tuned to {mhz:.3f}"
 msgstr ""
 
-#: ohscore/engine.py:3629
+#: ohscore/engine.py:3633
 #, python-brace-format
 msgid "{m} min {s:02d} s"
 msgstr ""
 
-#: ohscore/engine.py:3786
+#: ohscore/engine.py:3798
 #, python-brace-format
 msgid "{name} cannot be played: {error}"
 msgstr ""
 
-#: ohscore/engine.py:3861
+#: ohscore/engine.py:3873
 #, python-brace-format
 msgid "{name} has played to its end. File › Back to the radio, or Loop playback to hear it again."
 msgstr ""
@@ -1835,12 +1835,12 @@ msgstr ""
 msgid "{rate:g} Hz is not a whole number of samples per bit"
 msgstr ""
 
-#: ohscore/engine.py:3641
+#: ohscore/engine.py:3645
 #, python-brace-format
 msgid "{seconds:.1f} s of samples never arrived from the radio: its stream had gaps, usually the link to it (network or USB) stalling (the file says where)."
 msgstr ""
 
-#: ohscore/engine.py:3638
+#: ohscore/engine.py:3642
 #, python-brace-format
 msgid "{seconds:.1f} s of samples were dropped because the disk could not keep up (the file says where)."
 msgstr ""
@@ -1871,7 +1871,7 @@ msgstr ""
 msgid "{shift:+d} Hz, the next best fit, not measured for sure"
 msgstr ""
 
-#: ohscore/engine.py:3629
+#: ohscore/engine.py:3633
 #, python-brace-format
 msgid "{s} s"
 msgstr ""

@@ -216,6 +216,12 @@ class ServerRecordings:
                    "mode": station["mode"]}
             out.update((k, station[k]) for k in self.NOTED if station.get(k) is not None)
             return out
+        # A session holding the receiver for something else (Radio's AIS,
+        # ADS-B): its frequency and its name, not the operator's mode.
+        held = getattr(self.radio, "held_service", None)
+        held = held() if held is not None else None
+        if held:
+            return {"freqHz": round(float(held.get("freqHz") or 0)) or None, "mode": held["mode"]}
         return {"freqHz": round(float(s.get("rxDial") or 0)) or None, "mode": str(s.get("mode") or "").upper() or None}
 
     def _past(self, body: dict, station: dict | None):

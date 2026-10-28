@@ -34,7 +34,7 @@ msgstr ""
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1641
+#: ohsradio/radio.py:1651
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -366,7 +366,7 @@ msgstr ""
 msgid "Not while transmitting: AIS takes the receiver to 162 MHz"
 msgstr ""
 
-#: ohsradio/radio.py:1330
+#: ohsradio/radio.py:1340
 #, python-brace-format
 msgid "Notch filter not changed: {error}"
 msgstr ""
@@ -664,7 +664,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1599
+#: ohsradio/radio.py:1609
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""

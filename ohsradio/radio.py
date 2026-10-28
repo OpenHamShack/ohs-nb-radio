@@ -1275,6 +1275,16 @@ class Radio(Engine):
                     "rt": rds.get("rt"), "ptyName": rds.get("ptyName"), "freqHz": s.get("rxDial")}
         return None
 
+    def held_service(self) -> dict | None:
+        """AIS or ADS-B while its session holds the receiver
+        (Engine.held_service): what an IQ or audio recording made then is
+        named and described by."""
+        h = self.held
+        by = h.get("by") if h is not None else None
+        if by in ("ais", "adsb"):
+            return {"kind": by, "mode": {"ais": "AIS", "adsb": "ADS-B"}[by], "label": None, "freqHz": h["centre"]}
+        return None
+
     # ------------------------------------------------------------------ receive
     def _configure_rx(self):
         # The HL2's LNA is its only receive gain, so it gets what NB's

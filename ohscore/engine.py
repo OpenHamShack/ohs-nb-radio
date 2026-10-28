@@ -3553,7 +3553,11 @@ class Engine(metaclass=_EngineType):
         folder = Path(folder) if folder is not None else self.recordings_dir()
         try:
             folder.mkdir(parents=True, exist_ok=True)
-            station = self.broadcast_station()
+            # What the receiver is held for when it is no broadcast station
+            # (Radio's AIS and ADS-B): the recording is named and described
+            # by that, not by the operator's mode from before, which nothing
+            # demodulates (an ADS-B capture was "1090 MHz FM").
+            station = self.broadcast_station() or self.held_service()
             mode = station["mode"] if station else s["mode"]
             base = sigmf.new_base(folder, self.CONFIG.app.name, time.time(), s["rxDial"], mode, station)
             rec = sigmf.Recorder(base, self.geo.fs, self._rec_meta(s, station), limit_s or None).start()
@@ -3683,6 +3687,13 @@ class Engine(metaclass=_EngineType):
         (QO-100 NB)."""
         return None
 
+    def held_service(self) -> dict | None:
+        """What a session holding the receiver listens to when it is not a
+        broadcast station, for a recording's name and metadata: Radio's
+        `{"kind": "ais" | "adsb", "mode": "AIS" | "ADS-B", "freqHz"}`. None
+        otherwise, and in an app that holds nothing."""
+        return None
+
     def _rec_meta(self, s: dict, station: dict | None = None) -> dict:
         """A recording's global metadata (ohscore/sigmf.py adds the format's
         own fields): enough to analyse it without asking whoever sent it.
@@ -3729,7 +3740,8 @@ class Engine(metaclass=_EngineType):
             g["core:author"] = s["callsign"]
             g["openhamshack:callsign"] = s["callsign"]
         if station:
-            g["openhamshack:broadcast"] = dict(station)
+            g["openhamshack:broadcast" if station.get("kind") in ("dab", "wfm") else "openhamshack:service"] = \
+                dict(station)
         for k, v in self._rec_extra(s).items():
             g[f"openhamshack:{k}"] = v
         return g
