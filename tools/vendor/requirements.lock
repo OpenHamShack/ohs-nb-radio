@@ -51,6 +51,15 @@
 # §2) - the binary row, per-client decimation, the levels window and
 # latest-wins sending - for api/spectrum/v1. Like shack-rec only the store
 # form's server uses it, so only the store images carry it.
+# shack-ui, new, built as ~/ohs-libs tools/build.sh builds, from ohs-libs
+# main e8a5129: the ui/1 screen builder (CLIENT-UI-PLAN.md §5) - Document,
+# node(), native(), Bind and Action - and validate(), which checks a screen
+# against the pinned schema and refuses any generic action that declares
+# transmit (§5.6). Radio's ui/v1 routes build their screens with it so every
+# app's screens pass the same checks. Only the store form's server uses it,
+# and so far only Radio serves screens, so only Radio's image carries it
+# (with Debian's python3-jsonschema, which validate() needs); NB's image
+# gains it with NB's first screen.
 shack-rec==0.1.0 --hash=sha256:fb8807781161f72b5768c685ca805d6eb14b983a6ec468b6744cf6f65ad8ec82
 shack-cw==0.1.0 --hash=sha256:458f3fa9f3f83dfda0031dbce453f40f89d95ae21a2716c7e005db04f52a877f
 shack-bandplan==0.1.0 --hash=sha256:591a1cb85f3ecd64af5d5c5f198d9aa47696436c9ee72fa66b106c16c75cc44d
@@ -58,3 +67,4 @@ shack-client==0.1.0 --hash=sha256:3a7c9985151ec2c4c2fba253eb4f83ada065cc112675b7
 shack-pad==0.1.0 --hash=sha256:682b9b3e69e371f9b146d7573589d94cbb2ea92d3ee7d156da4149326a156724
 shack-i18n==0.1.0 --hash=sha256:856e39f6ab83ffc8290975d791091678aa44c332f96ecec2576540f8fedb00e5
 shack-spectrum==0.2.0 --hash=sha256:c7730cabfc50926bc8a1699ec998c7031170d22278dd482f2d568ad0def51cc6
+shack-ui==0.2.0 --hash=sha256:7f0db349eb4c9219630c18216fe4bf43b6c555f3d0e315eb6ca35b8a9eaeadd0

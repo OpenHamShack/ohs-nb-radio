@@ -70,6 +70,10 @@ FROM docker.io/library/debian:13-slim
 # says the module is absent; soapysdr-tools for SoapySDRUtil, which is how
 # to see from a shell on the controller what the container can find
 # (podman exec ... SoapySDRUtil --find).
+# python3-jsonschema for shack_ui, which checks every ui/1 screen against
+# the pinned schema as it is served (Document.to_json), so a screen that
+# would break a client is a 500 here rather than a broken TV page; Debian
+# 13's 4.19 meets the wheel's >=4.18.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-numpy \
@@ -77,6 +81,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-paramiko \
         python3-libiio \
         python3-soapysdr \
+        python3-jsonschema \
         soapysdr-tools \
         libusb-1.0-0 \
         librtlsdr0 \
@@ -112,13 +117,13 @@ COPY tools/vendor/ /tmp/vendor/
 RUN cd /tmp/vendor \
     && site="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
     && mkdir -p "$site" \
-    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec shack_spectrum; do \
+    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec shack_spectrum shack_ui; do \
          f="$(ls ${w}-*.whl)"; \
          want="$(sed -n "s/^$(echo $w | tr _ -)==.*--hash=sha256:\([0-9a-f]*\).*/\1/p" requirements.lock)"; \
          echo "$want  $f" | sha256sum -c - || exit 1; \
          python3 -m zipfile -e "$f" "$site"; \
        done \
-    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum; shack_bandplan.load()" \
+    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum, shack_ui; shack_bandplan.load()" \
     && arch="$(uname -m)" \
     && f="$(ls shack_sdr-*-manylinux_*_${arch}.whl)" \
     && want="$(sed -n "s/^shack-sdr==.*--hash=sha256:\([0-9a-f]*\).*_${arch}$/\1/p" shack-sdr.lock)" \

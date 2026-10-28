@@ -5,9 +5,10 @@ sync with a controller), shack_pad (the AKP03E controller), shack_cw (the
 CW decoder and Morse tables, which began in ohscore and moved there so Icom
 and Flex share them), shack_rec (recordings on the controller, for the
 store form's server only), shack_spectrum (the spectrum/1 encoder behind
-api/spectrum/v1, also the store form's server only) and shack_sdr (the
-decoder host, the Rust RTTY decoder, the codec loader and the RTL-SDR and
-SDRplay sources).
+api/spectrum/v1, also the store form's server only), shack_ui (the ui/1
+screen builder and validator behind ui/v1, Radio's store server only) and
+shack_sdr (the decoder host, the Rust RTTY decoder, the codec loader and
+the RTL-SDR and SDRplay sources).
 
 Every package form unpacks the pinned wheels beside ohscore (tools/build-deb.sh,
 build-windows.ps1, build-macos.sh, the store Containerfile), so there an
@@ -177,6 +178,10 @@ def rec():
 
 def spectrum():
     return load("shack_spectrum")
+
+
+def ui():
+    return load("shack_ui")
 
 
 def sdr():
