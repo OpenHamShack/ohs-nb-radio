@@ -74,6 +74,7 @@ def _sentence(kind: str, reason: str, detail: str) -> str:
         "out-of-range": _("The {radio} cannot tune that frequency."),
         "read-failed": _("The {radio} stopped sending samples."),
         "disconnected": _("The {radio} was unplugged."),
+        "closed": _("The {radio} is closed."),
         "bad-antenna": _("The {radio} has no such antenna input."),
     }
     text = words.get(reason, _("The {radio} failed ({reason}).")).format(radio=name, reason=reason)
@@ -222,8 +223,13 @@ class SourceDevice(Device):
 
     def read(self, n: int) -> np.ndarray:
         while len(self.left) < n:
+            src = self.src
+            if src is None:
+                # Closed, or never opened: said in words, never an
+                # AttributeError from a thread that outlived its run.
+                raise DeviceError(_sentence(self.source, "closed", ""))
             try:
-                block = self.src.read()
+                block = src.read()
             except self._error as e:
                 raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
             if block is None:

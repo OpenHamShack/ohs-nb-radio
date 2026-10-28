@@ -338,10 +338,18 @@ class AdsbService:
             raise
         # Running means listening at 1090 MHz: the receive thread moves the
         # centre on its next block, and a client (or a recording started at
-        # once) must not find it still on the old one. Seconds at most.
-        end = time.monotonic() + 5.0
-        while time.monotonic() < end and r.running and (r.centre != CENTRE_HZ or r.pending_centre is not None):
+        # once) must not find it still on the old one. So wait until the
+        # device itself is there and its samples are from there, then put
+        # that in deviceStatus at once rather than at the supervisor's next
+        # tick: beta.15's POST answered while deviceStatus still showed the
+        # operator's 430 MHz. Seconds at most.
+        want = r._dev_freq(CENTRE_HZ, r._conv_at(CENTRE_HZ, rx=True))
+        end = time.monotonic() + 10.0
+        while time.monotonic() < end and r.running and not (
+                r.pending_centre is None and r.centre == CENTRE_HZ
+                and getattr(r.dev, "rx_if", want) == want and r._rx_settled()):
             time.sleep(0.01)
+        r._status(deviceStatus=r._device_status())
         pos = locator_position(r.st.get("locator") or "")
         params = {"refLat": pos[0], "refLon": pos[1]} if pos is not None else {}
         host = m.Host(threads=1, cpu_max=0.0, ring_s=2.0, max_sessions=1)

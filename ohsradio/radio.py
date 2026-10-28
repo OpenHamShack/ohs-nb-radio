@@ -1017,15 +1017,23 @@ class Radio(Engine):
                 v["why"], v["text"] = "adsb", _("out: ADS-B is listening at 1090 MHz")
         return out
 
+    # How long a reopen keeps asking for a device the driver has not yet
+    # given back: SDRplay's API service releases an RSP asynchronously, and
+    # on ohs-box (28/10/2026) the reopen at 2.4 MS/s straight after closing
+    # at 6 found "No SDRplay RSP" - then the process died. Bounded: about 15
+    # s in all, then the failure is the operator's to see.
+    REOPEN_WAITS_S = (0.5, 1.0, 2.0, 4.0, 8.0)
+
     def restart_at(self, fs: float | None) -> None:
         """Reopen the radio with its device at `fs` S/s, or (None) at the
         operator's own `sampleRate`, which is never changed: what Radio's
         ADS-B does for a receiver whose filter at the operator's rate is
         too narrow for Mode S (adsb.py). The device is closed and opened
         again under the same broker claim (the server, not the engine, holds
-        that). A recording in progress ends, as any stop ends one. Never
-        from the radio's own threads: stop() joins them. If the device will
-        not open at `fs`, it is opened at the operator's rate again and the
+        that). An open that fails is tried again after REOPEN_WAITS_S. A
+        recording in progress ends, as any stop ends one. Never from the
+        radio's own threads: stop() joins them. If the device will not open
+        at `fs`, it is opened at the operator's rate again and the
         DeviceError raised."""
         with self.restart_lock:
             self.restarting = True
@@ -1033,15 +1041,26 @@ class Radio(Engine):
                 self.rate_override = fs
                 self.stop()
                 try:
-                    self.start()
+                    self._start_retrying()
                 except DeviceError:
                     if fs is None:
                         raise
                     self.rate_override = None
-                    self.start()
+                    self._start_retrying()
                     raise
             finally:
                 self.restarting = False
+
+    def _start_retrying(self) -> None:
+        for wait in self.REOPEN_WAITS_S + (None,):
+            try:
+                self.start()
+                return
+            except DeviceError as e:
+                if wait is None:
+                    raise
+                self.log.info("reopening the %s: %s; again in %g s", self._kind(), e, wait)
+                time.sleep(wait)
 
     # ------------------------------------------------------------ broadcast gain
     # A DAB session holding the receiver, or wide FM, plays with a gain of

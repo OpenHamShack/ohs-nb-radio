@@ -974,7 +974,14 @@ class Engine(metaclass=_EngineType):
     def start(self) -> None:
         if self.running:
             return
-        self.stop_ev.clear()
+        # A new event for each run, never the last one cleared: a thread of
+        # the last run that stop() could not join in time (a receive thread
+        # blocked in a read) keeps the event it started with, sees it set,
+        # and ends - rather than carrying on into this run and reading a
+        # device it never opened. That is what happened when Radio's ADS-B
+        # reopened an RSP on ohs-box (28/10/2026): the old receive thread
+        # read the new, unopened device, and the process died.
+        self.stop_ev = threading.Event()
         self.st["keyed"] = False
         self.dev = self.play or self._make_device()
         if self.receive_only and self.dev.can_tx:
@@ -1703,17 +1710,20 @@ class Engine(metaclass=_EngineType):
             raise
 
     def _rx_loop(self):
+        ev = self.stop_ev                   # this run's (start() says why)
         n = self.BLOCK_HOPS * self.geo.L
         cpu = 0.0
         wait = 0.0
-        while not self.stop_ev.is_set():
+        while not ev.is_set():
             try:
                 x = self._rx_read(n)
             except Exception as e:  # noqa: BLE001 - any device failure: unkey, report, reconnect
-                if self.stop_ev.is_set():
+                if ev.is_set():
                     break
-                self._device_lost(e)
+                self._device_lost(e, ev)
                 continue
+            if ev.is_set():
+                break                       # read across a stop: not this run's samples
             if x is None:
                 continue
             pf = self.prefetch
@@ -1763,12 +1773,15 @@ class Engine(metaclass=_EngineType):
                 if pf is None:
                     self.overruns += 1
 
-    def _device_lost(self, e: Exception):
+    def _device_lost(self, e: Exception, ev: threading.Event | None = None):
+        ev = ev if ev is not None else self.stop_ev
+        if ev.is_set():
+            return                          # a stop, not a loss
         self.log.warning("device %s lost: %s", self.cfg.get("device"), e)
         diag.notable("radio-lost", f"{self.cfg.get('device')}: {e}")
         self._unkey(f"Unkeyed: the {self.cfg['device']} stopped responding ({e})", "error", "device lost")
         self._status(error=f"Device problem: {e}", running=False)
-        while not self.stop_ev.wait(2.0):
+        while not ev.wait(2.0):
             try:
                 self.dev.close()
                 self.dev.open()
@@ -2688,7 +2701,8 @@ class Engine(metaclass=_EngineType):
         return lo, hi
 
     def _decode_loop(self):
-        while not self.stop_ev.is_set():
+        ev = self.stop_ev                   # this run's (start() says why)
+        while not ev.is_set():
             item = self.decode_q.get()
             self._close_retired()
             if item is None:
@@ -3429,7 +3443,8 @@ class Engine(metaclass=_EngineType):
 
     # ---------------------------------------------------------------- supervisor
     def _supervise(self):
-        while not self.stop_ev.wait(0.1):
+        ev = self.stop_ev                   # this run's (start() says why)
+        while not ev.wait(0.1):
             now = time.monotonic()
             s = self.st
             if s["keyed"]:

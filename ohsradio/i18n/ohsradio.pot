@@ -22,7 +22,7 @@ msgstr ""
 msgid "A recording is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1074
+#: ohsradio/radio.py:1093
 msgid "A recording is playing: its gain was fixed when it was recorded."
 msgstr ""
 
@@ -34,7 +34,7 @@ msgstr ""
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1622
+#: ohsradio/radio.py:1641
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -286,7 +286,7 @@ msgstr ""
 msgid "Line obstacle"
 msgstr ""
 
-#: ohsradio/adsb.py:492
+#: ohsradio/adsb.py:500
 msgid "Listening to ADS-B on 1090 MHz"
 msgstr ""
 
@@ -340,7 +340,7 @@ msgstr ""
 msgid "Not a field of my frequencies: {fields}"
 msgstr ""
 
-#: ohsradio/adsb.py:496
+#: ohsradio/adsb.py:504
 #: ohsradio/ais.py:623
 msgid "Not running"
 msgstr ""
@@ -366,7 +366,7 @@ msgstr ""
 msgid "Not while transmitting: AIS takes the receiver to 162 MHz"
 msgstr ""
 
-#: ohsradio/radio.py:1311
+#: ohsradio/radio.py:1330
 #, python-brace-format
 msgid "Notch filter not changed: {error}"
 msgstr ""
@@ -411,7 +411,7 @@ msgstr ""
 msgid "Radio failure"
 msgstr ""
 
-#: ohsradio/radio.py:1134
+#: ohsradio/radio.py:1153
 #, python-brace-format
 msgid "Radio is scanning {label} for its station list: it is yours again the moment you use it"
 msgstr ""
@@ -420,7 +420,7 @@ msgstr ""
 msgid "Reachable"
 msgstr ""
 
-#: ohsradio/radio.py:1078
+#: ohsradio/radio.py:1097
 msgid "Receiver gain control is automatic: the radio's own AGC follows the station."
 msgstr ""
 
@@ -501,12 +501,12 @@ msgstr ""
 msgid "Start the radio to see ships: AIS needs the receiver"
 msgstr ""
 
-#: ohsradio/adsb.py:494
+#: ohsradio/adsb.py:502
 #: ohsradio/ais.py:621
 msgid "Stopped"
 msgstr ""
 
-#: ohsradio/adsb.py:493
+#: ohsradio/adsb.py:501
 msgid "Stopped: nobody had the aircraft map open"
 msgstr ""
 
@@ -514,7 +514,7 @@ msgstr ""
 msgid "Stopped: nobody had the ship map open"
 msgstr ""
 
-#: ohsradio/adsb.py:495
+#: ohsradio/adsb.py:503
 #: ohsradio/ais.py:622
 msgid "Stopped: the radio stopped"
 msgstr ""
@@ -524,7 +524,7 @@ msgstr ""
 msgid "Stopped: the radio was wanted ({why})"
 msgstr ""
 
-#: ohsradio/adsb.py:496
+#: ohsradio/adsb.py:504
 #: ohsradio/ais.py:623
 msgid "Stopped: the receiver was taken back"
 msgstr ""
@@ -551,7 +551,7 @@ msgstr ""
 msgid "The CW skimmer stopped."
 msgstr ""
 
-#: ohsradio/radio.py:1076
+#: ohsradio/radio.py:1095
 msgid "The Hermes-Lite 2's receive gain is its LNA setting, which stays yours."
 msgstr ""
 
@@ -664,7 +664,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1580
+#: ohsradio/radio.py:1599
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -745,7 +745,7 @@ msgstr ""
 msgid "Waiting for the radio to restart…"
 msgstr ""
 
-#: ohsradio/radio.py:1173
+#: ohsradio/radio.py:1192
 #, python-brace-format
 msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""

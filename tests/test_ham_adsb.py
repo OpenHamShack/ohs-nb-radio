@@ -25,12 +25,16 @@ import scratch_home  # noqa: F401  first: no test may touch the real config (see
 import http.client
 import json
 import tempfile
+import threading
 import time
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from ohscore import sdr
 from ohscore.decoders import Refused
+from ohscore.devices import DeviceError
+from ohscore.devices.sdrsource import SdrplayDevice
 from ohscore.engine import ReceiverHeld, TxRefused
 from ohscore.server import shack
 from ohscore.server.app import Server
@@ -224,6 +228,93 @@ class OnTheSimulator(unittest.TestCase):
         if hasattr(r.dev, "notches") and r.dev.notches():
             self.assertTrue(wait(r, lambda: not any(getattr(r.dev, "notch_want", {}).values()), 10))
 
+
+@unittest.skipUnless(has_adsb(), "no shack_sdr with ADS-B for this machine")
+class Reopening(unittest.TestCase):
+    """What the first session on ohs-box (beta.15, 28/10/2026) found: the
+    reopen at the operator's rate straight after 6 MS/s met "No SDRplay RSP
+    was found" while the API was still releasing it, an old receive thread
+    then read a device that had never opened, and the process died."""
+
+    def radio(self, **over):
+        cfg = {"vfo": HOME, "mode": "fm", "locator": "IO75RL", "sampleRate": 2_400_000, **over}
+        r, _audio, _dev = make_listener([air("SIM202")], **cfg)
+        self.addCleanup(r._tmp.cleanup)
+        self.addCleanup(r.stop)
+        r.start()
+        return r
+
+    def flaky(self, fails: dict):
+        """ListeningSim.open failing as an RSP not yet released does, as
+        many times as `fails` says for the rate it is opened at."""
+        real = ListeningSim.open
+
+        def open_(dev):
+            if fails.get(dev.fs, 0) > 0:
+                fails[dev.fs] -= 1
+                raise DeviceError("No SDRplay RSP was found (serial 191101D142)")
+            return real(dev)
+        return mock.patch.object(ListeningSim, "open", open_)
+
+    def test_a_reopen_that_finds_no_device_tries_again(self):
+        r = self.radio()
+        fails = {6_000_000.0: 1, 2_400_000.0: 2}
+        with self.flaky(fails), mock.patch.object(Radio, "REOPEN_WAITS_S", (0.05, 0.1, 0.2)):
+            r.adsb.join("tv-1")
+            self.assertEqual((r.running, r.geo.fs, r.adsb.state), (True, 6_000_000.0, "running"))
+            r.adsb.end("stopped")
+            self.assertTrue(wait(r, lambda: r.running and r.geo.fs == 2_400_000.0 and not r.restarting, 30))
+        self.assertEqual(fails, {6_000_000.0: 0, 2_400_000.0: 0})
+        self.assertEqual(r.state()["rxOwner"], {})
+
+    def test_one_that_never_opens_is_refused_and_the_radio_is_back_at_its_rate(self):
+        r = self.radio()
+        with self.flaky({6_000_000.0: 99}), mock.patch.object(Radio, "REOPEN_WAITS_S", (0.05, 0.1)):
+            with self.assertRaises(Refused) as e:
+                r.adsb.join("tv-1")
+        self.assertEqual(e.exception.code, "device_error")
+        self.assertIn("6 MS/s", str(e.exception))
+        self.assertEqual((r.running, r.geo.fs, r.adsb.state, r.state()["rxOwner"]), (True, 2_400_000.0, "idle", {}))
+
+    def test_a_receive_thread_that_outlives_its_run_never_joins_the_next(self):
+        # A read that blocks past stop()'s three-second join, as an RSP's can
+        # while the API releases it.
+        r = self.radio()
+        gate, blocked = threading.Event(), threading.Event()
+        dev = r.dev
+        real_read = type(dev).read
+
+        def read(d, n):
+            if d is dev and not gate.is_set():
+                blocked.set()
+                gate.wait(20)
+            return real_read(d, n)
+
+        with mock.patch.object(ListeningSim, "read", read):
+            self.assertTrue(blocked.wait(10))
+            old = [t for t in r.threads if t.name.endswith("-rx")]
+            r.stop()
+            r.start()
+            gate.set()
+            for t in old:
+                t.join(5)
+                self.assertFalse(t.is_alive(), "the old run's receive thread carried on")
+        alive = [t for t in threading.enumerate() if t.name == old[0].name]
+        self.assertEqual(len(alive), 1)
+        self.assertTrue(wait(r, lambda: r.running and r.rx_samples > 0, 10))
+
+    def test_a_read_on_a_closed_device_is_a_sentence_not_a_crash(self):
+        dev = SdrplayDevice({}, 2_400_000.0)
+        with self.assertRaises(DeviceError) as e:
+            dev.read(1024)
+        self.assertIn("closed", str(e.exception))
+
+    def test_when_the_post_answers_the_device_is_at_1090(self):
+        r = self.radio(vfo=430_162_500.0)
+        r.adsb.join("tv-1")
+        ds = r.state()["deviceStatus"]
+        self.assertEqual((ds.get("rxLo", ds.get("rxIf")), ds["fs"]), (1_090_000_000.0, 6_000_000.0))
+        self.assertEqual((r.dev.rx_if, r.geo.fs), (1_090_000_000.0, 6_000_000.0))
 
 @unittest.skipUnless(has_adsb(), "no shack_sdr with ADS-B for this machine")
 class OtherReceivers(unittest.TestCase):
