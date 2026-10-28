@@ -19,18 +19,30 @@
 #      ~/.claude/CLAUDE.md, 20 September), and carry a store/<app>/
 #      module.yaml version above the one installed on the box. Dock360
 #      refuses an older version anyway, but only after the build.
-#   2. The suite (tools/run-suite-split.sh, RERUN_RED=2) runs here, in a
-#      detached worktree at <commit>, while the signing host builds from
-#      its own detached worktree at the same commit. The build runs inside
-#      an 8G systemd scope because the signing host is shared.
+#   2. The suite (tools/run-suite-split.sh --if-needed, RERUN_RED=2) runs
+#      here, in a detached worktree at <commit>, while the signing host
+#      builds from its own detached worktree at the same commit. The build
+#      runs inside an 8G systemd scope because the signing host is shared.
+#      --if-needed skips the run when the suite cache (run-suite-split.sh's
+#      header) has a green run of the same tree with the same interpreter
+#      and ohsdigi - and the tree is compared with store/*/module.yaml's
+#      version line blanked, so the release commit, which bumps only that,
+#      is covered by a green run of the commit before it. ohsdigi is built
+#      first either way, since its bytes are part of the cache's key.
 #   3. The build only counts if its log says "selftest: PASS",
 #      "check-encumbered: clean" and "DONE rc=0".
 #   4. Only when both are green: tools/box-store-update.sh, which makes a
 #      signed rollback of what is installed before touching the box.
+#   5. tools/store-post-install.sh on the box: the module active, its
+#      journal since the install free of crashes, the in-container
+#      selftest, and store/<app>/smoke.json's checks (as of <commit>). A
+#      failure notifies and prints the rollback command; nothing is rolled
+#      back by itself.
 #
 # --no-install stops after step 3 and prints the box-store-update.sh
-# command. --skip-suite is for a commit whose tree a green run has already
-# covered (say so in the handover). --check validates arguments and config
+# command. --skip-suite skips the suite outright, a deliberate override
+# for a tree the cache cannot vouch for (a run on another host, another
+# interpreter; say so in the handover). --check validates arguments and config
 # only: no git, no ssh. JOBS (default 8) is the suite's -j; PYTHON
 # (default ~/build/venvs/ohs-qt/bin/python) its interpreter.
 #
@@ -138,7 +150,7 @@ if [ $SUITE = 1 ]; then
     (cd "$W" && tools/build-ohsdigi.sh --host --install > "$OUT/ohsdigi.log" 2>&1) || fail "ohsdigi build - see $OUT/ohsdigi.log"
     echo "suite: -j $JOBS in $W"
     (cd "$W" && PYTHON=${PYTHON:-$HOME/build/venvs/ohs-qt/bin/python} LOG_DIR=$OUT/suite RERUN_RED=2 \
-        tools/run-suite-split.sh -j "$JOBS" > "$OUT/suite.log" 2>&1)
+        tools/run-suite-split.sh --if-needed -j "$JOBS" > "$OUT/suite.log" 2>&1)
     SUITE_RC=$?
     tail -6 "$OUT/suite.log"
     git -C "$REPO" worktree remove --force "$W"
@@ -167,6 +179,18 @@ if [ $INSTALL = 0 ]; then
     notify "Store $APP $VERSION built and green, not installed"
     exit 0
 fi
+# The box's own clock, so the journal is read from exactly here whatever
+# this host's clock says.
+SINCE=$(ssh "$BOX_HOST" "date '+%Y-%m-%d %H:%M:%S'" 2>/dev/null)
 "$REPO/tools/box-store-update.sh" "$MODULE" "$VERSION" "$SIGN_HOST:$PKG" "$SHA" || fail "install on $BOX_HOST"
 echo "== installed $MODULE $VERSION on $BOX_HOST $(date -Is)"
-notify "Store $APP $VERSION installed on $BOX_HOST"
+
+# 5. is it really up? The smoke list as of the release commit, not this checkout.
+SMOKE=()
+if git -C "$REPO" show "$FULL:store/$APP/smoke.json" > "$OUT/smoke.json" 2>/dev/null; then
+    SMOKE=(--smoke "$OUT/smoke.json")
+fi
+# It notifies by itself on a failure, with the rollback command.
+"$REPO/tools/store-post-install.sh" ${SINCE:+--since "$SINCE"} --version "$VERSION" "${SMOKE[@]}" "$APP" \
+    || { echo "FAILED: post-install checks (installed, not rolled back)"; exit 1; }
+notify "Store $APP $VERSION installed on $BOX_HOST, post-install checks passed"
