@@ -161,19 +161,21 @@ class DabAuto:
         self.why = "default"
         self.at_hz: float | None = None
 
-    def tick(self, now: float, over: bool, lo: float, hi: float, dab_held: bool) -> bool:
-        """True when the verdict changed."""
+    def tick(self, now: float, over: bool, lo: float, hi: float, dab_held) -> bool:
+        """True when the verdict changed. `dab_held`: what holds the
+        receiver where the notch must stay out - "dab", "ais" (Radio
+        _dab_held), True for DAB - or nothing."""
         if dab_held or in_band_iii(lo, hi):
             # Never in here, and what was seen elsewhere does not carry in.
             self._win, self.streak = None, 0
-            why = "dab" if dab_held else "band_iii"
+            why = (dab_held if isinstance(dab_held, str) else "dab") if dab_held else "band_iii"
             if self.inn:
                 self.inn, self.out_at, self.why = False, now, why
                 return True
-            if self.why in ("default", "clear", "band_iii", "dab"):
+            if self.why in ("default", "clear", "band_iii", "dab", "ais"):
                 self.why = why
             return False
-        if self.why in ("band_iii", "dab"):
+        if self.why in ("band_iii", "dab", "ais"):
             self.why = "default"
         if self._win is None:
             self._win = {"t": now, "over": False}
@@ -211,4 +213,6 @@ class DabAuto:
             return _("out: tuned within Band III")
         if self.why == "dab":
             return _("out: a DAB station is playing")
+        if self.why == "ais":
+            return _("out: AIS is listening at 162 MHz, inside this notch's stopband")
         return _("out: no overload seen")

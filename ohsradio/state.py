@@ -290,6 +290,21 @@ with REG.after("scanIdleMinutes"):
             "give, saying only \"OpenHamShack-Radio\" and its version. Logos sent over the air always win; "
             "without internet nothing changes.")
 
+# --- ships on a map (ohsradio/ais.py, ohsradio/mapdata.py) -------------------------
+# Brian, 28/10/2026: AIS decodes only while a client has the map open; the
+# map's tiles come from OpenStreetMap only when the controller has internet,
+# and the bundled land map works without.
+with REG.after("radioDnsLogos"):
+    _k("aisKeepMinutes", "int", 60, "setting", lo=1, hi=1440, unit="min",
+       help="How long a ship stays on the AIS map after it was last heard.")
+    _k("mapOnlineTiles", "bool", True, "setting",
+       help="Show OpenStreetMap's map under the ships when Radio has internet: Radio fetches only the map "
+            "pictures a screen is showing, keeps them for a while, and serves them itself, so no screen goes to "
+            "the internet. What goes out: requests to tile.openstreetmap.org saying only \"OpenHamShack-Radio\" "
+            "and its version. Off, or offline, the map draws its own coastline.")
+    _k("mapTileCacheMb", "int", 200, "setting", lo=10, hi=5000, unit="MB",
+       help="The most disk the OpenStreetMap map pictures may take; the least recently shown go first.")
+
 # --- status (read-only) -------------------------------------------------------
 _o("rxDial", help="Frequency the receiver is demodulating (vfo + RIT, or the repeater input in reverse).")
 _o("txDial", help="Frequency our transmission is meant to land on (with split, repeater shift and XIT).")
@@ -336,6 +351,8 @@ with REG.after("txDial"):
                                       "{auto, db, operatorDb, gainModel, adaptive, state, signal, fibBad, overloaded, "
                                       "backoffs, atLimit, floorDb, text}; {auto: false, db: null, why, text} while one plays but "
                                       "the operator's gain stands; {} while none plays."),
+        ("ais", "dict", {}, "The AIS session (ais.py): {state (idle, running), why, text, clients, startedAt, "
+                            "endsInS, vessels, rev, frames, channelA, channelB, damaged, ...}; GET api/ais/session."),
         ("rds", "dict", None, "Wide FM: the station's RDS as the receiver decoded it (shack_sdr), "
                               "{pi, ps, rt, pty, ptyName, ta, tp, ct, af, stereo, ts}; null until a station's "
                               "programme identification is heard, and again on every retune."),

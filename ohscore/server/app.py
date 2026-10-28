@@ -1038,7 +1038,7 @@ class _Handler(BaseHTTPRequestHandler):
     # engine's decoder sessions (ohscore/decoders.py). Nothing here transmits.
     REFUSAL_STATUS = {"bad_params": 400, "unknown_decoder": 404, "unknown_session": 404,
                       "decoder_unavailable": 409, "outside_span": 409, "receiver_busy": 409, "on_air": 409,
-                      "span_pinned": 409,
+                      "span_pinned": 409, "bad_client": 400, "too_many_clients": 429,
                       "rate_too_low": 409, "out_of_range": 409, "too_many_sessions": 429, "not_running": 503}
 
     def get_decoders(self, who, q):
@@ -1251,6 +1251,163 @@ class _Handler(BaseHTTPRequestHandler):
             return
         log.info("band scan of %s started by %s", "+".join(got["bands"]), who.get("user", "?"))
         self._send(202, got)
+
+    # api/ais and api/map (docs/SERVER-API.md "AIS" and "Map"): Radio's ships
+    # on a map. NB has neither and answers 404.
+    def _ais(self):
+        a = getattr(self.srv.radio, "ais", None)
+        if a is None:
+            self._error(404, _("This app has no AIS."), "not_found")
+        return a
+
+    def get_ais_session(self, who, q):
+        a = self._ais()
+        if a is not None:
+            self._send(200, a.view())
+
+    def post_ais_session(self, who, q):
+        """POST api/ais/session {"client": id[, "dropSessions": true]}: this
+        client has the map open - start AIS, or keep it running. Again at
+        least every leaseS seconds while the map is open."""
+        from ..decoders import Refused as DecoderRefused
+        a = self._ais()
+        if a is None:
+            return
+        b = self._body()
+        if a.state != "running" and self.srv.digi.remote is not None:
+            # Armed, the next over would key wherever AIS had taken the
+            # receiver; the operator disarms first, as for DAB.
+            self._error(409, _("Not while automatic transmit is armed: switch it off first"), "on_air")
+            return
+        try:
+            view = a.join(b.get("client"), drop_sessions=b.get("dropSessions") is True)
+        except DecoderRefused as e:
+            more = {"sessions": e.sessions} if e.sessions is not None else {}
+            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+            return
+        self._send(200, view)
+
+    def delete_ais_session(self, who, q):
+        """DELETE api/ais/session?client=id: this client closed the map.
+        ?all=1: stop AIS now, whoever has the map open."""
+        a = self._ais()
+        if a is None:
+            return
+        if q.get("all", [""])[0] in ("1", "true"):
+            a.end("stopped")
+            log.info("AIS stopped by %s", who.get("user", "?"))
+            self._send(200, a.view())
+            return
+        self._send(200, a.leave(q.get("client", [""])[0]))
+
+    def get_ais_vessels(self, who, q):
+        """GET api/ais/vessels[?since=rev]: every vessel, or what changed."""
+        a = self._ais()
+        if a is None:
+            return
+        try:
+            since = int(q["since"][0]) if "since" in q else None
+        except ValueError:
+            self._error(400, _("since must be a whole number"), "bad_params")
+            return
+        st = a.table.station
+        loc = self.srv.radio.state().get("locator") or ""
+        self._send(200, {**a.table.view(since), "session": a.view(),
+                         "keepMinutes": int(self.srv.radio.state().get("aisKeepMinutes", 60)),
+                         "station": {"locator": loc or None, "lat": st[0] if st else None,
+                                     "lon": st[1] if st else None}})
+
+    def get_ais_vessel(self, who, q):
+        a = self._ais()
+        if a is None:
+            return
+        try:
+            mmsi = int(self._session_id())
+        except ValueError:
+            self._error(400, _("An MMSI is a number of up to nine digits"), "bad_params")
+            return
+        v = a.table.vessel(mmsi)
+        if v is None:
+            self._error(404, _("No vessel {mmsi} has been heard lately").format(mmsi=mmsi), "unknown_vessel")
+            return
+        self._send(200, v)
+
+    def _send_bytes(self, status: int, raw: bytes, ctype: str, headers: dict) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(raw)))
+        for k, v in headers.items():
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _map(self):
+        """Radio's map module (ohsradio/mapdata.py), which the engine
+        carries so this shared server never imports Radio; None (and a 404)
+        for an app with no map."""
+        m = getattr(self.srv.radio, "mapdata", None)
+        if m is None:
+            self._error(404, _("This app has no map."), "not_found")
+        return m
+
+    def get_map_info(self, who, q):
+        mapdata = self._map()
+        if mapdata is None:
+            return
+        r = self.srv.radio
+        tiles = r.map_tiles
+        land = mapdata.Land.load()
+        st = r.ais.table.station if getattr(r, "ais", None) is not None else None
+        self._send(200, {
+            "land": land.info() if land is not None else None,
+            "bounds": list(land.bounds) if land is not None else None,
+            "attribution": [mapdata.ATTRIBUTION],
+            "tiles": {**tiles.stats(), "url": "api/map/tiles/{z}/{x}/{y}.png", "minZoom": 0,
+                      "maxZoom": mapdata.MAX_ZOOM, "size": 256, "attribution": mapdata.ATTRIBUTION},
+            "station": {"locator": r.state().get("locator") or None, "lat": st[0] if st else None,
+                        "lon": st[1] if st else None}})
+
+    def get_map_land(self, who, q):
+        """GET api/map/land?bbox=w,s,e,n[&detail=auto|fine|coarse][&format=geojson|compact]."""
+        mapdata = self._map()
+        if mapdata is None:
+            return
+        land = mapdata.Land.load()
+        if land is None:
+            self._error(404, _("This install has no land map"), "no_land")
+            return
+        bbox = mapdata.parse_bbox(q.get("bbox", [""])[0]) if "bbox" in q else tuple(land.bounds)
+        detail = q.get("detail", ["auto"])[0]
+        fmt = q.get("format", ["geojson"])[0]
+        if bbox is None or detail not in ("auto", "fine", "coarse") or fmt not in ("geojson", "compact"):
+            self._error(400, _("bbox is west,south,east,north in degrees; detail auto, fine or coarse; format "
+                               "geojson or compact"), "bad_params")
+            return
+        if detail == "fine" and max(bbox[2] - bbox[0], bbox[3] - bbox[1]) > 4 * mapdata.FINE_MAX_SPAN_DEG:
+            detail = "coarse"
+        body = land.geojson(bbox, detail) if fmt == "geojson" else land.compact(bbox, detail)
+        raw = dumps(body)
+        headers = {"Cache-Control": "max-age=86400"}
+        if "gzip" in (self.headers.get("Accept-Encoding") or ""):
+            import gzip
+            raw = gzip.compress(raw, 6)
+            headers["Content-Encoding"] = "gzip"
+        ctype = "application/geo+json" if fmt == "geojson" else "application/json"
+        self._send_bytes(200, raw, ctype, headers)
+
+    def get_map_tile(self, who, q):
+        """GET api/map/tiles/{z}/{x}/{y}.png: an OpenStreetMap tile from the
+        cache (fetched first when allowed), or 404: draw the land map."""
+        if self._map() is None:
+            return
+        tiles = self.srv.radio.map_tiles
+        m = re.fullmatch(r"/api/map/tiles/(\d{1,2})/(\d{1,7})/(\d{1,7})\.png", urlsplit(self.path).path)
+        got = tiles.get(int(m[1]), int(m[2]), int(m[3])) if m else None
+        if got is None:
+            self._error(404, _("No map picture here: draw the built-in map"), "no_tile")
+            return
+        png, max_age = got
+        self._send_bytes(200, png, "image/png", {"Cache-Control": f"max-age={max_age}"})
 
     def get_overpower(self, who, q):
         """NB's over-power and LEILA watch: its list of the last 30 minutes
@@ -1773,6 +1930,12 @@ ROUTES = {
     ("POST", "/api/shack/pad/action"): ("control", _Handler.post_pad_action),
     ("POST", "/api/shack/release"): ("view", _Handler.post_shack_release),
     ("GET", "/api/decoders"): ("view", _Handler.get_decoders),
+    ("GET", "/api/ais/session"): ("view", _Handler.get_ais_session),
+    ("POST", "/api/ais/session"): ("control", _Handler.post_ais_session),
+    ("DELETE", "/api/ais/session"): ("control", _Handler.delete_ais_session),
+    ("GET", "/api/ais/vessels"): ("view", _Handler.get_ais_vessels),
+    ("GET", "/api/map/info"): ("view", _Handler.get_map_info),
+    ("GET", "/api/map/land"): ("view", _Handler.get_map_land),
     ("POST", "/api/decoders/sessions"): ("control", _Handler.post_decoder_session),
     ("POST", "/api/decoders/codecs/rescan"): ("control", _Handler.post_codecs_rescan),
     ("GET", "/api/decoders/files"): ("view", _Handler.get_decoder_files),
@@ -1791,6 +1954,8 @@ ROUTES = {
 # rest of the path after the prefix is the parameter. Exact routes first.
 PREFIX_ROUTES = {
     ("GET", "/api/decoders/sessions/"): ("view", _Handler.get_decoder_session),
+    ("GET", "/api/ais/vessels/"): ("view", _Handler.get_ais_vessel),
+    ("GET", "/api/map/tiles/"): ("view", _Handler.get_map_tile),
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
     ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),
     ("GET", "/api/decoders/files/"): ("view", _Handler.get_decoder_file),

@@ -180,14 +180,18 @@ class Policy:
     def active(self) -> bool:
         return self.key is not None
 
-    def begin(self, key, now: float, model: str, rfgr_range, operator_db: float, adaptive: bool) -> None:
+    def begin(self, key, now: float, model: str, rfgr_range, operator_db: float, adaptive: bool,
+              from_operator: bool = False) -> None:
         """A broadcast station starts (`key` names it: a new key is a new
-        station). `adaptive`: the device reports overload."""
+        station). `adaptive`: the device reports overload. `from_operator`:
+        start at the operator's own gain rather than the broadcast default
+        (AIS, ohsradio/ais.py: weak signals, so only overload moves it)."""
         self.key = key
         self.rfgr_range = rfgr_range
+        self.from_operator = bool(from_operator)
         self.ladder = Ladder(model, rfgr_range)
         self.operator = float(operator_db)
-        self.cap = self.ladder.start(operator_db)
+        self.cap = self.ladder.clamp(operator_db) if from_operator else self.ladder.start(operator_db)
         # The weak side may climb back as far as the operator's own gain
         # where that is more than the start: they chose it.
         op = self.ladder.clamp(operator_db)
@@ -226,7 +230,8 @@ class Policy:
         figure is the new start and ceiling, as if the station began now
         (their change is a deliberate act; what was learned stays)."""
         bad, floor = self.bad, self.floor
-        self.begin(self.key, now, self.ladder.model, self.rfgr_range, operator_db, self.adaptive)
+        self.begin(self.key, now, self.ladder.model, self.rfgr_range, operator_db, self.adaptive,
+                   from_operator=self.from_operator)
         self.bad, self.floor = bad, floor
 
     # -- the steps ------------------------------------------------------------

@@ -62,6 +62,7 @@ import math
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 import numpy as np
 
@@ -93,7 +94,7 @@ from .sequencer import Sequencer, SequencerError, make_output
 # the decoder sessions' results (ohscore/decoders.py). Never in the
 # server's default set, so a client gets them only when it asks.
 # stations: a band scan's list changed (bandscan.py), likewise only when asked.
-FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders", "stations")
+FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders", "stations", "ais")
 # How long after a re-centring the receive channel is taken to hold the
 # new centre's samples (Radio._rx_settled): a device read and the analysis
 # bank's overlap are a few tens of milliseconds at every supported rate;
@@ -280,6 +281,19 @@ class Radio(Engine):
             self.radiodns.start()
         self.activity_hooks.append(self.bandscan.touch)
         self.st["stationsAt"] = self.bandscan.stations_at()
+        # Ships on a map (ais.py, mapdata.py): AIS runs only while a client
+        # has the map open; the vessel table outlives a restart. Map tiles
+        # come from the internet only for the program an operator runs, as
+        # RadioDNS's logos do: a test's radio has no way out.
+        from . import mapdata
+        from .ais import AisService
+        self.ais = AisService(self)
+        self.mapdata = mapdata
+        self.st["ais"] = self.ais.view()
+        self.map_tiles = mapdata.TileCache(Path(self.data_dir) / "maptiles",
+                                           lambda: bool(self.st.get("mapOnlineTiles", True)),
+                                           lambda: int(self.st.get("mapTileCacheMb", 200)),
+                                           fetch=mapdata.default_fetch if self.persist else None)
 
     # ------------------------------------------------------------------ licence and plan
     def _plan(self):
@@ -928,6 +942,8 @@ class Radio(Engine):
 
     def _app_tick(self, now: float) -> None:
         self.bandscan.tick()
+        self.ais.tick()
+        self.map_tiles.save()
         self._broadcast_tick(now)
         self._notch_tick(now)
 
@@ -957,9 +973,13 @@ class Radio(Engine):
         half = self.geo.fs / 2
         return self.rx_if - half, self.rx_if + half
 
-    def _dab_held(self) -> bool:
+    def _dab_held(self) -> str | None:
+        """What holds the receiver where the DAB notch must stay out: "dab"
+        (it would notch the station itself), "ais" (162 MHz is inside its
+        >30 dB stopband, 160-230 MHz: ais.py), else None."""
         h = self.held
-        return h is not None and h.get("by") == "dab"
+        by = h.get("by") if h is not None else None
+        return by if by in ("dab", "ais") else None
 
     def _notch_view(self, lo: float, hi: float) -> dict:
         """`notches` in api/state and api/status: per switch the device has,
@@ -999,7 +1019,7 @@ class Radio(Engine):
     def _broadcast_key(self):
         h = self.held
         if h is not None:
-            return ("dab", h["session"]) if h.get("by") == "dab" else None
+            return (h["by"], h["session"]) if h.get("by") in ("dab", "ais") else None
         return ("wfm",) if self.st["mode"] == "wfm" else None
 
     def _broadcast_tick(self, now: float) -> None:
@@ -1024,8 +1044,10 @@ class Radio(Engine):
             count = ds.get("overloads")
             count = int(count) if isinstance(count, (int, float)) else None
             if bg.key != key or bg.wanted is None:
+                # AIS keeps the operator's gain until overload says
+                # otherwise (ais.py): a weak-signal service, not a multiplex.
                 bg.begin(key, now, ds.get("gainModel") or "db", ds.get("rfgrRange"), float(s["rxGain"]),
-                         "overloaded" in ds or "overloads" in ds)
+                         "overloaded" in ds or "overloads" in ds, from_operator=key[0] == "ais")
                 self.log.info("broadcast gain for %s: %g (the operator's %g; %s model, %s)", key[0], bg.gain,
                               bg.operator, bg.ladder.model, "backs off on overload" if bg.adaptive else "fixed")
             else:
@@ -1112,7 +1134,12 @@ class Radio(Engine):
                  "{rate:g} kS/s").format(least=wfm.WFM_RATE / 1000, device=self._kind(), rate=fs / 1000)
 
     def stop(self) -> None:
+        if self.running:
+            # The receiver back as it was while the radio still runs, so the
+            # engine's own save on the way out writes the operator's dial.
+            self.ais.end("radio_stopped")
         super().stop()
+        self.map_tiles.save(force=True)
         self.pin = None
         # The device is closed: it reopens with the operator's gain (the
         # configuration was never changed), so the policy starts afresh.

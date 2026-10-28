@@ -74,6 +74,10 @@ the desktop apps.
 | `POST api/recordings/stop {"kind"?}` | control | stop that kind, or both; the status with `stopped` |
 | `GET api/recordings/file?id=&part=data\|meta[&download=1]` | view | one file of a recording; `Range: bytes=…` answers `206` |
 | `POST api/recordings/delete {"id"}` | control | delete a recording (`409 recording_active` while it records) |
+| `GET api/ais/session`, `POST api/ais/session {"client"}`, `DELETE api/ais/session?client=\|all=1` | view, control, control | Radio only: the AIS session a ship map keeps alive (below, "AIS") |
+| `GET api/ais/vessels[?since=rev]`, `GET api/ais/vessels/{mmsi}` | view | Radio only: the vessel table, and one vessel with its track |
+| `GET api/events?kinds=…,ais` | view | Radio only: each AIS message's sentences, each vessel as it changes, the session; not in the default set |
+| `GET api/map/info`, `GET api/map/land?bbox=`, `GET api/map/tiles/{z}/{x}/{y}.png` | view | Radio only: the map to draw ships on (below, "Map") |
 | `GET api/local-frequencies?radiusKm=&category=` | view | Radio only: what there is to listen to near the station (below, "Local frequencies") |
 | `POST api/local-frequencies/mine`, `PUT`/`DELETE api/local-frequencies/mine/{id}` | control | Radio only: the operator's own list ("my frequencies") |
 | `POST api/local-frequencies/refresh` | control **and** the administrator flag | Radio only: download newer data (below) |
@@ -1149,7 +1153,11 @@ so it does not play at the operator's manual `rxGain`, which is set for
 weak amateur signals (an RSPdx on a local DAB multiplex at rxGain 40
 reported thousands of overloads and dropped audio at 48 dB SNR). While a
 DAB session holds the receiver, or the mode is `wfm`, Radio applies a gain
-of its own (ohsradio/bcastgain.py has the reasoning):
+of its own (ohsradio/bcastgain.py has the reasoning). AIS holding the
+receiver ("AIS" below) uses the same policy with one difference: it starts
+at the operator's own gain, not the broadcast default, and moves only on
+overload - AIS is weak signals, not a multiplex (`broadcastGain` while it
+runs says so).
 
 - **The operator's settings never change.** `rxGain`, `rxGainMode` and
   the antenna keep what the operator set, in `api/state`, Settings and the
@@ -1224,7 +1232,7 @@ Radio under "RTL-SDR and SDRplay"; code `ohsradio/notch.py`, tests
 
 | Setting | Values (default `auto`) | `auto` |
 |---|---|---|
-| `dabNotch` | `auto`, `on`, `off` | out, until the RSP reports overload in three one-second windows running while its span is clear of 174-240 MHz; then in, and out again after 5 minutes with no overload (10, 20... up to 60 if it comes back within the hour). Always out in Band III and while a DAB session holds the receiver |
+| `dabNotch` | `auto`, `on`, `off` | out, until the RSP reports overload in three one-second windows running while its span is clear of 174-240 MHz; then in, and out again after 5 minutes with no overload (10, 20... up to 60 if it comes back within the hour). Always out in Band III and while a DAB session or AIS holds the receiver (the notch's stopband, 160-230 MHz, covers AIS's 162 MHz) |
 | `rfNotch` | `auto`, `on`, `off` | in only while the whole span is below 60 MHz and clear of LW (148.5-283.5 kHz) and MW (526.5-1705 kHz); out above 60 MHz |
 
 `on` (in) and `off` (out) hold a notch wherever the receiver is.
@@ -1273,7 +1281,7 @@ station near a strong FM transmitter.
   "out: tuned above 60 MHz or within MW or LW broadcasting"}}`. `why`:
   `setting` (on or off), and for `dabNotch` auto `default` (no overload
   seen), `overload`, `clear` (taken out after the hold), `band_iii`,
-  `dab`; for `rfNotch` auto `below_60mhz` or `band`. `{}` for a radio
+  `dab`, `ais`; for `rfNotch` auto `below_60mhz` or `band`. `{}` for a radio
   without them.
 
 ## Station lists (Radio)
@@ -1629,6 +1637,237 @@ refresh_running` while one runs. The answer:
 Not used, by Brian's choice: RepeaterBook, UKRepeater/ETCC, G3USF's list,
 NATS AIP, VATSIM. No repeater list is shipped; repeaters are the
 operator's own entries.
+
+## AIS (Radio)
+
+Ships on a map (Brian, 28/10/2026). Radio decodes AIS - both channels,
+87B (161.975 MHz, "A") and 88B (162.025 MHz, "B") - **only while a client
+has the ship map open**, keeps a table of every vessel heard, and serves
+it. Code `ohsradio/ais.py` (and shack_sdr's `ais` decoder); tests
+`tests/test_ham_ais.py`. Receive only: nothing here keys.
+
+**The session.** A client opening its map calls `POST api/ais/session
+{"client": "<id>"}` (control) and calls it again at least every `leaseS`
+seconds (30) while the map stays open - every 10 s is right. `<id>` is the
+client's own stable name, 1-64 of `A-Za-z0-9._:-` (the same id it uses as
+`remote` elsewhere does). Closing the map, it calls `DELETE
+api/ais/session?client=<id>`; a client that simply vanishes is forgotten
+when its lease runs out. When no client is left the session ends `lingerS`
+(60 s) later - long enough for a TV moving between views - and the
+receiver goes back exactly as it was: the dial, mode and repeater offset,
+and the receiver's centre. `DELETE api/ais/session?all=1` (control) ends it
+at once whoever has the map open (an operator who wants the radio back).
+
+While it runs AIS **holds the receiver** like a DAB station: `rxOwner` is
+`{"by": "ais", "session": "ais", "block": "AIS", "freqHz": 162000000,
+"prior": {...}, "text": "..."}`, the dial is at 162.000 MHz (the receiver's
+DC spike falls between the channels, on neither), nothing at the dial is
+demodulated (silence plays), and a tune (`api/set`) or a key-up is
+refused `409 receiver_busy` with the sentence "The receiver is listening to
+AIS for the ship map: close the map, or stop AIS, to tune or change mode".
+A TV's map should show that it holds the receiver (`rxOwner.by == "ais"`).
+
+Every answer of the session routes is the session view (also `ais` in
+`api/state` and `api/status`, and `session` items on the feed):
+
+```json
+{"state": "running", "why": null, "text": "Listening to AIS on 161.975 and 162.025 MHz",
+ "clients": 1, "startedAt": "2026-10-28T06:20:31Z", "endsInS": null,
+ "centreHz": 162000000.0, "leaseS": 30.0, "lingerS": 60.0,
+ "vessels": 6, "rev": 412, "frames": 380, "channelA": 191, "channelB": 189, "damaged": 3}
+```
+
+- `state`: `running` or `idle`. `why` (idle): `idle` (nobody had the map
+  open), `stopped` (DELETE ?all=1), `radio_stopped`, `lost` (the receiver
+  was taken back), `null` before the first session. `text` says it in a
+  sentence. `endsInS`: seconds until it ends with no client, `null` while
+  any client has it. `frames`: messages decoded this session, per channel;
+  `damaged`: bursts that failed their CRC.
+- **Refusals** (`{"error", "code"}`): `400 bad_client` (no or a bad
+  `client`); `409 span_pinned` with `sessions` (background decoder
+  sessions pin the span: AIS would stop them; again with `"dropSessions":
+  true` to stop them, as for DAB, "The pinned span"); `409
+  receiver_busy` (a DAB station has the receiver: the sentence says so);
+  `409 on_air` (transmitting, or automatic transmit armed); `409
+  decoder_unavailable` (no shack_sdr with AIS); `429 too_many_clients`
+  (32); `503 not_running` (the radio is stopped: "Start the radio to see
+  ships"). A view-level client (`403 level_too_low`) cannot start AIS but
+  may read the table: show what is there and say decoding needs Control.
+- **Gain and notches:** the operator's gain stands; `broadcastGain` only
+  steps it down if the receiver reports overload (and back), as for wide
+  FM but starting from the operator's own gain. The RSP's DAB notch stays
+  out (`notches.dab_notch.why: "ais"`): its stopband covers 162 MHz.
+
+**The vessels.** `GET api/ais/vessels` (view):
+
+```json
+{"rev": 412, "full": true, "removed": [], "keepMinutes": 60,
+ "station": {"locator": "IO75RL", "lat": 55.479, "lon": -4.542},
+ "session": {...the session view...},
+ "vessels": [{"mmsi": 235999001, "class": "A", "name": "CLYDE SPIRIT", "callsign": "MCLY1",
+              "imo": null, "shipType": 60, "shipTypeText": "Passenger",
+              "lat": 55.6043, "lon": -4.9871, "positionAt": "2026-10-28T06:21:04Z", "accuracy": true,
+              "speed": 16.0, "course": 255.4, "heading": 255, "turn": 0.0,
+              "navStatus": 0, "navStatusText": "Under way using engine",
+              "destination": "BRODICK", "eta": "10-29 18:30", "draught": 4.5,
+              "length": 90, "beam": 16, "toBow": 70, "toStern": 20, "toPort": 8, "toStarboard": 8,
+              "distanceKm": 29.31, "bearingDeg": 287.5,
+              "lastHeard": "2026-10-28T06:21:04Z", "lastHeardTs": 1793168464.0,
+              "firstHeard": "2026-10-28T06:20:32Z", "messages": 14, "channel": "A", "snrDb": 23.8,
+              "lastType": 1, "rev": 410}]}
+```
+
+- One entry per MMSI, **nearest first**. A field is absent or `null` until
+  a message has brought it: a Class A ship's name comes in its type 5
+  (every six minutes on the air), so a new ship shows first as a position
+  with no name - draw it with its MMSI. Everything is merged from each
+  message type: positions (1, 2, 3, 18, 19, 27; 4 and 21 for base stations
+  and aids), names and voyage (5, 19, 24), aids (21).
+- Units: degrees (`lat` north, `lon` east, negative west), knots,
+  degrees true (`course`, `heading`: `null` when not available), metres
+  (`length`, `beam`, `to*`, `draught`), degrees a minute (`turn`). Times are
+  ISO 8601 UTC; `lastHeardTs` is the same as epoch seconds, for ageing a
+  symbol without parsing. `eta` is "MM-DD HH:MM" UTC as the ship gave it.
+- `class`: `A`, `B` (ships' two transponder classes), `base` (a base
+  station), `aton` (an aid to navigation: `aidType`, `aidTypeText`,
+  `virtualAid`, `offPosition`), `sar` (an aircraft), `sart` (a distress
+  beacon, SART/MOB/EPIRB: show it unmistakably), `other`.
+- `shipTypeText`, `navStatusText`, `aidTypeText` are sentences in the
+  server's language; `shipType`, `navStatus`, `aidType` the standard's
+  numbers (ITU-R M.1371-5 tables 53, 45, 74) for a client that words them
+  itself or picks a symbol (`shipType` 30 fishing, 36 sailing, 37 pleasure,
+  50-59 service craft, 60-69 passenger, 70-79 cargo, 80-89 tanker).
+- `distanceKm`, `bearingDeg`: from the station's locator (the station
+  profile), `null` without one or without a position.
+- A vessel not heard for `aisKeepMinutes` (a setting, 1-1440, default 60)
+  is dropped. The table is kept on the controller and survives a restart:
+  a map opened after one shows the ships it had, with their real ages.
+
+**Keeping up.** Every change bumps `rev`. `GET api/ais/vessels?since=<rev>`
+answers only the vessels changed after that rev, in `vessels`, and the
+MMSIs dropped after it, in `removed`, with `full: false`. When `full` is
+true (no `since`, a `since` too old, or a newer one than the server has:
+it restarted) the answer is the whole table and the client replaces its
+copy. Live, `GET api/events?kinds=ais` (WebSocket, not in the default set)
+sends, as they happen:
+
+- `{"kind": "ais", "type": "vessel", "rev", "vessel": {...as above}}` - a
+  vessel heard (the whole entry, not a diff).
+- `{"kind": "ais", "type": "removed", "rev", "mmsi"}` - dropped by age.
+- `{"kind": "ais", "type": "session", "session": {...}}` - the session
+  started, ended, gained or lost a client, or began its linger.
+- `{"kind": "ais", "type": "nmea", "t", "channel", "mmsi", "msgType",
+  "sentences": ["!AIVDM,1,1,,A,...*hh"]}` - every message as NMEA 0183, for
+  a log or other software.
+
+A map client: fetch `api/ais/vessels` when the map opens, then follow the
+feed; after a reconnect, `?since=` the last `rev` seen. A slow feed client
+can lose items (oldest first); the `rev` gap says so - fetch `?since=`.
+
+`GET api/ais/vessels/{mmsi}` (view): one vessel as above plus `track`, its
+recent positions oldest first, `[{"t", "lat", "lon", "speed", "course"}]` -
+a point when it has moved 25 m or a minute has passed, the last 120. `404
+unknown_vessel` when it is not in the table; `400 bad_params` for an MMSI
+that is not a number.
+
+Simulator: Radio's simulator puts six fictional ships and a buoy in the
+Firth of Clyde off the Ayrshire coast (`ohsradio/devices/simais.py`):
+a ferry Ardrossan-Brodick, a cargo ship up the firth, a fishing boat off
+Girvan, a Class B yacht, a pilot boat moored at Troon and a light on Lady
+Isle - real bursts on both channels, decoded like a ship's, positions every
+few seconds and names every half minute. Open the map with the radio on
+the simulator and they appear within a minute.
+
+## Map (Radio)
+
+What to draw the ships on: **land that is always there**, bundled with
+Radio, and **OpenStreetMap's map** when the controller has internet,
+fetched and cached by Radio and served through its own route - the client
+never touches the internet. Code `ohsradio/mapdata.py`; data
+`ohsradio/data/mapland` (made by `tools/mapland-build.py`); tests
+`tests/test_ham_map.py`.
+
+`GET api/map/info` (view):
+
+```json
+{"bounds": [-11.0, 49.0, 2.5, 61.0],
+ "land": {"source": "osm-land-polygons", "date": "2026-10-28", "licence": "ODbL-1.0",
+          "bounds": [-11.0, 49.0, 2.5, 61.0],
+          "levels": {"fine": {"toleranceDeg": 0.0002, "cellDeg": 0.5, "maxSpanDeg": 2.5},
+                     "coarse": {"toleranceDeg": 0.005, "cellDeg": 2.0, "maxSpanDeg": 360.0}}},
+ "attribution": [{"text": "© OpenStreetMap contributors", "url": "https://www.openstreetmap.org/copyright"}],
+ "tiles": {"enabled": true, "online": true, "cached": 120, "cachedMb": 2.1, "capMb": 200,
+           "backoffS": 0, "lastError": null, "url": "api/map/tiles/{z}/{x}/{y}.png",
+           "minZoom": 0, "maxZoom": 18, "size": 256,
+           "attribution": {"text": "© OpenStreetMap contributors", "url": "..."}},
+ "station": {"locator": "IO75RL", "lat": 55.479, "lon": -4.542}}
+```
+
+- **Attribution:** draw `attribution[0].text` on the map whenever it
+  shows (bottom right, never hidden behind a control): the land and the
+  tiles are both OpenStreetMap's, and its licence asks for that.
+- `bounds`: where the bundled land covers (Great Britain, Ireland, the
+  Isle of Man, the Channel Islands, Orkney and Shetland, and the near
+  coast of France). Outside it the land map is empty sea.
+- `land` is `null` if the install has no land data (draw the grid alone).
+- `tiles.enabled`: the `mapOnlineTiles` setting (default on). `online`:
+  tiles may be fetched now (the setting on and Radio not backing off after
+  a failed fetch). Neither promises a given tile: always be ready for 404.
+
+`GET api/map/land?bbox=west,south,east,north[&detail=auto|fine|coarse][&format=geojson|compact]`
+(view; degrees; no bbox is the whole of `bounds`):
+
+- **GeoJSON** (default, `application/geo+json`): a `FeatureCollection`
+  with `detail` (the level used) and `attribution`, and one `Feature`
+  whose geometry is a `MultiPolygon` of every land polygon in the cells the
+  box touches - more than the box, never less; clip as you draw. Rings
+  are closed, `[lon, lat]`, 4 decimals.
+- **Compact** (`format=compact`, `application/json`): `{"detail", "scale":
+  0.0001, "attribution", "polygons": [[ring, ...], ...]}`, each polygon a
+  list of rings (the outline, then holes), each ring a flat list of
+  integers: the first point whole, the rest as differences from the point
+  before, `[lon0, lat0, dlon1, dlat1, ...]`, in units of `scale` degrees.
+  About a third of GeoJSON's size and quicker to parse on a TV.
+- `detail=auto` gives `fine` (about 20 m) for a box up to `maxSpanDeg`
+  (2.5) degrees across and `coarse` (about 500 m) beyond; `fine` for a
+  box over 10 degrees is answered `coarse`. The Firth of Clyde at fine
+  detail is about 25,000 points.
+- **Fill the polygons; never stroke them.** The data is cut into cells,
+  and a stroke would draw the cut lines; the coastline is the land's
+  edge against the sea colour.
+- With `Accept-Encoding: gzip` the answer is gzipped. It changes only
+  when Radio is updated: `Cache-Control: max-age=86400`; cache it by box.
+- `400 bad_params` for a box that is not west<east, south<north inside
+  the world, or an unknown detail or format.
+
+`GET api/map/tiles/{z}/{x}/{y}.png` (view): the standard OpenStreetMap
+256-pixel tile (Web Mercator, the slippy-map numbering), `image/png` with
+`Cache-Control: max-age=<how long it stays fresh>`, or `404 no_tile` when
+there is none to give - offline, the setting off, not yet fetched and the
+fetch failed, beyond zoom 18 - and the client **draws the bundled land
+for that square instead**. A tile Radio has not got is fetched while the
+request waits (up to 4 s), so with internet the first look succeeds.
+
+How a client should use tiles (the OSM tile policy is Radio's to keep,
+and it keeps it only if the clients ask sensibly):
+
+- Ask only for the tiles **in view**: no margin, no other zoom levels
+  ahead, no "download this area". Radio fetches exactly what is asked and
+  nothing more (bulk and offline downloading are forbidden by the policy).
+- Draw the land first, then the tiles over it as they arrive, so a
+  missing tile shows land, not a hole; after a 404, ask for that tile
+  again only when the view changes or after a minute.
+- Keep a tile for its `max-age`.
+
+What Radio does (for reference): one User-Agent, "OpenHamShack-Radio/<version>
+(+https://openhamshack.com)", and nothing about the station; the caching
+headers honoured (fresh for max-age less Age, at least a day;
+stale-while-revalidate and stale-if-error; conditional revalidation); two
+fetches at a time; a backoff from one minute to an hour after a failure,
+so offline costs one request a minute, not one a tile; at most
+`mapTileCacheMb` (default 200) of tiles, the least recently shown going
+first. Settings: `mapOnlineTiles` (off: no traffic at all and no tile,
+cached or not) and `mapTileCacheMb`.
 
 ## What it is not (yet)
 
