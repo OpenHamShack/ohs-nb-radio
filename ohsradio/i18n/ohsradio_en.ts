@@ -584,323 +584,328 @@ Restarting the radio: {error}</source>
 </context><context>
     <name>SettingsDialog</name>
     <message>
-        <location filename="../ui/settings.py" line="75" />
+        <location filename="../ui/settings.py" line="76" />
         <source>real time</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="79" />
+        <location filename="../ui/settings.py" line="80" />
         <source>{pct} % of a core</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="93" />
+        <location filename="../ui/settings.py" line="94" />
         <source>CW skimmer</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="109" />
+        <location filename="../ui/settings.py" line="110" />
         <source>Hermes-Lite 2</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="110" />
+        <location filename="../ui/settings.py" line="111" />
         <source>Empty: found by broadcast when the radio starts. Find lists what answers now; pick one to fix its address. A radio on another subnet: type its address, and Find asks it directly.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="114" />
+        <location filename="../ui/settings.py" line="115" />
         <source>Find</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="132" />
+        <location filename="../ui/settings.py" line="133" />
         <source>RTL-SDR and SDRplay</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="147" />
+        <location filename="../ui/settings.py" line="148" />
         <source>Calibration</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="158" />
+        <location filename="../ui/settings.py" line="159" />
         <source>Decoders</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="158" />
+        <location filename="../ui/settings.py" line="159" />
         <source>Decoders that listen on frequencies of their own, beside the mode's (View › Decoders), and the codecs some decoders need. A change here applies when the radio next starts.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="168" />
+        <location filename="../ui/settings.py" line="169" />
         <source>Station lists</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="169" />
+        <location filename="../ui/settings.py" line="170" />
         <source>Radio lists the FM and DAB stations it can hear by itself, once a week at night while nobody is using it, and hands the radio back the moment anyone does. These apply at once.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="180" />
+        <location filename="../ui/settings.py" line="183" />
+        <source>DMR</source>
+        <translation type="unfinished" />
+    </message>
+    <message>
+        <location filename="../ui/settings.py" line="185" />
         <source>Codecs</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="181" />
+        <location filename="../ui/settings.py" line="186" />
         <source>codec2, for FreeDV, comes with Radio on Windows and macOS and with your system on Linux. Radio never includes the codecs whose patents or licences keep them out of free software (faad2 and fdk-aac for DAB+ and DRM sound, mbelib for digital voice): it uses them only if you install them, or put them in the codecs folder. mbelib gives DMR its voice; without it a DMR decoder still shows every call, ID, talkgroup, talker alias and message.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="193" />
+        <location filename="../ui/settings.py" line="198" />
         <source>Open codecs folder</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="196" />
+        <location filename="../ui/settings.py" line="201" />
         <source>Look again</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="215" />
+        <location filename="../ui/settings.py" line="220" />
         <source>Could not look for codecs: {error}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="217" />
+        <location filename="../ui/settings.py" line="222" />
         <source>This installation has no codec loader (shack-sdr).</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="221" />
+        <location filename="../ui/settings.py" line="226" />
         <source>FreeDV voice</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="222" />
-        <location filename="../ui/settings.py" line="221" />
+        <location filename="../ui/settings.py" line="227" />
+        <location filename="../ui/settings.py" line="226" />
         <source>DAB+ and DRM sound</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="222" />
+        <location filename="../ui/settings.py" line="227" />
         <source>DMR voice</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="246" />
+        <location filename="../ui/settings.py" line="251" />
         <source>Could not make {folder}: {error}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="254" />
+        <location filename="../ui/settings.py" line="259" />
         <source>An RTL-SDR or an SDRplay RSP only receives. Choose one above to see whether this computer has what it needs.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="260" />
+        <location filename="../ui/settings.py" line="265" />
         <source>This computer has what the {radio} needs.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="282" />
+        <location filename="../ui/settings.py" line="287" />
         <source>No Hermes-Lite 2 answered the broadcast on UDP port 1024 or {address}. Check it is powered and on this network (a radio with no DHCP server falls back to 169.254.19.221), and that no firewall drops UDP 1024 and 1025. Leaving the address empty still finds it by broadcast when the radio starts.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="287" />
+        <location filename="../ui/settings.py" line="292" />
         <source>No Hermes-Lite 2 answered the broadcast on UDP port 1024. Check it is powered and on this network (a radio with no DHCP server falls back to 169.254.19.221), and that no firewall drops UDP 1024 and 1025. Leaving the address empty still finds it by broadcast when the radio starts.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="309" />
+        <location filename="../ui/settings.py" line="314" />
         <source>Licence &amp; plan</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="309" />
+        <location filename="../ui/settings.py" line="314" />
         <source>What the transmit guard enforces. The licence is law and is always enforced; the band plan is a code of practice.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="313" />
+        <location filename="../ui/settings.py" line="318" />
         <source>Band plan</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="315" />
+        <location filename="../ui/settings.py" line="320" />
         <source>Warn: a transmission outside what its segment is for goes ahead with a warning. Enforce: it is refused. Beacon and satellite sub-bands are refused whatever this says.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="322" />
+        <location filename="../ui/settings.py" line="327" />
         <source>Bands &amp; power</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="322" />
+        <location filename="../ui/settings.py" line="327" />
         <source>Per band, what turns drive into watts at the antenna. An estimate over your class's limit there is a warning, not a refusal; where the radio measures its own output and no PA gain is entered, the measurement is held to the limit.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="330" />
+        <location filename="../ui/settings.py" line="335" />
         <source>Band</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="330" />
+        <location filename="../ui/settings.py" line="335" />
         <source>Device W</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="330" />
+        <location filename="../ui/settings.py" line="335" />
         <source>PA gain dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="330" />
+        <location filename="../ui/settings.py" line="335" />
         <source>Feeder loss dB</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="331" />
+        <location filename="../ui/settings.py" line="336" />
         <source>Antenna dBi</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="331" />
+        <location filename="../ui/settings.py" line="336" />
         <source>Ceiling %</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="331" />
+        <location filename="../ui/settings.py" line="336" />
         <source>At full drive</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="363" />
+        <location filename="../ui/settings.py" line="368" />
         <source>Device W empty: the device's own figure (a Pluto about 4.5 mW, the Hermes-Lite 2 about 5 W). A Pluto has no output filter: check its output into a dummy load on a spectrum analyser before it drives any PA, and never connect it straight to an antenna. Whether a PA's own filter is then enough is what that check shows.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="403" />
+        <location filename="../ui/settings.py" line="408" />
         <source>Bands</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="404" />
+        <location filename="../ui/settings.py" line="409" />
         <source>Direct: the radio tunes the band itself. Through a converter, the band is on the band bar whenever the radio reaches the converter's IF for it (6 m included), and transmits only through an RX/TX or TX only one with its most drive given. A TX only one is transmitted through and the band received directly.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="418" />
+        <location filename="../ui/settings.py" line="423" />
         <source>Direct</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="435" />
+        <location filename="../ui/settings.py" line="440" />
         <source>Local frequencies</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="436" />
+        <location filename="../ui/settings.py" line="441" />
         <source>What there is to listen to near your locator (Station page): airfields, area control, coast stations, marinas and the channel tables. The Local view lists it; a click tunes there.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="440" />
+        <location filename="../ui/settings.py" line="445" />
         <source>My frequencies</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="441" />
+        <location filename="../ui/settings.py" line="446" />
         <source>Your own list: repeaters, nets, anything you listen to. Saved as you change it, and shared with OpenHamShack Remote when this Radio runs on a controller.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="450" />
+        <location filename="../ui/settings.py" line="455" />
         <source>Name</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="450" />
+        <location filename="../ui/settings.py" line="455" />
         <source>MHz</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="450" />
+        <location filename="../ui/settings.py" line="455" />
         <source>Mode</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="450" />
+        <location filename="../ui/settings.py" line="455" />
         <source>Category</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="494" />
+        <location filename="../ui/settings.py" line="499" />
         <source>Add…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="494" />
+        <location filename="../ui/settings.py" line="499" />
         <source>Edit…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="495" />
+        <location filename="../ui/settings.py" line="500" />
         <source>Delete</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="501" />
+        <location filename="../ui/settings.py" line="506" />
         <source>Data</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="511" />
+        <location filename="../ui/settings.py" line="516" />
         <source>Refresh now</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="512" />
+        <location filename="../ui/settings.py" line="517" />
         <source>Download newer airfield and marine data, and area control with an openAIP key. Needs the internet; Radio works with the copy it came with.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="529" />
+        <location filename="../ui/settings.py" line="534" />
         <source>{source}: {n} frequencies, {coverage}, {date}. {licence}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="546" />
+        <location filename="../ui/settings.py" line="551" />
         <source>Downloading…</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="562" />
+        <location filename="../ui/settings.py" line="567" />
         <source>{source}: {n}</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="563" />
+        <location filename="../ui/settings.py" line="568" />
         <source>{source}: not refreshed ({why})</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="569" />
+        <location filename="../ui/settings.py" line="574" />
         <source>PTT sequencer</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="569" />
+        <location filename="../ui/settings.py" line="574" />
         <source>The line that keys a PA, a preamp's bypass relay or a transverter: on before RF, off after it.</source>
         <translation type="unfinished" />
     </message>
     <message>
-        <location filename="../ui/settings.py" line="575" />
+        <location filename="../ui/settings.py" line="580" />
         <source>Opening a serial port raises RTS and DTR for an instant before OpenHamShack Radio can clear them (Linux does this, not the program); a relay does not follow it and no RF is ever sent then. If your PA keys on the slightest glitch, drive it through an inverter with a pull-down. When the program stops for any reason the port closes and both lines drop.</source>
         <translation type="unfinished" />
     </message>

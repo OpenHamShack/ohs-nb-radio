@@ -44,7 +44,8 @@ class SettingsDialog(core.SettingsDialog):
               "cwSkim": "CW skimmer", "cwSkimSquelch": "CW skimmer squelch", "cwSkimMax": "CW skimmer channels",
               "cwSkimScp": "Download MASTER.SCP", "localRadiusKm": "Radius", "openAipKey": "openAIP API key",
               "scanAuto": "Weekly station scan", "scanHour": "Scan at (hour)", "scanEveryDays": "Scan every",
-              "scanIdleMinutes": "Only after idle for", "radioDnsLogos": "Station logos from the internet"}
+              "scanIdleMinutes": "Only after idle for", "radioDnsLogos": "Station logos from the internet",
+              "dmrIdLookup": "DMR callsigns from the internet"}
     CHOICE_LABELS = {**core.CHOICE_LABELS,
                      "device": {"sim": "Simulator", "pluto": "Pluto family", "libresdr": "LibreSDR",
                                 "hl2": "Hermes-Lite 2", "rtlsdr": "RTL-SDR (RX only)",
@@ -177,6 +178,10 @@ class SettingsDialog(core.SettingsDialog):
         # RadioDNS logos (ohsradio/radiodns.py): the one setting here that
         # reaches the internet, so its help (what goes out) is shown in full.
         self._add(lay, "radioDnsLogos")
+        # DMR's callsigns and names (ohsradio/dmrids.py): it too reaches
+        # the internet, so its help is shown in full.
+        self._section(lay, self.tr("DMR"))
+        self._add(lay, "dmrIdLookup")
         self._section(lay, self.tr("Codecs"))
         note = QLabel(self.tr("codec2, for FreeDV, comes with Radio on Windows and macOS and with your system on "
                               "Linux. Radio never includes the codecs whose patents or licences keep them out of "

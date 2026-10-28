@@ -309,6 +309,18 @@ with REG.after("radioDnsLogos"):
     _k("mapTileCacheMb", "int", 200, "setting", lo=10, hi=5000, unit="MB",
        help="The most disk the OpenStreetMap map pictures may take; the least recently shown go first.")
 
+# --- DMR callsigns and names (ohsradio/dmrids.py) --------------------------------
+# On by default, like RadioDNS's logos (Brian: internet features are
+# optional extras, and offline nothing changes). Off means no traffic at all
+# and bare IDs, as before. The help says exactly what goes out.
+with REG.after("mapTileCacheMb"):
+    _k("dmrIdLookup", "bool", True, "setting",
+       help="Show callsigns and names for the radio IDs a DMR decoder hears, and names for talkgroups. Radio "
+            "downloads radioid.net's list of registered IDs and Brandmeister's talkgroup names once a week in the "
+            "background, keeps them on this computer, and answers every screen itself. What goes out: two web "
+            "requests a week saying only \"OpenHamShack-Radio\" and its version. A talker alias the caller's "
+            "radio sends always wins; without internet the decoder shows the bare IDs.")
+
 # --- status (read-only) -------------------------------------------------------
 _o("rxDial", help="Frequency the receiver is demodulating (vfo + RIT, or the repeater input in reverse).")
 _o("txDial", help="Frequency our transmission is meant to land on (with split, repeater shift and XIT).")
@@ -360,6 +372,9 @@ with REG.after("txDial"):
         ("adsb", "dict", {}, "The ADS-B session (adsb.py): {state (idle, running), why, text, clients, startedAt, "
                              "endsInS, centreHz, rateHz, aircraft, rev, messages, df17, aircraftSeen, ...}; GET "
                              "api/adsb/session."),
+        ("dmrIds", "dict", {}, "DMR callsigns and names (dmrids.py): {available, count, updatedUtc, source, "
+                               "talkgroups}; available false offline until a list has been fetched, and with "
+                               "dmrIdLookup off."),
         ("rds", "dict", None, "Wide FM: the station's RDS as the receiver decoded it (shack_sdr), "
                               "{pi, ps, rt, pty, ptyName, ta, tp, ct, af, stereo, ts}; null until a station's "
                               "programme identification is heard, and again on every retune."),

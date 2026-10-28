@@ -128,6 +128,10 @@ os.environ["OHS_PSKREPORTER"] = os.environ["OPENHAMSHACK_PSKREPORTER"] = "127.0.
 # fetcher takes as offline; the tests that check it run their own server.
 os.environ["OHS_RADIODNS_RESOLVER"] = "127.0.0.1:9"
 
+# DMR's callsign lists (ohsradio/dmrids.py) likewise: both sources at a
+# closed local port, for any radio or tool that starts the fetcher.
+os.environ["OHS_DMRIDS_BASE"] = "http://127.0.0.1:9"
+
 # The time of day, too: the suite runs at local noon, whatever the machine's
 # clock says. Radio's weekly band scan (ohsradio/bandscan.py) starts by
 # itself at the first tick in the hour after scanHour (03:00 local), and a

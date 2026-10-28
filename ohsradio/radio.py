@@ -279,6 +279,16 @@ class Radio(Engine):
                                  lambda: bool(self.st.get("radioDnsLogos", True)))
         if self.persist:
             self.radiodns.start()
+        # Callsigns and names for DMR's IDs and talkgroups (dmrids.py),
+        # fetched in the background like RadioDNS's logos and on the same
+        # terms: only for the program an operator runs, and offline a DMR
+        # session shows bare IDs as it always did.
+        from .dmrids import DmrIds
+        self.dmr_ids = DmrIds(Path(self.data_dir) / "dmrids", lambda: bool(self.st.get("dmrIdLookup", True)),
+                              on_change=lambda v: self._status(dmrIds=v))
+        self.st["dmrIds"] = self.dmr_ids.view()
+        if self.persist:
+            self.dmr_ids.start()
         self.activity_hooks.append(self.bandscan.touch)
         self.st["stationsAt"] = self.bandscan.stations_at()
         # Ships on a map (ais.py, mapdata.py): AIS runs only while a client
@@ -671,6 +681,12 @@ class Radio(Engine):
             self._maybe_recentre()
         if any(k in changed for k in ("seqDelayMs",)) and self.seq is not None:
             self.seq.delay = s["seqDelayMs"] / 1000.0
+        if "dmrIdLookup" in changed:
+            # Names shown or hidden at once; turned on, a look within
+            # seconds rather than the hour (dmrids.py).
+            self._status(dmrIds=self.dmr_ids.view())
+            if s.get("dmrIdLookup"):
+                self.dmr_ids.nudge()
 
     def _maybe_recentre(self):
         held = self.held
@@ -1418,10 +1434,23 @@ class Radio(Engine):
     def decoder_meta(self, meta: dict) -> dict:
         """A decoder feed as clients get it (Decoders._meta): a DAB feed's
         TII codes (`tii`) named as `transmitters`, with each site's distance
-        and bearing from the station's locator."""
+        and bearing from the station's locator; a DMR feed's slots with
+        their callers' callsigns and talkgroups' names (dmrids.py)."""
+        if isinstance(meta.get("slots"), list):
+            from .dmrids import annotate
+            return dict(meta, slots=[annotate(sl, self.dmr_ids) if isinstance(sl, dict) else sl
+                                     for sl in meta["slots"]])
         if "tii" not in meta:
             return meta
         return dict(meta, transmitters=self.dabtx.describe(meta, self.st.get("locator", "")))
+
+    def decoder_frame(self, decoder: str, it: dict) -> dict:
+        """A decoder result as clients get it (Decoders._frame): a DMR
+        call's or message's IDs named, as in its meta."""
+        if decoder != "dmr" or not isinstance(it.get("fields"), dict):
+            return it
+        from .dmrids import annotate
+        return dict(it, fields=annotate(it["fields"], self.dmr_ids))
 
     def _demodulate(self, X, starts, rx_dial: float):
         if self.st["mode"] == "wfm":

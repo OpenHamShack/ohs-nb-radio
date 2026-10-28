@@ -778,6 +778,7 @@ The table below is generated from the Settings window itself (`tools/settings-re
 | Scan every | 1 days – 60 days | 7 days | How old a station list may be before the night's scan makes it again. |
 | Only after idle for | 1 min – 720 min | 30 min | How long the radio must have been left alone (nobody tuning or listening) before a night's scan may start. |
 | Station logos from the internet | On / Off | On | Fetch DAB station logos from the internet in the background, so the station list has them before Radio has heard each ensemble's own. What goes out: DNS look-ups of each station's RadioDNS name, then web requests to the broadcasters' service-information servers and the logo addresses they give, saying only "OpenHamShack-Radio" and its version. Logos sent over the air always win; without internet nothing changes. |
+| DMR callsigns from the internet | On / Off | On | Show callsigns and names for the radio IDs a DMR decoder hears, and names for talkgroups. Radio downloads radioid.net's list of registered IDs and Brandmeister's talkgroup names once a week in the background, keeps them on this computer, and answers every screen itself. What goes out: two web requests a week saying only "OpenHamShack-Radio" and its version. A talker alias the caller's radio sends always wins; without internet the decoder shows the bare IDs. |
 
 #### Licence & plan
 

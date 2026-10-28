@@ -37,7 +37,7 @@ the desktop apps.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET /` | view | a status page and the Recordings (record, play, download, delete); nothing fetched from elsewhere, one small script that posts to `api/recordings` |
-| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `span` (what the receiver covers and whether background decoder sessions pin it: "The pinned span" below; `{}` in QO-100 NB), `broadcastGain` (the receiver gain a DAB station or wide FM plays with in place of the operator's: "Broadcast gain" below; `{}` while none plays, and in QO-100 NB), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below) |
+| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `span` (what the receiver covers and whether background decoder sessions pin it: "The pinned span" below; `{}` in QO-100 NB), `broadcastGain` (the receiver gain a DAB station or wide FM plays with in place of the operator's: "Broadcast gain" below; `{}` while none plays, and in QO-100 NB), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below), `dmrIds` (Radio: the DMR callsign list, "DMR" below; absent in QO-100 NB) |
 | `GET api/state` | view | `Radio.state()`: every key |
 | `GET api/spec` | view | the settings registry (type, limits, choices, help, auth, restart) |
 | `POST api/set` | control (transmit for `auth` keys) | `{key: value, …}` or `{"changes": {…}}` through `Radio.set()`, all or nothing; answers `{"changed": {…}}`. A tune out of the span background decoders pin is `409 span_pinned` with the sessions it would stop, unless the body has `"dropSessions": true` ("The pinned span" below); a receiver DAB holds is `409 receiver_busy`. The station profile's keys (callsign, locator, country, licence, class, own licence, conditions) are refused: they are set on the controller. So are the device addresses and audio devices (the broker and the API own those). |
@@ -1442,10 +1442,12 @@ sound is 8 kHz mono in the decoder, converted to the stream's own rate.
  "slots": [
   {"slot": 1, "state": "voice", "src": 9990001, "dst": 99, "callType": "group", "cc": 1,
    "alias": "MX0TST Test", "encrypted": false, "emergency": false,
-   "callStart": 1793166482.24, "lastHeard": 1793166484.92, "rssiDb": -61.8, "ber": 0.0012},
+   "callStart": 1793166482.24, "lastHeard": 1793166484.92, "rssiDb": -61.8, "ber": 0.0012,
+   "srcCallsign": "MX0TST", "dstName": "Test Ninety-Nine"},
   {"slot": 2, "state": "idle", "src": 9990003, "dst": 98, "callType": "group", "cc": 1,
    "alias": null, "encrypted": true, "emergency": false,
-   "callStart": 1793166478.10, "lastHeard": 1793166479.30, "rssiDb": -62.0, "ber": 0.0}]}
+   "callStart": 1793166478.10, "lastHeard": 1793166479.30, "rssiDb": -62.0, "ber": 0.0,
+   "srcCallsign": "Q9CCC", "srcName": "Charlie", "srcCountry": "Otherland"}]}
 ```
 
 - `mode`: what the channel carries - `bs` (a repeater's output), `ms` (a
@@ -1459,6 +1461,9 @@ sound is 8 kHz mono in the decoder, converted to the stream's own rate.
   `rssiDb` the channel's power, dB full scale; `ber` the share of bits the
   error correction fixed over the slot's last two seconds or so (0.01 is
   1 %).
+- `srcCallsign`, `srcName`, `srcCountry` and `dstName`, **only when
+  known** (absent otherwise): the caller named and the talkgroup's name,
+  below ("Callsigns and names").
 - **An idle slot keeps its last call's** `src`, `dst`, `callType`, `cc`,
   `alias`, `encrypted` and `callStart`, so a client shows "last heard"
   without keeping history of its own. Fields not yet known are null: a
@@ -1476,6 +1481,11 @@ sound is 8 kHz mono in the decoder, converted to the stream's own rate.
 | `talker_alias` | `src`, `alias`: as soon as an alias is complete |
 | `sms` | `src`, `dst`, `group`, `text`, `sap`, `srcPort`, `dstPort`, `octets`: a short message (an IP/UDP datagram, Motorola's text messaging and its like) |
 | `data` | as `sms` without `text`: a data message with no text found in it |
+
+Every result with a `src` may also carry `srcCallsign`, `srcName` and
+`srcCountry`, and one to a talkgroup (`callType` `group`, or an `sms`/`data`
+with `group` true) `dstName`, as the slots do; the kept results in
+`GET api/decoders/sessions/{id}` are the named ones.
 
 The session's `stats` add `bursts`, `syncs`, `misses`, `calls`,
 `voiceFrames`, `lcOk`, `lcBad` and `dataMessages` to the usual ones;
@@ -1496,6 +1506,67 @@ simulator"); on slot 2, overlapping it, a private call from 9990002
 ("MX0ABC") to 9990001 and an encrypted call from 9990003 to talkgroup 98.
 Country code 999 is no country's, so the IDs name nobody. With mbelib the
 test voice frames play as a buzz.
+
+### Callsigns and names
+
+A DMR call carries only numbers. Since 28/10/2026 Radio names them from
+two lists it fetches itself in the background (ohsradio/dmrids.py): the
+radio IDs registered with **radioid.net** (callsign, first name, city,
+state, country) and **Brandmeister**'s talkgroup names. Every client gets
+the names in the session's `meta` and results; **no client ever reaches
+the internet for them**, and no route serves the lists themselves.
+
+- **Offline, nothing changes.** With no list yet, no route out or the
+  sources failing, a session shows bare IDs as it always did: no error
+  anywhere, no wait. A fetch never sits on a request's path: a lookup
+  reads a small database on the controller's own disk.
+- **The talker alias wins.** A callsign at the start of the alias the
+  caller's radio sends (`"MX0TST Test"` gives `"MX0TST"`) is
+  `srcCallsign`, list or no list; the list's `srcName` and `srcCountry`
+  are added only when the list gives that ID the same callsign (else they
+  would describe the ID's owner, not the caller). An alias with no
+  callsign in it leaves the list's callsign standing.
+- **`dstName`** is for talkgroups only; a private call's `dst` is a radio.
+- **The setting** `dmrIdLookup` (bool, default `true`; `api/set`, Settings
+  › Decoders › DMR): off means no traffic at all and the fields exactly as
+  before (no `src*`/`dstName`, the alias's callsign included). The copy on
+  disk is kept for when it is on again; turned on, a fetch is tried within
+  seconds.
+- **The cache** lives in the app's data folder, `dmrids/`: `users.sqlite`
+  (about 12 MB for a list of radioid.net's size), `talkgroups.json`,
+  `state.json` (each source's validators, last look and backoff). It is
+  never part of Radio's package or repository: radioid.net's data-use
+  policy forbids republishing its list, so each controller (or desktop)
+  fetches its own. A refresh is built beside the live copy and renamed
+  over it only when whole and non-empty, so a lookup sees the old list or
+  the new one, never half; a download cut short leaves the old one.
+- **What goes out:** `GET https://radioid.net/static/user.csv` (17 MB) and
+  `GET https://api.brandmeister.network/v2/talkgroup` (about 17 kB
+  gzipped), each **once a week**, first tried three minutes after start;
+  the users list conditional (`If-None-Match`, `If-Modified-Since`), so an
+  unchanged week costs a 304. User-Agent `OpenHamShack-Radio/<version>`
+  and nothing else about the station: no cookies, no query, no callsign,
+  locator or contact address. A failure backs off silently, an hour
+  doubling to a day, kept across restarts, and is retried at that pace for
+  ever. Names are never logged: only counts and causes.
+
+`dmrIds` in `api/status` and `api/state` (and its `state` diffs when a
+list is fetched or the setting changes):
+
+```json
+{"available": true, "count": 287041, "updatedUtc": "2026-10-28T14:02:11Z",
+ "source": "radioid.net", "talkgroups": 1874}
+```
+
+`available` is true while names are being added from a list (false with
+no list yet, offline, or the setting off); `count` the IDs in the users
+list (0 without one); `updatedUtc` when that list was last downloaded
+(not when a 304 confirmed it), null without one; `source` where it came
+from, null without one; `talkgroups` the talkgroup names held.
+
+**The simulator's** IDs are under country code 999 and named by their
+aliases (`MX0TST`, `MX0ABC`); tests serve their own fake lists, whose
+callsigns start with Q, a prefix no country issues.
 
 **Not yet:** Tier III trunking and CSBKs, rate 1 data, GPS positions in
 the embedded link control, real-air checks (recordings of local repeaters
