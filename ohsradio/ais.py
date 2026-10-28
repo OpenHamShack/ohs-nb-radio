@@ -12,9 +12,16 @@
 162 MHz, so it runs only while a client has its map open: the client
 starts the session and renews it (`join`) at least every CLIENT_LEASE_S;
 a client that leaves says so, or simply stops renewing. The session ends
-LINGER_S after the last client has gone - long enough that a TV moving
-between views, or a phone that slept a moment, does not hand the receiver
-to and fro - and gives the receiver back exactly as it was.
+as soon as the last client has gone (LINGER_S, 0) and gives the receiver
+back exactly as it was. It lingered 60 s until 28/10/2026, so a TV moving
+between views did not hand the receiver to and fro; Brian decided against
+any linger when client presence came (CLIENT-UI-PLAN 7.3: the radio is
+given back the moment nobody uses it, and the price - a map reopened at
+once starts from cold, a few seconds - is accepted). The lease itself is
+unchanged, and is still all a client without presence has; a client with
+presence and "ais" in its holds is vouched for by it (`vouch`, set by the
+server) and need not renew here, and its leaving ends its share at once
+(Server.client_gone).
 
 **The receiver.** Held like a DAB station's (Engine.hold_receiver;
 `rxOwner` says so): the dial and the receiver's centre to 162.000 MHz,
@@ -77,7 +84,7 @@ SID = "ais"
 CENTRE_HZ = 162_000_000.0
 MIN_RATE = 96_000.0
 CLIENT_LEASE_S = 30.0
-LINGER_S = 60.0
+LINGER_S = 0.0            # no linger (module docstring)
 CLIENT_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 MAX_CLIENTS = 32
 # The track: a point when a vessel has moved TRACK_MIN_M or TRACK_MIN_S
@@ -419,6 +426,10 @@ class AisService:
         self.why: str | None = None
         self.started_at: float | None = None
         self.linger_until: float | None = None
+        # Set by the server: whether client presence vouches for a client
+        # (present in this app with the map in its holds), which then need
+        # not renew this lease apart (CLIENT-UI-PLAN 7.2). None: nobody does.
+        self.vouch = None
         self.host = None
         self.sid: str | None = None
         self.index = 0
@@ -453,6 +464,12 @@ class AisService:
             self.linger_until = None
             self._publish()
             return self.view()
+
+    def _vouched(self, client: str) -> bool:
+        try:
+            return self.vouch is not None and bool(self.vouch(client))
+        except Exception:  # noqa: BLE001 - a vouch that fails vouches for nobody
+            return False
 
     def leave(self, client: str) -> dict:
         with self.lock:
@@ -548,7 +565,7 @@ class AisService:
         with self.lock:
             if self.state == "running":
                 for c, until in list(self.clients.items()):
-                    if until < now:
+                    if until < now and not self._vouched(c):
                         del self.clients[c]
                 if not self.clients and self.linger_until is None:
                     self.linger_until = now + LINGER_S

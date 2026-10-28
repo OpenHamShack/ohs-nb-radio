@@ -9,8 +9,9 @@
     radio.adsb.tick(now)             # the supervisor, ten times a second
 
 Shaped exactly like AIS (ais.py): decoding only while a client has the map
-open, a CLIENT_LEASE_S lease the client renews, LINGER_S after the last
-one goes, the receiver held and given back as it was. What differs:
+open, a CLIENT_LEASE_S lease the client renews (or client presence
+vouches for), no linger after the last one goes (LINGER_S, 0, as AIS since
+28/10/2026), the receiver held and given back as it was. What differs:
 
 **The rate.** Mode S's bits differ around ±1 MHz from the carrier, so the
 receiver's IF filter decides what can be heard (shack_sdr README, ADS-B).
@@ -74,7 +75,7 @@ CENTRE_HZ = 1_090_000_000.0
 MIN_RATE = 2_400_000.0
 RSP_RATE = 6_000_000.0
 CLIENT_LEASE_S = 30.0
-LINGER_S = 60.0
+LINGER_S = 0.0            # no linger (ais.py's docstring)
 CLIENT_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 MAX_CLIENTS = 32
 # The track: a point when an aircraft has moved TRACK_MIN_M or TRACK_MIN_S
@@ -238,6 +239,10 @@ class AdsbService:
         self.why: str | None = None
         self.started_at: float | None = None
         self.linger_until: float | None = None
+        # Set by the server: whether client presence vouches for a client
+        # (present in this app with the map in its holds), which then need
+        # not renew this lease apart (CLIENT-UI-PLAN 7.2). None: nobody does.
+        self.vouch = None
         self.host = None
         self.sid: str | None = None
         self.index = 0
@@ -275,6 +280,12 @@ class AdsbService:
                 self.linger_until = None
                 self._publish()
                 return self.view()
+
+    def _vouched(self, client: str) -> bool:
+        try:
+            return self.vouch is not None and bool(self.vouch(client))
+        except Exception:  # noqa: BLE001 - a vouch that fails vouches for nobody
+            return False
 
     def leave(self, client: str) -> dict:
         with self.lock:
@@ -436,7 +447,7 @@ class AdsbService:
         with self.lock:
             if self.state == "running":
                 for c, until in list(self.clients.items()):
-                    if until < now:
+                    if until < now and not self._vouched(c):
                         del self.clients[c]
                 if not self.clients and self.linger_until is None:
                     self.linger_until = now + LINGER_S
