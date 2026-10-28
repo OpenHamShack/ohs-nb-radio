@@ -526,7 +526,12 @@ class DmrIds:
         """The new users database in place of the old. Under the lookup
         lock: a lookup sees the old file or the new one, never a half. The
         reader is closed first because Windows cannot rename over an open
-        file (POSIX could, but one path for both is simpler to trust)."""
+        file (POSIX could, but one path for both is simpler to trust).
+        The build ran with synchronous off, so the file is flushed first:
+        a power cut after the rename must not leave a half-written list
+        under the live name."""
+        with open(part, "rb+") as fh:
+            os.fsync(fh.fileno())
         with self.lock:
             if self.db is not None:
                 self.db.close()
