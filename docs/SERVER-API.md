@@ -1499,20 +1499,21 @@ test voice frames play as a buzz.
 
 **Not yet:** Tier III trunking and CSBKs, rate 1 data, GPS positions in
 the embedded link control, real-air checks (recordings of local repeaters
-are to come), and on a controller mbelib as a host library (its
-`host_libraries` entry waits for the platform to stage it).
+are to come). On a controller mbelib is a host library (below), staged
+by platform 2.0.0-beta.10 and later.
 
 ## Host libraries (store form)
 
 What the image may not carry comes from the controller's host:
-`store/radio/module.yaml` declares `host_libraries: [faad2, sdrplay-api]`,
+`store/radio/module.yaml` declares `host_libraries: [faad2, sdrplay-api, mbelib]`
+(mbelib since 28/10/2026, needing platform beta.10),
 and a controller that knows the key (platform beta.9 or later) mounts each
 at `/opt/hostlibs/<name>` read-only and sets `SHACK_HOSTLIBS`. Its
 administrator installs them (Controller › Optional libraries); Radio can
 only say so. `hostLibs` in `api/status` and `api/state`:
 
 ```json
-{"supported": true, "root": "/opt/hostlibs", "libraries": {"faad2": true, "sdrplay-api": false}, "why": ""}
+{"supported": true, "root": "/opt/hostlibs", "libraries": {"faad2": true, "sdrplay-api": false, "mbelib": true}, "why": ""}
 ```
 
 On an older controller, which installs the app with the key ignored and

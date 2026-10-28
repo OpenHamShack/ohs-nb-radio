@@ -473,10 +473,13 @@ class HostLibraries(unittest.TestCase):
             Path(libs, "faad2").mkdir()
             Path(libs, "faad2", "libfaad.so.2").write_bytes(b"")
             Path(libs, "sdrplay-api").mkdir()          # mounted, nothing installed yet
+            Path(libs, "mbelib").mkdir()
+            Path(libs, "mbelib", "libmbe.so.1").write_bytes(b"")
             a, b = self.env(True, libs)
             with a, b:
                 self.assertEqual(hostlibs.status(), {"supported": True, "root": libs, "why": "",
-                                                     "libraries": {"faad2": True, "sdrplay-api": False}})
+                                                     "libraries": {"faad2": True, "sdrplay-api": False,
+                                                                   "mbelib": True}})
                 self.assertIn("ask your controller's administrator", decoders.faad2_sentence())
 
     def test_the_store_server_says_update_in_status_and_on_its_page(self):

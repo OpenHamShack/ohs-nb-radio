@@ -33,6 +33,9 @@ from .i18n.text import _
 LIBRARIES = {
     "faad2": ("libfaad.so.2",),
     "sdrplay-api": ("libsdrplay_api.so.3", "sdrplay_apiService"),
+    # DMR's voice: the platform builds it from upstream (szechyjs/mbelib
+    # 1.3.0) and stages libmbe.so.1.0 with libmbe.so.1 beside it.
+    "mbelib": ("libmbe.so.1",),
 }
 
 
