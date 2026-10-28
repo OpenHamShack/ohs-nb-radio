@@ -10,8 +10,12 @@ decoder's own choices (RTTY's speed and shift, reverse). The scope's
 right-click "Decode here as" starts one where the mouse is, without the
 view. A card is what its decoder's `panel` hint says: a terminal for
 text (RTTY, CW, PSK - a line per station when a PSK session hears
-several), and for a picture (SSTV, milestone 2) the picture painting in
-as its rows arrive, with the session's recent pictures under it.
+several), for a picture (SSTV, milestone 2) the picture painting in
+as its rows arrive, with the session's recent pictures under it, and for
+slots (DMR) a box per timeslot - its state, who is calling whom, talker
+alias, colour code, an encrypted badge, level and when it was last heard
+- over a log of calls and messages, with Listen (the session's voice
+instead of the radio's) and which slots to hear.
 
 A session only listens: nothing here keys, arms or answers anything.
 
@@ -29,6 +33,8 @@ import base64
 import time
 
 import numpy as np
+from datetime import datetime
+
 from PyQt6.QtCore import QCoreApplication, QObject, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QImage, QPixmap
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QListView,
@@ -54,7 +60,7 @@ def decoder_label(entry_or_id) -> str:
     """A decoder's name as the operator knows it."""
     did = entry_or_id["id"] if isinstance(entry_or_id, dict) else str(entry_or_id)
     return {"rtty": "RTTY", "cw": "CW", "ft8": "FT8", "ft4": "FT4", "q65": "Q65", "js8": "JS8", "psk": "PSK",
-            "sstv": "SSTV"}.get(did, did.upper())
+            "sstv": "SSTV", "dmr": "DMR"}.get(did, did.upper())
 
 
 def params_text(decoder: str, params: dict) -> str:
@@ -138,6 +144,77 @@ def transmitters_text(meta: dict) -> str:
     return QCoreApplication.translate("DecodersView", "Transmitters heard:") + "\n" + "\n".join(lines)
 
 
+def _clock(t) -> str:
+    """A result's UTC time as the operator's local clock, hh:mm:ss."""
+    try:
+        return datetime.fromtimestamp(float(t)).strftime("%H:%M:%S")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return "--:--:--"
+
+
+def dmr_party(dst, call_type) -> str:
+    """Who a DMR call is to: "talkgroup 2350", or the radio's ID."""
+    if dst is None:
+        return "?"
+    if call_type == "group":
+        return QCoreApplication.translate("DecodersView", "talkgroup {tg}").format(tg=int(dst))
+    return str(int(dst))
+
+
+def dmr_line(it: dict) -> str | None:
+    """A DMR result as a line of the card's log: a call that ended, or a
+    message. None for what the slot boxes show instead."""
+    f = it.get("fields") or {}
+    slot = QCoreApplication.translate("DecodersView", "TS{n}").format(n=int(f.get("slot") or 0))
+    src = str(int(f["src"])) if f.get("src") is not None else "?"
+    if it.get("frame") == "call_end":
+        who = src + (f" ({f['alias']})" if f.get("alias") else "")
+        line = f"{_clock(it.get('t'))}  {slot}  {who} → {dmr_party(f.get('dst'), f.get('callType'))}  " + \
+            QCoreApplication.translate("DecodersView", "{s} s").format(s=f"{float(f.get('durationS') or 0):.1f}")
+        if f.get("encrypted"):
+            line += "  " + QCoreApplication.translate("DecodersView", "encrypted")
+        if f.get("emergency"):
+            line += "  " + QCoreApplication.translate("DecodersView", "EMERGENCY")
+        return line
+    if it.get("frame") == "sms":
+        dst = dmr_party(f.get("dst"), "group" if f.get("group") else "private")
+        return f"{_clock(it.get('t'))}  {slot}  " + QCoreApplication.translate("DecodersView", "message") + \
+            f" {src} → {dst}: {f.get('text', '')}"
+    if it.get("frame") == "data":
+        return f"{_clock(it.get('t'))}  {slot}  " + QCoreApplication.translate(
+            "DecodersView", "data {src} → {dst}, {n} bytes").format(src=src, dst=dmr_party(f.get("dst"), None),
+                                                                     n=int(f.get("octets") or 0))
+    return None
+
+
+def dmr_slot_text(sl: dict) -> tuple[str, str, str]:
+    """A DMR slot's box: its title, who is calling whom, and the details
+    (colour code, level, BER, last heard)."""
+    tr = QCoreApplication.translate
+    states = {"voice": tr("DecodersView", "voice"), "data": tr("DecodersView", "data"),
+              "idle": tr("DecodersView", "idle")}
+    title = tr("DecodersView", "Slot {n}").format(n=int(sl.get("slot") or 0)) + " · " + \
+        states.get(sl.get("state"), sl.get("state") or "")
+    if sl.get("src") is None and sl.get("dst") is None:
+        who = tr("DecodersView", "Nobody heard yet") if sl.get("lastHeard") is None else \
+            tr("DecodersView", "Waiting for the caller's ID…")
+    else:
+        src = str(int(sl["src"])) if sl.get("src") is not None else "?"
+        alias = f" {sl['alias']}" if sl.get("alias") else ""
+        who = tr("DecodersView", "{src}{alias} → {dst}").format(src=src, alias=alias,
+                                                                dst=dmr_party(sl.get("dst"), sl.get("callType")))
+    bits = []
+    if sl.get("cc") is not None:
+        bits.append(tr("DecodersView", "CC {cc}").format(cc=int(sl["cc"])))
+    if sl.get("rssiDb") is not None:
+        bits.append(tr("DecodersView", "{db} dBFS").format(db=f"{float(sl['rssiDb']):.0f}"))
+    if sl.get("ber") is not None:
+        bits.append(tr("DecodersView", "BER {pct} %").format(pct=f"{float(sl['ber']) * 100:.1f}"))
+    if sl.get("lastHeard") is not None:
+        bits.append(tr("DecodersView", "last heard {t}").format(t=_clock(sl["lastHeard"])))
+    return title, who, " · ".join(bits)
+
+
 class DecodersStore(QObject):
     """The engine's sessions and what each has copied."""
 
@@ -170,6 +247,11 @@ class DecodersStore(QObject):
         d = self.decoders
         return d.catalogue() if d is not None else []
 
+    def outputs(self, decoder: str) -> list[str]:
+        """What a decoder makes (its catalogue entry's `outputs`)."""
+        e = next((e for e in self.catalogue() if e.get("id") == decoder), None)
+        return list((e or {}).get("outputs") or [])
+
     def pump(self, _dt: float = 0.0) -> None:
         if self.feed is None:
             return
@@ -190,6 +272,10 @@ class DecodersStore(QObject):
                 self._line(sid, it)
             elif it.get("type") == "image":
                 self._image(sid, it)
+            elif it.get("type") == "frame" and it.get("frame") in ("call_end", "sms", "data"):
+                line = dmr_line(it)
+                if line:
+                    self.texts[sid] = (self.texts.get(sid, "") + line + "\n")[-TEXT_KEEP:]
             changed = True
         for sid in gaps:
             self._refill(sid)
@@ -259,7 +345,11 @@ class DecodersStore(QObject):
         sess = d.session(sid) if d is not None else None
         if not sess:
             return
-        text = "".join(r.get("text", "") for r in sess.get("results", []) if r.get("type") == "text")
+        if sess.get("panel") == "slots":
+            text = "".join((dmr_line(r) or "") + "\n" for r in sess.get("results", [])
+                           if r.get("type") == "frame" and dmr_line(r))
+        else:
+            text = "".join(r.get("text", "") for r in sess.get("results", []) if r.get("type") == "text")
         self.texts[sid] = text[-TEXT_KEEP:]
 
     def refresh(self) -> None:
@@ -284,6 +374,63 @@ class DecodersStore(QObject):
         self.decoders.stop(sid)
         self.refresh()
 
+    def listen(self, sid: str, on: bool) -> None:
+        """Hear the session instead of the radio (DMR's voice), or the radio
+        again. Raises ohscore.decoders.Refused."""
+        self.decoders.listen(sid, on)
+        self.refresh()
+
+    def configure(self, sid: str, params: dict) -> None:
+        """Change a session's parameters live (DMR's slots to hear)."""
+        self.decoders.configure(sid, params)
+        self.refresh()
+
+
+class SlotBox(QFrame):
+    """One DMR timeslot: what it is doing, who is calling whom, details,
+    and a badge when its call is encrypted (never decoded) or an emergency."""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("Slot")
+        k = theme.t()
+        self.setStyleSheet(f"QFrame#Slot {{ background: {k['bg2']}; border: 1px solid {k['line']};"
+                           f" border-radius: 6px; }}")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(theme.S2, theme.S1, theme.S2, theme.S1)
+        lay.setSpacing(2)
+        head = QHBoxLayout()
+        self.title = QLabel("")
+        self.title.setFont(theme.font(12, theme.QFont.Weight.DemiBold))
+        head.addWidget(self.title, 1)
+        self.badge = QLabel(QCoreApplication.translate("DecodersView", "Encrypted"))
+        self.badge.setStyleSheet(f"color: {k['bg0']}; background: {k['warn']}; border-radius: 4px; padding: 0 6px;")
+        self.badge.setToolTip(QCoreApplication.translate("DecodersView", "This call is encrypted: Radio shows who "
+                                                                         "is calling, and never decodes its voice"))
+        head.addWidget(self.badge)
+        self.emergency = QLabel(QCoreApplication.translate("DecodersView", "Emergency"))
+        self.emergency.setStyleSheet(f"color: {k['bg0']}; background: {k['err']}; border-radius: 4px;"
+                                     f" padding: 0 6px;")
+        head.addWidget(self.emergency)
+        lay.addLayout(head)
+        self.who = QLabel("")
+        self.who.setFont(theme.font(13))
+        self.who.setTextFormat(Qt.TextFormat.PlainText)
+        lay.addWidget(self.who)
+        self.details = QLabel("")
+        self.details.setObjectName("Muted")
+        self.details.setTextFormat(Qt.TextFormat.PlainText)
+        self.details.setWordWrap(True)
+        lay.addWidget(self.details)
+
+    def show_slot(self, sl: dict) -> None:
+        title, who, details = dmr_slot_text(sl)
+        self.title.setText(title)
+        self.who.setText(who)
+        self.details.setText(details)
+        self.badge.setVisible(bool(sl.get("encrypted")))
+        self.emergency.setVisible(bool(sl.get("emergency")))
+
 
 class SessionCard(QFrame):
     """One session: title, state, its text, Tune and Stop."""
@@ -307,6 +454,26 @@ class SessionCard(QFrame):
         self.tune_btn.setToolTip(QCoreApplication.translate("DecodersView", "Put the dial on this signal"))
         self.tune_btn.clicked.connect(lambda: view.tune_to(self.sid))
         head.addWidget(self.tune_btn)
+        # A decoder that makes sound (DMR): hear it instead of the radio,
+        # and which of its slots.
+        self.listen: QCheckBox | None = None
+        self.hear: QComboBox | None = None
+        if "audio" in (view.store.outputs(sess["decoder"]) or ()):
+            self.listen = QCheckBox(QCoreApplication.translate("DecodersView", "Listen"))
+            self.listen.setToolTip(QCoreApplication.translate("DecodersView", "Hear this decoder's voice instead "
+                                                                              "of the radio"))
+            self.listen.toggled.connect(lambda on: view.listen(self.sid, on))
+            head.addWidget(self.listen)
+            if sess.get("panel") == "slots":
+                self.hear = QComboBox()
+                for label, value in ((QCoreApplication.translate("DecodersView", "Both slots"), "both"),
+                                     (QCoreApplication.translate("DecodersView", "Slot 1"), "1"),
+                                     (QCoreApplication.translate("DecodersView", "Slot 2"), "2")):
+                    self.hear.addItem(label, value)
+                self.hear.setToolTip(QCoreApplication.translate("DecodersView", "Whose voice to hear"))
+                self.hear.activated.connect(
+                    lambda _i: view.configure(self.sid, {"slot": self.hear.currentData()}))
+                head.addWidget(self.hear)
         self.stop_btn = Button(QCoreApplication.translate("DecodersView", "Stop"), small=True)
         self.stop_btn.clicked.connect(lambda: view.stop(self.sid))
         head.addWidget(self.stop_btn)
@@ -316,6 +483,16 @@ class SessionCard(QFrame):
         self.state.setWordWrap(True)
         self.state.setTextFormat(Qt.TextFormat.PlainText)
         lay.addWidget(self.state)
+        # Slots (DMR): a box per timeslot over the log of calls.
+        self.slot_boxes: list[SlotBox] = []
+        if sess.get("panel") == "slots":
+            row = QHBoxLayout()
+            row.setSpacing(theme.S2)
+            for _ in range(2):
+                box = SlotBox()
+                self.slot_boxes.append(box)
+                row.addWidget(box, 1)
+            lay.addLayout(row)
         self.term = Terminal()
         self.term.setMinimumHeight(70)
         lay.addWidget(self.term, 1)
@@ -373,6 +550,18 @@ class SessionCard(QFrame):
             words.append(QCoreApplication.translate("DecodersView", "{hz} Hz off").format(
                 hz=f"{stats['offsetHz']:+.0f}"))
         self.state.setText(" · ".join(words))
+        if self.listen is not None:
+            self.listen.blockSignals(True)
+            self.listen.setChecked(bool(sess.get("listening")))
+            self.listen.blockSignals(False)
+        if self.hear is not None:
+            i = self.hear.findData(str((sess.get("params") or {}).get("slot", "both")))
+            if i >= 0 and not self.hear.view().isVisible():
+                self.hear.setCurrentIndex(i)
+        if self.slot_boxes:
+            slots = (sess.get("meta") or {}).get("slots") or []
+            for i, box in enumerate(self.slot_boxes):
+                box.show_slot(slots[i] if i < len(slots) and isinstance(slots[i], dict) else {"slot": i + 1})
         if self.pic is not None:
             self._update_picture()
             return
@@ -589,6 +778,19 @@ class DecodersView(QWidget):
 
     def stop(self, sid: str):
         self.store.stop(sid)
+
+    def listen(self, sid: str, on: bool):
+        try:
+            self.store.listen(sid, on)
+        except ValueError as e:
+            self._say(str(e))
+            self.refresh()
+
+    def configure(self, sid: str, params: dict):
+        try:
+            self.store.configure(sid, params)
+        except ValueError as e:
+            self._say(str(e))
 
     def tune_to(self, sid: str):
         sess = next((s for s in self.store.sessions if s["id"] == sid), None)

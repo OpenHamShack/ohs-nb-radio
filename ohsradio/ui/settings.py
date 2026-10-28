@@ -181,8 +181,9 @@ class SettingsDialog(core.SettingsDialog):
         note = QLabel(self.tr("codec2, for FreeDV, comes with Radio on Windows and macOS and with your system on "
                               "Linux. Radio never includes the codecs whose patents or licences keep them out of "
                               "free software (faad2 and fdk-aac for DAB+ and DRM sound, mbelib for digital voice): "
-                              "it uses them only if you install them, or put them in the codecs folder. Nothing in "
-                              "this version needs them yet."))
+                              "it uses them only if you install them, or put them in the codecs folder. mbelib gives "
+                              "DMR its voice; without it a DMR decoder still shows every call, ID, talkgroup, talker "
+                              "alias and message."))
         note.setWordWrap(True)
         note.setObjectName("Muted")
         lay.addWidget(note)
@@ -216,8 +217,12 @@ class SettingsDialog(core.SettingsDialog):
             lab = QLabel(self.tr("This installation has no codec loader (shack-sdr)."))
             lab.setObjectName("Muted")
             self.codec_rows.addWidget(lab)
+        # What each codec is for, beside its name: the reason to install it.
+        uses = {"codec2": self.tr("FreeDV voice"), "faad2": self.tr("DAB+ and DRM sound"),
+                "fdk-aac": self.tr("DAB+ and DRM sound"), "mbelib": self.tr("DMR voice")}
         for c in rows:
-            lab = QLabel(f"{c['id']}: {c.get('whyText') or c.get('state')}")
+            name = f"{c['id']} ({uses[c['id']]})" if c.get("id") in uses else c["id"]
+            lab = QLabel(f"{name}: {c.get('whyText') or c.get('state')}")
             lab.setWordWrap(True)
             lab.setTextFormat(Qt.TextFormat.PlainText)
             self.codec_rows.addWidget(lab)

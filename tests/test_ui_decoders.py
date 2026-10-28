@@ -5,7 +5,10 @@ on the band simulator: Add starts an RTTY session at the typed frequency
 with the chosen speed and shift, its card copies the simulated station,
 Tune puts the dial on it in RTTY, Stop ends it, a refusal is said in the
 view, the scope's right-click starts one where the mouse is, and Settings
-lists the codecs and their sentences. Nothing here keys."""
+lists the codecs, what each is for, and their sentences. A DMR session's
+card shows a box per timeslot with who is calling whom on the simulated
+repeater, its Listen box puts the session on the speaker, and its slot
+choice changes the session live. Nothing here keys."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import os
 import shutil
@@ -135,13 +138,46 @@ class DecodersWindow(unittest.TestCase):
         win, bridge, radio = self.window()
         dlg = SettingsDialog(bridge, win.prefs, win)
         texts = [dlg.codec_rows.itemAt(i).widget().text() for i in range(dlg.codec_rows.count())]
-        self.assertEqual([t.split(":")[0] for t in texts], ["codec2", "faad2", "fdk-aac", "mbelib"])
-        self.assertTrue(all(len(t) > len("mbelib: ") for t in texts))
+        self.assertEqual([t.split(" (")[0] for t in texts], ["codec2", "faad2", "fdk-aac", "mbelib"])
+        # Each says what it is for: the reason to install it.
+        self.assertTrue(texts[3].startswith("mbelib (DMR voice): "), texts[3])
+        self.assertTrue(all(len(t) > len("mbelib (DMR voice): ") for t in texts))
         self.assertIn("decodersMax", dlg.fields)
         self.assertIn("decodeCpuMax", dlg.fields)
         dlg._fill_codecs(rescan=True)
         self.assertEqual(dlg.codec_rows.count(), 4)
         dlg.close()
+
+    @unittest.skipUnless(sdr.load() is not None and any(e["id"] == "dmr" for e in sdr.load().catalogue()),
+                         "no shack_sdr with DMR for this machine")
+    def test_a_dmr_card_shows_both_slots_and_listens(self):
+        from ohsradio.devices import simdmr
+        win, bridge, radio = self.window(vfo=simdmr.FREQ, mode="fm")
+        win.show_view("decoders")
+        view = win.decoders_view
+        view.pick.setCurrentIndex(view.pick.findData("dmr"))
+        view.freq.setText(f"{simdmr.FREQ / 1e6:.6f}")
+        view.add()
+        self.assertEqual(len(view.cards), 1, view.status.text())
+        sid, card = next(iter(view.cards.items()))
+        self.assertIn("DMR", card.title.text())
+        self.assertEqual(len(card.slot_boxes), 2)
+        # The simulator's talkgroup call on slot 1, by ID and alias.
+        self.assertTrue(self.settle_until(lambda: "MX0TST Test" in card.slot_boxes[0].who.text(), 90),
+                        card.slot_boxes[0].who.text())
+        self.assertIn("9990001", card.slot_boxes[0].who.text())
+        self.assertIn("talkgroup 99", card.slot_boxes[0].who.text())
+        self.assertIn("CC 1", card.slot_boxes[0].details.text())
+        # Its log has the calls that ended.
+        self.assertTrue(self.settle_until(lambda: "TS1" in card.term.toPlainText(), 90))
+        # Listen puts it on the speaker; the slot choice goes to the session.
+        card.listen.setChecked(True)
+        self.assertEqual(radio.decoders.status()["listening"], sid)
+        card.hear.setCurrentIndex(card.hear.findData("2"))
+        card.hear.activated.emit(card.hear.currentIndex())
+        self.assertEqual(radio.decoders.session(sid)["params"]["slot"], "2")
+        card.listen.setChecked(False)
+        self.assertIsNone(radio.decoders.status()["listening"])
 
 
 if __name__ == "__main__":
