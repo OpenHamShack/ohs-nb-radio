@@ -49,7 +49,8 @@
 # pass through from this environment. The whole output goes to test.log in
 # the folder; this prints a ten-line summary.
 #
-# Exit status: 0 captured, restored and the test passed; 1 a failure (the
+# Exit status: 0 captured, restored and the test passed (or was not run
+# because nothing was on the air: "inconclusive"); 1 a failure (the
 # summary says which); 2 a usage or refusal before anything changed; 3 the
 # box refused (on the air, receiver held); 4 the receiver was NOT put back
 # exactly (the summary names what differs - fix it before anything else);
@@ -227,9 +228,28 @@ else
     WHERE="NOT deleted from the box (delete it in Recordings)"
 fi
 
+# Was there anything to decode? A quiet channel is not a decoder failure
+# (GB7IR said nothing for the first real minute, 28/10/2026, and dmr_real
+# failed "no DMR sync at all"): dmr measures the channel in the file
+# (tools/iq_activity.py: seconds with power over the channel's own quiet);
+# ais and adsb take the messages the live decoder counted while it recorded.
+# None, and the test is skipped and the run called inconclusive, never a FAIL.
+QUIET=""
+case $DEC in
+    dmr)
+        if act=$(python3 "$REPO/tools/iq_activity.py" "$OUT/$ID.sigmf-meta" "$FREQ"); then
+            read -r n_act n_secs <<<"$act"
+            [ "$n_act" -gt 0 ] || QUIET="no traffic on $FREQ Hz during the capture ($n_act of $n_secs s active)"
+        fi ;;
+    ais|adsb)
+        [ "$(field messages)" != 0 ] || QUIET="no $DEC traffic during the capture (the live decoder heard 0 messages)" ;;
+esac
+
 TRES="test: not run (--no-test)"
 TAIL=""
-if [ $TEST = 1 ]; then
+if [ -n "$QUIET" ]; then
+    TRES="test: inconclusive, not run - $QUIET"
+elif [ $TEST = 1 ]; then
     # shellcheck disable=SC2086
     (cd "$LIBS/rust" && env "$VAR=$OUT" "$CARGO" test --release -p shack_sdr $T -- --ignored --nocapture) > "$OUT/test.log" 2>&1
     TRC=$?

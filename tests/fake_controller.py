@@ -39,6 +39,8 @@ class FakeRadio:
         self.linger_s = 0.0       # an ended AIS/ADS-B session holds the receiver this long, as the app's does
         self.release_at = None
         self.recorded_while_held = False
+        self.messages = 7         # what an AIS/ADS-B session says its decoder heard
+        self.iq = None            # (rate, centre) -> ci16 bytes a recording holds; else a small fixed pattern
         self.extra = {}           # GET path -> JSON answered (smoke checks)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -91,6 +93,7 @@ class FakeRadio:
     def _session_view(self, kind: str) -> dict:
         held = self.owner.get("by") == kind
         return {"state": "running" if held else "idle", "clients": len(self.clients) if held else 0,
+                "frames": self.messages, "messages": self.messages,
                 "centreHz": float(self.owner.get("freqHz") or 0), "rateHz": self.device()["fs"]}
 
     # ---------------------------------------------------------- routes
@@ -127,9 +130,9 @@ class FakeRadio:
             if not self.recording:
                 return 200, {"stopped": []}
             rid, self.recording = self.recording, None
-            data = bytes(range(256)) * 64
-            (self.recdir / f"{rid}.sigmf-data").write_bytes(data)
             d = self.device()
+            data = self.iq(d["fs"], d["rxLo"]) if self.iq else bytes(range(256)) * 64
+            (self.recdir / f"{rid}.sigmf-data").write_bytes(data)
             (self.recdir / f"{rid}.sigmf-meta").write_text(json.dumps({
                 "global": {"core:datatype": "ci16_le", "core:sample_rate": d["fs"]},
                 "captures": [{"core:sample_start": 0, "core:frequency": d["rxLo"]}]}))
@@ -141,6 +144,8 @@ class FakeRadio:
         for kind, freq in (("ais", 162000000), ("adsb", 1090000000)):
             if path != f"{kind}/session":
                 continue
+            if method == "GET":
+                return 200, self._session_view(kind)
             if method == "POST":
                 if self.owner and (self.owner.get("by") != kind or self.release_at):
                     return 409, {"error": "The receiver is busy", "code": "receiver_busy"}

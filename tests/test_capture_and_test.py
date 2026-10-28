@@ -33,6 +33,48 @@ exit ${FAKE_CARGO_RC:-0}
 """
 
 
+RATE = 400_000          # wide enough for the channel 100 kHz off the fake's centre, small enough to write
+
+
+def synthetic(rate, centre, channel=430_900_000, busy=(), seconds=3, always=False):
+    """ci16 noise, with a carrier on <channel> during the seconds in `busy`
+    (or all of them): a quiet channel, a talkative one, or one keyed throughout."""
+    import numpy as np
+    rng = np.random.default_rng(1)
+    n = int(rate * seconds)
+    x = rng.normal(0, 100, n) + 1j * rng.normal(0, 100, n)
+    t = np.arange(n) / rate
+    on = np.ones(n, bool) if always else np.isin((t // 1).astype(int), list(busy))
+    x += on * 2000 * np.exp(2j * np.pi * (channel - centre) * t)
+    out = np.empty(2 * n, np.int16)
+    out[0::2], out[1::2] = x.real, x.imag
+    return out.tobytes()
+
+
+class IqActivity(unittest.TestCase):
+    """tools/iq_activity.py on synthetic captures."""
+
+    def measure(self, **kw):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        centre = 431_000_000.0
+        (tmp / "c.sigmf-data").write_bytes(synthetic(RATE, centre, **kw))
+        (tmp / "c.sigmf-meta").write_text('{"global": {"core:datatype": "ci16_le", "core:sample_rate": %d}, '
+                                          '"captures": [{"core:frequency": %f}]}' % (RATE, centre))
+        out = subprocess.run(["python3", str(REPO / "tools" / "iq_activity.py"), str(tmp / "c.sigmf-meta"),
+                              "430900000"], capture_output=True, text=True, check=True).stdout.split()
+        return int(out[0]), int(out[1])
+
+    def test_a_quiet_channel_has_no_active_second(self):
+        self.assertEqual(self.measure(), (0, 3))
+
+    def test_bursts_are_counted(self):
+        self.assertEqual(self.measure(busy=(1,), seconds=4), (1, 4))
+
+    def test_a_channel_keyed_throughout_is_active_throughout(self):
+        self.assertEqual(self.measure(always=True), (3, 3))
+
+
 class CaptureAndTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -50,6 +92,10 @@ class CaptureAndTest(unittest.TestCase):
                     "OHS_TOKEN_FILE": str(token_file(self.tmp)), "CAPTURE_RECORDINGS_DIR": str(self.recdir),
                     "HOME": str(self.home), "OHS_LIBS": str(self.tmp / "libs"), "CARGO": str(cargo),
                     "OHS_CAPTURE_SETTLE_S": "0"}
+        # A talkative channel unless a test says otherwise: dmr's test runs
+        # only when the capture holds traffic.
+        self.fake.st["sampleRate"] = RATE
+        self.fake.iq = lambda rate, centre: synthetic(rate, centre, busy=(1,), seconds=2)
         self.original = dict(self.fake.st)
 
     def run_it(self, *args, **env):
@@ -98,6 +144,27 @@ class CaptureAndTest(unittest.TestCase):
         self.assertLessEqual(len(summary), 10, summary)
         self.assertIn("test dmr_real recordings_of_local_repeaters: PASS", res.stdout)
         self.assertIn("matches the box; deleted from the box", res.stdout)
+
+    def test_a_quiet_channel_is_inconclusive_not_a_failure(self):
+        self.fake.iq = lambda rate, centre: synthetic(rate, centre, seconds=2)
+        res = self.run_it("--yes-receiver", "dmr", "430900000", "1", FAKE_CARGO_RC="101")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("test: inconclusive, not run - no traffic on 430900000 Hz during the capture (0 of 2 s active)",
+                      res.stdout)
+        self.assertNotIn("FAIL", res.stdout)
+        self.assertFalse(list((self.home / "build" / "real-dmr").glob("*/test.log")), "the test did not run")
+        self.assertRestored()
+
+    def test_ais_with_no_messages_is_inconclusive(self):
+        self.fake.messages = 0
+        res = self.run_it("--yes-receiver", "ais", "162000000", "1", FAKE_CARGO_RC="101")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("no ais traffic during the capture (the live decoder heard 0 messages)", res.stdout)
+
+    def test_adsb_with_messages_runs_its_test(self):
+        res = self.run_it("--yes-receiver", "adsb", "1090000000", "1")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("test adsb_real real_recordings: PASS", res.stdout)
 
     def test_keep_on_box_keeps_it(self):
         res = self.run_it("--yes-receiver", "--keep-on-box", "--no-test", "dmr", "430900000", "1")

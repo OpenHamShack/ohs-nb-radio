@@ -275,6 +275,16 @@ def capture(api: Api, a) -> int:
         end = time.monotonic() + a.seconds
         while time.monotonic() < end:
             time.sleep(min(1.0, max(0.0, end - time.monotonic())))
+        if a.decoder in ("ais", "adsb"):
+            # What the live decoder heard while this recorded: no message at
+            # all means a quiet sky or sea, which the real-file test must
+            # not be blamed for (capture-and-test.sh then calls it inconclusive).
+            # Unknown (an older Radio, a failed read) is not "none": the test then runs.
+            try:
+                view = api.call("GET", f"{a.decoder}/session")
+                result["messages"] = view.get("frames" if a.decoder == "ais" else "messages")
+            except ApiError as e:
+                say("could not read the session's message count:", e)
         stop = api.call("POST", "recordings/stop", {"kind": "iq"})
         recording = False
         rec = (stop.get("stopped") or [{}])[0]
