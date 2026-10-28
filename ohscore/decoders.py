@@ -1297,10 +1297,13 @@ def sessions_text(sessions: list[dict]) -> str:
 
 
 def switched_off() -> set[str]:
-    """Decoders the library has that this app does not offer yet: `psk`
-    while sdr.PSK_ON_SHACK_SDR is off (sdr.py says why). Not listed, and
-    a session of one is refused as unknown_decoder."""
-    return set() if sdr.PSK_ON_SHACK_SDR else {"psk"}
+    """Decoders the library has that this app does not offer as Decoders
+    sessions: `psk` while sdr.PSK_ON_SHACK_SDR is off (sdr.py says why),
+    and `adsb` always - it is Radio's aircraft map's (ohsradio/adsb.py),
+    which reopens the receiver at a rate of its own; as a session here it
+    would get a channel or the dial's rate and hear nothing. Not listed,
+    and a session of one is refused as unknown_decoder."""
+    return {"adsb"} | (set() if sdr.PSK_ON_SHACK_SDR else {"psk"})
 
 
 def _catalogue_entry(decoder: str) -> dict | None:

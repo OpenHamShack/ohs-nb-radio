@@ -201,6 +201,15 @@ class OnTheSimulator(unittest.TestCase):
             r.adsb.join("tv-1")
         self.assertEqual(e.exception.code, "not_running")
 
+    def test_it_is_never_a_decoders_session(self):
+        # The aircraft map's alone: as a Decoders session it would get the
+        # dial's rate or a channel and hear nothing.
+        r = self.radio(stations=[])
+        self.assertNotIn("adsb", [e["id"] for e in r.decoders.catalogue()])
+        with self.assertRaises(Refused) as e:
+            r.decoders.start("adsb", 1_090_000_000.0, {})
+        self.assertEqual(e.exception.code, "unknown_decoder")
+
     def test_the_operators_gain_stands_and_both_notches_stay_out(self):
         r = self.radio(stations=[air("SIM202")], rxGainMode="manual", rxGain=52.0, dabNotch="on", rfNotch="on")
         r.adsb.join("tv-1")
