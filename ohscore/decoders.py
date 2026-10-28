@@ -399,6 +399,12 @@ class Decoders:
         entry = next((e for e in m.catalogue() if e["id"] == decoder), None)
         return entry is not None and _takes_receiver(entry)
 
+    def held_by(self, decoder: str) -> str | None:
+        """The id of the running `decoder` session that holds the receiver
+        (the DAB station playing), or None."""
+        with self.lock:
+            return next((f.id for f in self.fixed.values() if f.held and f.decoder == decoder), None)
+
     def limits(self) -> dict:
         s = self.engine.st
         return {"sessions": int(s.get("decodersMax", 4)), "cpuMax": float(s.get("decodeCpuMax", 0.25)),

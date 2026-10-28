@@ -996,6 +996,19 @@ runs at a time.
 {"params": {"service": "C3A7"}}`. Another `block` is `400 bad_params`:
 stop the session and start one there.
 
+**Without the session's id** (what a ui/1 screen sends, since its
+actions are POSTs to fixed paths: "ui/1 screens" below), on the same
+`POST api/decoders/sessions` at the same control level:
+
+- `{"decoder": "dab", "stop": true}` stops whichever DAB station plays,
+  as the DELETE above would: `200 {"stopped": true, "id"}`, or `404
+  unknown_session` when none does.
+- `"replace": true` beside an ordinary start lets the station playing
+  give way: on the same block only the service changes, live (`200` with
+  the same session); on another block it stops and the new session starts
+  (`201`); with none playing it is an ordinary start. Without `replace` a
+  second station is still `409 receiver_busy`.
+
 **Its sound** is Radio's ordinary receive audio, in place of the
 demodulator's: `api/audio/rx` at 48 kHz, the station's own two channels
 with `?channels=2` and L+R averaged without; `audio.stereo` in status is

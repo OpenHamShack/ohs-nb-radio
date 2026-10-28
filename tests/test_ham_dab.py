@@ -371,6 +371,34 @@ class OverTheApi(unittest.TestCase):
         s, a = self.req("POST", "/api/decoders/sessions", {"decoder": "dab"})
         self.assertEqual((s, a["code"]), (400, "bad_params"))
 
+    def test_stop_and_replace_without_the_session_id(self):
+        # What a ui/1 screen sends (its actions are POSTs to fixed paths).
+        s, a = self.req("POST", "/api/decoders/sessions", {"decoder": "dab", "stop": True})
+        self.assertEqual((s, a["code"]), (404, "unknown_session"))
+        s, a = self.req("POST", "/api/decoders/sessions",
+                        {"decoder": "dab", "params": {"block": BLOCK, "service": MP2}, "replace": True})
+        self.assertEqual(s, 201, a)
+        sid = a["id"]
+        # The same block: the service changes live, in the same session.
+        s, a = self.req("POST", "/api/decoders/sessions",
+                        {"decoder": "dab", "params": {"block": BLOCK, "service": PLUS}, "replace": True})
+        self.assertEqual((s, a["id"], a["params"]["service"]), (200, sid, PLUS), a)
+        # Without replace a second station is refused, as before.
+        s, a = self.req("POST", "/api/decoders/sessions", {"decoder": "dab", "params": {"block": "12B"}})
+        self.assertEqual((s, a["code"]), (409, "receiver_busy"))
+        # Another block: the playing one gives way to a new session there.
+        s, a = self.req("POST", "/api/decoders/sessions",
+                        {"decoder": "dab", "params": {"block": "12B"}, "replace": True})
+        self.assertEqual((s, a["block"]), (201, "12B"), a)
+        self.assertNotEqual(a["id"], sid)
+        self.assertEqual(self.req("GET", f"/api/decoders/sessions/{sid}", level="view")[0], 404)
+        s, a = self.req("POST", "/api/decoders/sessions", {"decoder": "dab", "stop": True}, level="view")
+        self.assertEqual((s, a["code"]), (403, "level_too_low"))
+        s, a = self.req("POST", "/api/decoders/sessions", {"decoder": "dab", "stop": True})
+        self.assertEqual((s, a["stopped"]), (200, True), a)
+        s, a = self.req("GET", "/api/status", level="view")
+        self.assertEqual((a["rxOwner"], a["vfo"], a["mode"]), ({}, HOME, "fm"))
+
     def test_the_sound_reaches_api_audio_rx_at_48_khz(self):
         self.start()
         ct, lr = self.listen("?channels=2")

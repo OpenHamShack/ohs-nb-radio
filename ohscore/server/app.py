@@ -1065,6 +1065,9 @@ class _Handler(BaseHTTPRequestHandler):
         # A decoder that takes the receiver (DAB) may name its block in
         # params instead of giving freqHz (the block's centre).
         held = isinstance(decoder, str) and d.holds_receiver(decoder)
+        if held and b.get("stop") is True:
+            self._held_gives_way(who, b, None, {})
+            return
         if not isinstance(decoder, str) or not isinstance(params, dict) or isinstance(freq, bool) \
                 or not (isinstance(freq, (int, float)) or (held and freq is None and params.get("block"))):
             self._error(400, _("Give decoder, freqHz and, if any, params"), "bad_params")
@@ -1073,6 +1076,8 @@ class _Handler(BaseHTTPRequestHandler):
             # Armed, the next over would key wherever DAB had taken the
             # receiver; the operator disarms first, as for any key-up.
             self._error(409, _("Not while automatic transmit is armed: switch it off first"), "on_air")
+            return
+        if held and b.get("replace") is True and self._held_gives_way(who, b, freq, params):
             return
         try:
             sess = d.start(decoder, None if freq is None else float(freq), params,
@@ -1086,6 +1091,54 @@ class _Handler(BaseHTTPRequestHandler):
         log.info("decoder session %s started by %s: %s at %.0f Hz", sess["id"], who.get("user", "?"), decoder,
                  sess["freqHz"])
         self._send(201, sess)
+
+    def _held_gives_way(self, who, b: dict, freq, params: dict) -> bool:
+        """`"stop": true` and `"replace": true` on POST api/decoders/sessions
+        for a decoder that holds the receiver (DAB): what a ui/1 screen
+        needs, since its actions are POSTs to fixed paths (CLIENT-UI-PLAN
+        §5.5) and cannot carry the session id a DELETE or a live change
+        names, nor a DELETE at all. The same Control level as the route.
+
+        - stop: the playing station stops, exactly as DELETE
+          api/decoders/sessions/{id} would; 404 unknown_session when none
+          plays.
+        - replace: the playing station gives way to this one. On the same
+          block only the service changes, live (200, the same session, as
+          POST api/decoders/sessions/{id} {"params"}); on another block it
+          stops and the new one starts (the usual 201). With none playing
+          it is an ordinary start.
+
+        True when the request has been answered; False to go on and start."""
+        d = self.srv.radio.decoders
+        decoder = b["decoder"]
+        sid = d.held_by(decoder)
+        if b.get("stop") is True:
+            if sid is None or not d.stop(sid):
+                self._error(404, _("No {decoder} station is playing").format(decoder=decoder.upper()),
+                            "unknown_session")
+            else:
+                log.info("decoder session %s stopped by %s", sid, who.get("user", "?"))
+                self._send(200, {"stopped": True, "id": sid})
+            return True
+        if sid is None:
+            return False
+        cur = d.session(sid) or {}
+        block = str(params.get("block") or "").strip().upper()
+        same = (block == cur.get("block")) if block else \
+            (freq is not None and abs(float(freq) - float(cur.get("freqHz") or 0.0)) < 8_000.0)
+        if same:
+            from ..decoders import Refused as DecoderRefused
+            try:
+                sess = d.configure(sid, {k: v for k, v in params.items() if k != "block"})
+            except DecoderRefused as e:
+                self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code)
+                return True
+            log.info("decoder session %s set by %s: %s", sid, who.get("user", "?"), params)
+            self._send(200, sess)
+            return True
+        d.stop(sid)
+        log.info("decoder session %s stopped by %s for another block", sid, who.get("user", "?"))
+        return False
 
     def post_decoder_session_params(self, who, q):
         """POST api/decoders/sessions/{id} {"params": {...}}: change a

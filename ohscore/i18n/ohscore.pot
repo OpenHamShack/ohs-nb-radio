@@ -5,7 +5,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language: en\n"
 
-#: ohscore/decoders.py:530
+#: ohscore/decoders.py:536
 #: ohscore/engine.py:2132
 #, python-brace-format
 msgid "A DAB station on block {block} already has the receiver: stop it first"
@@ -46,7 +46,7 @@ msgstr ""
 msgid "A memory needs a name"
 msgstr ""
 
-#: ohscore/server/app.py:1627
+#: ohscore/server/app.py:1680
 msgid "A pad keys through api/ptt, not as an action"
 msgstr ""
 
@@ -54,11 +54,11 @@ msgstr ""
 msgid "A reply needs the decode's slot"
 msgstr ""
 
-#: ohscore/server/app.py:1190
+#: ohscore/server/app.py:1243
 msgid "A service id is four or eight hexadecimal digits"
 msgstr ""
 
-#: ohscore/decoders.py:615
+#: ohscore/decoders.py:621
 #, python-brace-format
 msgid "A session stays on its block: stop it and start one on {block}"
 msgstr ""
@@ -88,11 +88,11 @@ msgstr ""
 msgid "Already transmitting"
 msgstr ""
 
-#: ohscore/server/app.py:1439
+#: ohscore/server/app.py:1492
 msgid "An ICAO address is six hexadecimal digits"
 msgstr ""
 
-#: ohscore/server/app.py:1359
+#: ohscore/server/app.py:1412
 msgid "An MMSI is a number of up to nine digits"
 msgstr ""
 
@@ -114,7 +114,7 @@ msgstr ""
 msgid "Ask your controller's administrator to install SDRplay's API (Controller › Optional libraries) to use this radio."
 msgstr ""
 
-#: ohscore/decoders.py:1296
+#: ohscore/decoders.py:1302
 #, python-brace-format
 msgid "Ask your controller's administrator to install {codec} (Controller › Optional libraries)."
 msgstr ""
@@ -222,7 +222,7 @@ msgstr ""
 msgid "Best guess {shift:+d} Hz: press Auto-tune again to try it."
 msgstr ""
 
-#: ohscore/decoders.py:592
+#: ohscore/decoders.py:598
 #, python-brace-format
 msgid "Block {block} is centred on {centre}, not {freq}"
 msgstr ""
@@ -331,7 +331,7 @@ msgstr ""
 msgid "Each decoder session needs a frequency in hertz"
 msgstr ""
 
-#: ohscore/decoders.py:1286
+#: ohscore/decoders.py:1292
 #, python-brace-format
 msgid "Found: {path}"
 msgstr ""
@@ -340,7 +340,7 @@ msgstr ""
 msgid "Frequency"
 msgstr ""
 
-#: ohscore/server/app.py:1070
+#: ohscore/server/app.py:1073
 msgid "Give decoder, freqHz and, if any, params"
 msgstr ""
 
@@ -348,11 +348,11 @@ msgstr ""
 msgid "Give one of fromSecondsAgo, fromItemStart and lastMinutes"
 msgstr ""
 
-#: ohscore/server/app.py:1103
+#: ohscore/server/app.py:1156
 msgid "Give params"
 msgstr ""
 
-#: ohscore/decoders.py:596
+#: ohscore/decoders.py:602
 msgid "Give the block's centre frequency (freqHz) or its name (params.block)"
 msgstr ""
 
@@ -428,17 +428,17 @@ msgstr ""
 msgid "No DAB signal on this block."
 msgstr ""
 
-#: ohscore/server/app.py:1443
+#: ohscore/server/app.py:1496
 #, python-brace-format
 msgid "No aircraft {icao} has been heard lately"
 msgstr ""
 
-#: ohscore/server/app.py:1228
+#: ohscore/server/app.py:1281
 #, python-brace-format
 msgid "No logo has come for {sid} yet"
 msgstr ""
 
-#: ohscore/server/app.py:1519
+#: ohscore/server/app.py:1572
 msgid "No map picture here: draw the built-in map"
 msgstr ""
 
@@ -447,11 +447,11 @@ msgstr ""
 msgid "No memory called {name}"
 msgstr ""
 
-#: ohscore/decoders.py:1147
+#: ohscore/decoders.py:1153
 msgid "No more decoders can run at once"
 msgstr ""
 
-#: ohscore/server/app.py:1246
+#: ohscore/server/app.py:1299
 #, python-brace-format
 msgid "No programme guide has come for {sid} yet"
 msgstr ""
@@ -460,7 +460,7 @@ msgstr ""
 msgid "No recordings yet."
 msgstr ""
 
-#: ohscore/server/app.py:1210
+#: ohscore/server/app.py:1263
 #, python-brace-format
 msgid "No slide has come from {sid} yet"
 msgstr ""
@@ -469,9 +469,14 @@ msgstr ""
 msgid "No sound card: transmit audio cannot reach the radio"
 msgstr ""
 
-#: ohscore/server/app.py:1363
+#: ohscore/server/app.py:1416
 #, python-brace-format
 msgid "No vessel {mmsi} has been heard lately"
+msgstr ""
+
+#: ohscore/server/app.py:1117
+#, python-brace-format
+msgid "No {decoder} station is playing"
 msgstr ""
 
 #: ohscore/devices/sdrsource.py:68
@@ -484,12 +489,12 @@ msgstr ""
 msgid "Not a WAV file this program can read ({error}): save it as 16-bit PCM WAV"
 msgstr ""
 
-#: ohscore/decoders.py:1299
+#: ohscore/decoders.py:1305
 #, python-brace-format
 msgid "Not found: {codec} is normally included; reinstalling the program puts it back."
 msgstr ""
 
-#: ohscore/decoders.py:1300
+#: ohscore/decoders.py:1306
 #, python-brace-format
 msgid "Not installed. This program never includes {codec}: install it yourself, or put it in the codecs folder."
 msgstr ""
@@ -504,9 +509,9 @@ msgstr ""
 msgid "Not while a recording is playing: stop it first"
 msgstr ""
 
-#: ohscore/server/app.py:1075
-#: ohscore/server/app.py:1312
-#: ohscore/server/app.py:1393
+#: ohscore/server/app.py:1078
+#: ohscore/server/app.py:1365
+#: ohscore/server/app.py:1446
 msgid "Not while automatic transmit is armed: switch it off first"
 msgstr ""
 
@@ -523,7 +528,7 @@ msgstr ""
 msgid "Not while transmitting: DAB takes the receiver to Band III"
 msgstr ""
 
-#: ohscore/server/app.py:1995
+#: ohscore/server/app.py:2048
 msgid "Nothing is kept to listen behind live: the timeshift keeps a DAB or wide FM station while it plays"
 msgstr ""
 
@@ -559,7 +564,7 @@ msgstr ""
 msgid "Only subscribe messages are understood here."
 msgstr ""
 
-#: ohscore/server/app.py:1729
+#: ohscore/server/app.py:1782
 msgid "Only the controller's administrator may refresh the local frequencies."
 msgstr ""
 
@@ -579,7 +584,7 @@ msgstr ""
 msgid "Paused: the decoders are using all the processor time they are allowed (Settings › Decoders)."
 msgstr ""
 
-#: ohscore/decoders.py:521
+#: ohscore/decoders.py:527
 #, python-brace-format
 msgid "Playing DAB takes the receiver to Band III and stops {sessions}"
 msgstr ""
@@ -713,9 +718,9 @@ msgstr ""
 msgid "Size"
 msgstr ""
 
-#: ohscore/decoders.py:1153
-#: ohscore/decoders.py:435
-#: ohscore/decoders.py:527
+#: ohscore/decoders.py:1159
+#: ohscore/decoders.py:441
+#: ohscore/decoders.py:533
 #: ohscore/engine.py:2127
 msgid "Start the radio before adding a decoder"
 msgstr ""
@@ -825,7 +830,7 @@ msgstr ""
 msgid "The controller's services did not answer ({why})"
 msgstr ""
 
-#: ohscore/decoders.py:1144
+#: ohscore/decoders.py:1150
 #, python-brace-format
 msgid "The decoder does not take those settings ({detail})"
 msgstr ""
@@ -839,7 +844,7 @@ msgstr ""
 msgid "The decoder has stopped responding and everything it is given is thrown away: stop it and start it again (restart the app if that does not help)."
 msgstr ""
 
-#: ohscore/decoders.py:1159
+#: ohscore/decoders.py:1165
 #, python-brace-format
 msgid "The decoder would not start ({code})"
 msgstr ""
@@ -858,9 +863,9 @@ msgstr ""
 msgid "The filter is fixed in {mode}"
 msgstr ""
 
-#: ohscore/decoders.py:431
-#: ohscore/decoders.py:583
-#: ohscore/decoders.py:580
+#: ohscore/decoders.py:437
+#: ohscore/decoders.py:589
+#: ohscore/decoders.py:586
 msgid "The frequency must be a number of hertz"
 msgstr ""
 
@@ -903,7 +908,7 @@ msgstr ""
 msgid "The receiver is busy on {label}; it is yours again the moment you use it"
 msgstr ""
 
-#: ohscore/decoders.py:442
+#: ohscore/decoders.py:448
 #, python-brace-format
 msgid "The receiver is playing DAB from block {block}: stop the DAB station to add a decoder"
 msgstr ""
@@ -926,7 +931,7 @@ msgstr ""
 msgid "The receiver's own AGC is on, so its gain moves with the signal and no offset would hold. Set Receiver gain control to Manual (Settings › Radio) and calibrate again."
 msgstr ""
 
-#: ohscore/decoders.py:1155
+#: ohscore/decoders.py:1161
 #, python-brace-format
 msgid "The receiver's samples do not suit this decoder ({detail})"
 msgstr ""
@@ -957,7 +962,7 @@ msgstr ""
 msgid "The sound system is not running"
 msgstr ""
 
-#: ohscore/server/app.py:1881
+#: ohscore/server/app.py:1934
 #, python-brace-format
 msgid "The spectrum feed is not available in this installation: {why}"
 msgstr ""
@@ -984,12 +989,12 @@ msgstr ""
 msgid "The voice keyer stopped repeating: {error}"
 msgstr ""
 
-#: ohscore/decoders.py:1291
+#: ohscore/decoders.py:1297
 #, python-brace-format
 msgid "The {codec} in {path} was refused: {reason}."
 msgstr ""
 
-#: ohscore/decoders.py:1123
+#: ohscore/decoders.py:1129
 #, python-brace-format
 msgid "The {decoder} decoder has stopped responding: stop it and start it again"
 msgstr ""
@@ -1049,8 +1054,8 @@ msgstr ""
 msgid "The {radio} would not take a setting."
 msgstr ""
 
-#: ohscore/decoders.py:446
-#: ohscore/decoders.py:534
+#: ohscore/decoders.py:452
+#: ohscore/decoders.py:540
 #, python-brace-format
 msgid "There are already {n} decoders running, the most Settings › Decoders allows"
 msgstr ""
@@ -1059,7 +1064,7 @@ msgstr ""
 msgid "There are no memories to step through"
 msgstr ""
 
-#: ohscore/decoders.py:590
+#: ohscore/decoders.py:596
 #, python-brace-format
 msgid "There is no DAB block called {block}"
 msgstr ""
@@ -1068,28 +1073,28 @@ msgstr ""
 msgid "There is no call in that message to answer"
 msgstr ""
 
-#: ohscore/server/app.py:1169
+#: ohscore/server/app.py:1222
 #, python-brace-format
 msgid "There is no decoded picture called {name}"
 msgstr ""
 
-#: ohscore/decoders.py:418
-#: ohscore/decoders.py:1149
+#: ohscore/decoders.py:424
+#: ohscore/decoders.py:1155
 #, python-brace-format
 msgid "There is no decoder called {name}"
 msgstr ""
 
-#: ohscore/decoders.py:609
-#: ohscore/decoders.py:1158
-#: ohscore/decoders.py:674
-#: ohscore/server/app.py:1140
-#: ohscore/server/app.py:1148
+#: ohscore/decoders.py:615
+#: ohscore/decoders.py:1164
+#: ohscore/decoders.py:680
+#: ohscore/server/app.py:1193
+#: ohscore/server/app.py:1201
 #, python-brace-format
 msgid "There is no decoder session called {id}"
 msgstr ""
 
-#: ohscore/server/app.py:1715
-#: ohscore/server/app.py:1705
+#: ohscore/server/app.py:1768
+#: ohscore/server/app.py:1758
 #, python-brace-format
 msgid "There is no entry {id} in my frequencies"
 msgstr ""
@@ -1113,7 +1118,7 @@ msgstr ""
 msgid "There is no such QSO in the log"
 msgstr ""
 
-#: ohscore/server/app.py:1790
+#: ohscore/server/app.py:1843
 msgid "There is no such recording."
 msgstr ""
 
@@ -1139,11 +1144,11 @@ msgstr ""
 msgid "This app answers only through the OpenHamShack controller."
 msgstr ""
 
-#: ohscore/server/app.py:1372
+#: ohscore/server/app.py:1425
 msgid "This app has no ADS-B."
 msgstr ""
 
-#: ohscore/server/app.py:1292
+#: ohscore/server/app.py:1345
 msgid "This app has no AIS."
 msgstr ""
 
@@ -1151,30 +1156,30 @@ msgstr ""
 msgid "This app has no CW skimmer."
 msgstr ""
 
-#: ohscore/server/app.py:1183
+#: ohscore/server/app.py:1236
 msgid "This app has no DAB."
 msgstr ""
 
-#: ohscore/server/app.py:1554
-#: ohscore/server/app.py:1565
-#: ohscore/server/app.py:1589
+#: ohscore/server/app.py:1607
+#: ohscore/server/app.py:1618
+#: ohscore/server/app.py:1642
 msgid "This app has no S-meter calibration."
 msgstr ""
 
-#: ohscore/server/app.py:1649
+#: ohscore/server/app.py:1702
 msgid "This app has no local frequencies."
 msgstr ""
 
-#: ohscore/server/app.py:1462
+#: ohscore/server/app.py:1515
 msgid "This app has no map."
 msgstr ""
 
-#: ohscore/server/app.py:1529
-#: ohscore/server/app.py:1537
+#: ohscore/server/app.py:1582
+#: ohscore/server/app.py:1590
 msgid "This app has no over-power watch."
 msgstr ""
 
-#: ohscore/server/app.py:1258
+#: ohscore/server/app.py:1311
 msgid "This app has no station lists."
 msgstr ""
 
@@ -1195,7 +1200,7 @@ msgstr ""
 msgid "This decoder runs only as the radio's mode, not on a frequency of its own."
 msgstr ""
 
-#: ohscore/server/app.py:1489
+#: ohscore/server/app.py:1542
 msgid "This install has no land map"
 msgstr ""
 
@@ -1405,11 +1410,11 @@ msgstr ""
 msgid "bad DC size"
 msgstr ""
 
-#: ohscore/server/app.py:1495
+#: ohscore/server/app.py:1548
 msgid "bbox is west,south,east,north in degrees; detail auto, fine or coarse; format geojson or compact"
 msgstr ""
 
-#: ohscore/server/app.py:1946
+#: ohscore/server/app.py:1999
 msgid "behind must be a number of seconds, 0 or more"
 msgstr ""
 
@@ -1422,12 +1427,12 @@ msgstr ""
 msgid "block data ran out"
 msgstr ""
 
-#: ohscore/server/app.py:1670
+#: ohscore/server/app.py:1723
 #, python-brace-format
 msgid "category must be one of {names}"
 msgstr ""
 
-#: ohscore/server/app.py:1938
+#: ohscore/server/app.py:1991
 msgid "channels must be 1 or 2"
 msgstr ""
 
@@ -1439,7 +1444,7 @@ msgstr ""
 msgid "converters must be a list"
 msgstr ""
 
-#: ohscore/server/app.py:1242
+#: ohscore/server/app.py:1295
 msgid "date is YYYY-MM-DD"
 msgstr ""
 
@@ -1448,7 +1453,7 @@ msgstr ""
 msgid "dbfs must be a number"
 msgstr ""
 
-#: ohscore/server/app.py:1569
+#: ohscore/server/app.py:1622
 msgid "dbm is required"
 msgstr ""
 
@@ -1474,15 +1479,15 @@ msgstr ""
 msgid "hiHz must be above loHz."
 msgstr ""
 
-#: ohscore/decoders.py:1288
+#: ohscore/decoders.py:1294
 msgid "it crashed when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:1288
+#: ohscore/decoders.py:1294
 msgid "it did not answer when it was tested"
 msgstr ""
 
-#: ohscore/decoders.py:1289
+#: ohscore/decoders.py:1295
 msgid "it gave a wrong answer when it was tested"
 msgstr ""
 
@@ -1490,15 +1495,15 @@ msgstr ""
 msgid "its decoder did not start (the log says why)"
 msgstr ""
 
-#: ohscore/decoders.py:1290
+#: ohscore/decoders.py:1296
 msgid "its folder does not allow programs to run"
 msgstr ""
 
-#: ohscore/server/app.py:1118
+#: ohscore/server/app.py:1171
 msgid "listen is true or false"
 msgstr ""
 
-#: ohscore/server/app.py:1922
+#: ohscore/server/app.py:1975
 msgid "loHz and hiHz must be frequencies in Hz, loHz below hiHz."
 msgstr ""
 
@@ -1550,7 +1555,7 @@ msgstr ""
 msgid "q65code produced no 'Channel symbols' line for {message}: {output}"
 msgstr ""
 
-#: ohscore/server/app.py:1664
+#: ohscore/server/app.py:1717
 #, python-brace-format
 msgid "radiusKm must be a number from {lo} to {hi}"
 msgstr ""
@@ -1564,9 +1569,9 @@ msgstr ""
 msgid "remote must be 1 to 64 letters, digits, '.', '_', ':' or '-'"
 msgstr ""
 
-#: ohscore/server/app.py:1136
-#: ohscore/server/app.py:1343
-#: ohscore/server/app.py:1424
+#: ohscore/server/app.py:1189
+#: ohscore/server/app.py:1396
+#: ohscore/server/app.py:1477
 msgid "since must be a whole number"
 msgstr ""
 
@@ -1641,7 +1646,7 @@ msgstr ""
 msgid "transmit is held by another remote"
 msgstr ""
 
-#: ohscore/server/app.py:1224
+#: ohscore/server/app.py:1277
 msgid "variant is square or wide"
 msgstr ""
 
@@ -1650,7 +1655,7 @@ msgstr ""
 msgid "yes"
 msgstr ""
 
-#: ohscore/server/app.py:1892
+#: ohscore/server/app.py:1945
 #, python-brace-format
 msgid "{app} already serves {n} spectrum clients; try again when one has gone."
 msgstr ""
@@ -1675,17 +1680,17 @@ msgstr ""
 msgid "{codec} produced no 'Channel symbols' line for {message}: {output}"
 msgstr ""
 
-#: ohscore/decoders.py:676
+#: ohscore/decoders.py:682
 #, python-brace-format
 msgid "{decoder} makes no sound to listen to"
 msgstr ""
 
-#: ohscore/decoders.py:501
+#: ohscore/decoders.py:507
 #, python-brace-format
 msgid "{decoder} needs the receiver to run at {least:g} kS/s or more, and it runs at {rate:g} kS/s"
 msgstr ""
 
-#: ohscore/decoders.py:1306
+#: ohscore/decoders.py:1312
 #, python-brace-format
 msgid "{decoder} on {freq}"
 msgstr ""
@@ -1746,12 +1751,12 @@ msgstr ""
 msgid "{file}: samples of type {type} cannot be played (complex ones can: {types})"
 msgstr ""
 
-#: ohscore/decoders.py:599
+#: ohscore/decoders.py:605
 #, python-brace-format
 msgid "{freq} is not the centre of a DAB block (5A-13F)"
 msgstr ""
 
-#: ohscore/decoders.py:458
+#: ohscore/decoders.py:464
 #, python-brace-format
 msgid "{freq} is outside what the receiver covers now"
 msgstr ""
