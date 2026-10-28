@@ -7,7 +7,8 @@ Tune puts the dial on it in RTTY, Stop ends it, a refusal is said in the
 view, the scope's right-click starts one where the mouse is, and Settings
 lists the codecs, what each is for, and their sentences. A DMR session's
 card shows a box per timeslot with who is calling whom on the simulated
-repeater, its Listen box puts the session on the speaker, and its slot
+repeater (by callsign and name where the server names them, else by ID:
+dmr_slot_text, dmr_line), its Listen box puts the session on the speaker, and its slot
 choice changes the session live. Nothing here keys."""
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import os
@@ -162,10 +163,11 @@ class DecodersWindow(unittest.TestCase):
         sid, card = next(iter(view.cards.items()))
         self.assertIn("DMR", card.title.text())
         self.assertEqual(len(card.slot_boxes), 2)
-        # The simulator's talkgroup call on slot 1, by ID and alias.
+        # The simulator's talkgroup call on slot 1, named by its talker
+        # alias, with the ID it was heard as among the details.
         self.assertTrue(self.settle_until(lambda: "MX0TST Test" in card.slot_boxes[0].who.text(), 90),
                         card.slot_boxes[0].who.text())
-        self.assertIn("9990001", card.slot_boxes[0].who.text())
+        self.assertIn("ID 9990001", card.slot_boxes[0].details.text())
         self.assertIn("talkgroup 99", card.slot_boxes[0].who.text())
         self.assertIn("CC 1", card.slot_boxes[0].details.text())
         # Its log has the calls that ended.
@@ -178,6 +180,39 @@ class DecodersWindow(unittest.TestCase):
         self.assertEqual(radio.decoders.session(sid)["params"]["slot"], "2")
         card.listen.setChecked(False)
         self.assertIsNone(radio.decoders.status()["listening"])
+
+
+class DmrText(unittest.TestCase):
+    """The DMR card's words for a slot and a log line, from the fields the
+    server sends: named where Radio's dmrids.py named them, else the bare
+    ID, as before the names. Fixture IDs are country code 999's and the
+    listed callsigns start Q, which no country issues."""
+
+    def test_a_named_slot_shows_the_callsign_name_and_talkgroup(self):
+        from ohscore.ui.decodersview import dmr_slot_text
+        sl = {"slot": 2, "state": "voice", "src": 9990003, "dst": 98, "callType": "group", "cc": 1,
+              "srcCallsign": "Q9CCC", "srcName": "Charlie", "dstName": "Test Ninety-Eight"}
+        _, who, details = dmr_slot_text(sl)
+        self.assertEqual(who, "Q9CCC Charlie → talkgroup 98 (Test Ninety-Eight)")
+        self.assertTrue(details.startswith("ID 9990003"), details)
+
+    def test_an_unnamed_slot_shows_the_bare_id(self):
+        from ohscore.ui.decodersview import dmr_slot_text
+        _, who, details = dmr_slot_text({"slot": 1, "state": "voice", "src": 9990004, "dst": 99,
+                                         "callType": "group", "cc": 1})
+        self.assertEqual(who, "9990004 → talkgroup 99")
+        self.assertNotIn("ID", details)
+
+    def test_an_alias_naming_another_callsign_is_kept_beside_the_list(self):
+        from ohscore.ui.decodersview import dmr_line
+        line = dmr_line({"t": 0, "frame": "call_end", "fields": {
+            "slot": 1, "src": 9990002, "dst": 9990001, "callType": "private", "durationS": 2.0,
+            "alias": "Club radio", "srcCallsign": "MX0ABC", "srcName": "Bravo"}})
+        self.assertIn("MX0ABC Bravo (Club radio) → 9990001", line)
+        sms = dmr_line({"t": 0, "frame": "sms", "fields": {"slot": 1, "src": 9990002, "dst": 99, "group": True,
+                                                           "text": "hi", "srcCallsign": "MX0ABC",
+                                                           "dstName": "Test Ninety-Nine"}})
+        self.assertIn("MX0ABC → talkgroup 99 (Test Ninety-Nine): hi", sms)
 
 
 if __name__ == "__main__":

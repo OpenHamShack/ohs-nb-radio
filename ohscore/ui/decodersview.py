@@ -152,13 +152,33 @@ def _clock(t) -> str:
         return "--:--:--"
 
 
-def dmr_party(dst, call_type) -> str:
-    """Who a DMR call is to: "talkgroup 2350", or the radio's ID."""
+def dmr_party(dst, call_type, name=None) -> str:
+    """Who a DMR call is to: "talkgroup 2350", "talkgroup 2350 (UK Call)"
+    when the server named it (`dstName`), or the radio's ID."""
     if dst is None:
         return "?"
     if call_type == "group":
+        if name:
+            return QCoreApplication.translate("DecodersView", "talkgroup {tg} ({name})").format(tg=int(dst),
+                                                                                              name=name)
         return QCoreApplication.translate("DecodersView", "talkgroup {tg}").format(tg=int(dst))
     return str(int(dst))
+
+
+def dmr_caller(f: dict) -> str:
+    """Who is calling, as the server named them (Radio's dmrids.py): the
+    callsign and name when it knows them, with the talker alias when that
+    says more; else the bare ID with any alias, as before the names. The
+    names arrive with the feed, so nothing here waits for a lookup."""
+    alias = f.get("alias") or ""
+    call = f.get("srcCallsign")
+    if call:
+        if alias and alias.split()[0].upper() == call.upper():
+            return alias                    # the caller's own words: "MX0TST Test"
+        who = call + (f" {f['srcName']}" if f.get("srcName") else "")
+        return who + (f" ({alias})" if alias else "")
+    src = str(int(f["src"])) if f.get("src") is not None else "?"
+    return src + (f" ({alias})" if alias else "")
 
 
 def dmr_line(it: dict) -> str | None:
@@ -166,10 +186,11 @@ def dmr_line(it: dict) -> str | None:
     message. None for what the slot boxes show instead."""
     f = it.get("fields") or {}
     slot = QCoreApplication.translate("DecodersView", "TS{n}").format(n=int(f.get("slot") or 0))
-    src = str(int(f["src"])) if f.get("src") is not None else "?"
+    src = dmr_caller(dict(f, alias=None))
     if it.get("frame") == "call_end":
-        who = src + (f" ({f['alias']})" if f.get("alias") else "")
-        line = f"{_clock(it.get('t'))}  {slot}  {who} → {dmr_party(f.get('dst'), f.get('callType'))}  " + \
+        who = dmr_caller(f)
+        to = dmr_party(f.get("dst"), f.get("callType"), f.get("dstName"))
+        line = f"{_clock(it.get('t'))}  {slot}  {who} → {to}  " + \
             QCoreApplication.translate("DecodersView", "{s} s").format(s=f"{float(f.get('durationS') or 0):.1f}")
         if f.get("encrypted"):
             line += "  " + QCoreApplication.translate("DecodersView", "encrypted")
@@ -177,7 +198,7 @@ def dmr_line(it: dict) -> str | None:
             line += "  " + QCoreApplication.translate("DecodersView", "EMERGENCY")
         return line
     if it.get("frame") == "sms":
-        dst = dmr_party(f.get("dst"), "group" if f.get("group") else "private")
+        dst = dmr_party(f.get("dst"), "group" if f.get("group") else "private", f.get("dstName"))
         return f"{_clock(it.get('t'))}  {slot}  " + QCoreApplication.translate("DecodersView", "message") + \
             f" {src} → {dst}: {f.get('text', '')}"
     if it.get("frame") == "data":
@@ -189,7 +210,8 @@ def dmr_line(it: dict) -> str | None:
 
 def dmr_slot_text(sl: dict) -> tuple[str, str, str]:
     """A DMR slot's box: its title, who is calling whom, and the details
-    (colour code, level, BER, last heard)."""
+    (the caller's ID when the box names them, colour code, level, BER,
+    last heard)."""
     tr = QCoreApplication.translate
     states = {"voice": tr("DecodersView", "voice"), "data": tr("DecodersView", "data"),
               "idle": tr("DecodersView", "idle")}
@@ -199,11 +221,12 @@ def dmr_slot_text(sl: dict) -> tuple[str, str, str]:
         who = tr("DecodersView", "Nobody heard yet") if sl.get("lastHeard") is None else \
             tr("DecodersView", "Waiting for the caller's ID…")
     else:
-        src = str(int(sl["src"])) if sl.get("src") is not None else "?"
-        alias = f" {sl['alias']}" if sl.get("alias") else ""
-        who = tr("DecodersView", "{src}{alias} → {dst}").format(src=src, alias=alias,
-                                                                dst=dmr_party(sl.get("dst"), sl.get("callType")))
+        who = tr("DecodersView", "{src} → {dst}").format(
+            src=dmr_caller(sl), dst=dmr_party(sl.get("dst"), sl.get("callType"), sl.get("dstName")))
     bits = []
+    if sl.get("srcCallsign") and sl.get("src") is not None:
+        # The box names the caller; the ID it was heard as stays in view.
+        bits.append(tr("DecodersView", "ID {id}").format(id=int(sl["src"])))
     if sl.get("cc") is not None:
         bits.append(tr("DecodersView", "CC {cc}").format(cc=int(sl["cc"])))
     if sl.get("rssiDb") is not None:
