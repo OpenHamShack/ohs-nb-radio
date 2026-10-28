@@ -38,28 +38,28 @@ msgstr ""
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
-#: ohsradio/ais.py:398
+#: ohsradio/ais.py:436
 msgid "AIS has the receiver for the ship map: stop AIS first"
 msgstr ""
 
-#: ohsradio/ais.py:431
+#: ohsradio/ais.py:469
 msgid "AIS needs the shack_sdr library, which this install does not have"
 msgstr ""
 
-#: ohsradio/ais.py:438
+#: ohsradio/ais.py:476
 #, python-brace-format
 msgid "AIS takes the receiver to 162 MHz and stops {sessions}"
 msgstr ""
 
-#: ohsradio/ais.py:125
+#: ohsradio/ais.py:133
 msgid "AIS-SART active"
 msgstr ""
 
-#: ohsradio/ais.py:125
+#: ohsradio/ais.py:133
 msgid "Aground"
 msgstr ""
 
-#: ohsradio/ais.py:144
+#: ohsradio/ais.py:152
 msgid "Aid to navigation"
 msgstr ""
 
@@ -67,11 +67,11 @@ msgstr ""
 msgid "An IQ recording is being made"
 msgstr ""
 
-#: ohsradio/ais.py:110
+#: ohsradio/ais.py:118
 msgid "Anti-pollution"
 msgstr ""
 
-#: ohsradio/ais.py:123
+#: ohsradio/ais.py:131
 msgid "At anchor"
 msgstr ""
 
@@ -113,7 +113,7 @@ msgstr ""
 msgid "Cancelled: nothing was changed."
 msgstr ""
 
-#: ohsradio/ais.py:114
+#: ohsradio/ais.py:122
 msgid "Cargo"
 msgstr ""
 
@@ -127,7 +127,7 @@ msgstr ""
 msgid "Connecting to {host}…"
 msgstr ""
 
-#: ohsradio/ais.py:124
+#: ohsradio/ais.py:132
 msgid "Constrained by her draught"
 msgstr ""
 
@@ -136,7 +136,7 @@ msgstr ""
 msgid "DAB: block {block} ({n} of {of})"
 msgstr ""
 
-#: ohsradio/ais.py:108
+#: ohsradio/ais.py:116
 msgid "Diving ops"
 msgstr ""
 
@@ -145,7 +145,7 @@ msgstr ""
 msgid "Done: the Pluto now runs as {chip}, which tunes {range}."
 msgstr ""
 
-#: ohsradio/ais.py:107
+#: ohsradio/ais.py:115
 msgid "Dredging or underwater ops"
 msgstr ""
 
@@ -159,7 +159,7 @@ msgstr ""
 msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
 msgstr ""
 
-#: ohsradio/ais.py:125
+#: ohsradio/ais.py:133
 msgid "Engaged in fishing"
 msgstr ""
 
@@ -199,39 +199,39 @@ msgstr ""
 msgid "Firmware {version}: ADI's method for v0.32 and later."
 msgstr ""
 
-#: ohsradio/ais.py:107
+#: ohsradio/ais.py:115
 msgid "Fishing"
 msgstr ""
 
-#: ohsradio/ais.py:141
+#: ohsradio/ais.py:149
 msgid "Fixed light or beacon"
 msgstr ""
 
-#: ohsradio/ais.py:139
+#: ohsradio/ais.py:147
 msgid "Fixed structure off shore"
 msgstr ""
 
-#: ohsradio/ais.py:143
+#: ohsradio/ais.py:151
 msgid "Floating buoy or light vessel"
 msgstr ""
 
-#: ohsradio/ais.py:114
+#: ohsradio/ais.py:122
 msgid "High-speed craft"
 msgstr ""
 
-#: ohsradio/ais.py:110
+#: ohsradio/ais.py:118
 msgid "Law enforcement"
 msgstr ""
 
-#: ohsradio/ais.py:577
+#: ohsradio/ais.py:619
 msgid "Listening to AIS on 161.975 and 162.025 MHz"
 msgstr ""
 
-#: ohsradio/ais.py:110
+#: ohsradio/ais.py:118
 msgid "Medical transport"
 msgstr ""
 
-#: ohsradio/ais.py:108
+#: ohsradio/ais.py:116
 msgid "Military ops"
 msgstr ""
 
@@ -239,7 +239,7 @@ msgstr ""
 msgid "Model"
 msgstr ""
 
-#: ohsradio/ais.py:124
+#: ohsradio/ais.py:132
 msgid "Moored"
 msgstr ""
 
@@ -256,7 +256,7 @@ msgstr ""
 msgid "No station locator: nothing to fetch around"
 msgstr ""
 
-#: ohsradio/ais.py:111
+#: ohsradio/ais.py:119
 msgid "Non-combatant ship"
 msgstr ""
 
@@ -265,7 +265,7 @@ msgstr ""
 msgid "Not a field of my frequencies: {fields}"
 msgstr ""
 
-#: ohsradio/ais.py:581
+#: ohsradio/ais.py:623
 msgid "Not running"
 msgstr ""
 
@@ -278,11 +278,11 @@ msgstr ""
 msgid "Not scanning now: {why}"
 msgstr ""
 
-#: ohsradio/ais.py:123
+#: ohsradio/ais.py:131
 msgid "Not under command"
 msgstr ""
 
-#: ohsradio/ais.py:397
+#: ohsradio/ais.py:435
 msgid "Not while transmitting: AIS takes the receiver to 162 MHz"
 msgstr ""
 
@@ -291,27 +291,27 @@ msgstr ""
 msgid "Notch filter not changed: {error}"
 msgstr ""
 
-#: ohsradio/ais.py:115
+#: ohsradio/ais.py:123
 msgid "Other type"
 msgstr ""
 
-#: ohsradio/ais.py:114
+#: ohsradio/ais.py:122
 msgid "Passenger"
 msgstr ""
 
-#: ohsradio/ais.py:109
+#: ohsradio/ais.py:117
 msgid "Pilot vessel"
 msgstr ""
 
-#: ohsradio/ais.py:108
+#: ohsradio/ais.py:116
 msgid "Pleasure craft"
 msgstr ""
 
-#: ohsradio/ais.py:109
+#: ohsradio/ais.py:117
 msgid "Port tender"
 msgstr ""
 
-#: ohsradio/ais.py:137
+#: ohsradio/ais.py:145
 msgid "RACON"
 msgstr ""
 
@@ -328,11 +328,11 @@ msgstr ""
 msgid "Receiver gain control is automatic: the radio's own AGC follows the station."
 msgstr ""
 
-#: ohsradio/ais.py:135
+#: ohsradio/ais.py:143
 msgid "Reference point"
 msgstr ""
 
-#: ohsradio/ais.py:116
+#: ohsradio/ais.py:124
 msgid "Reserved"
 msgstr ""
 
@@ -340,7 +340,7 @@ msgstr ""
 msgid "Restarting the radio…"
 msgstr ""
 
-#: ohsradio/ais.py:124
+#: ohsradio/ais.py:132
 msgid "Restricted manoeuvrability"
 msgstr ""
 
@@ -349,7 +349,7 @@ msgstr ""
 msgid "Running: {command}"
 msgstr ""
 
-#: ohsradio/ais.py:108
+#: ohsradio/ais.py:116
 msgid "Sailing"
 msgstr ""
 
@@ -357,7 +357,7 @@ msgstr ""
 msgid "Scanning now"
 msgstr ""
 
-#: ohsradio/ais.py:109
+#: ohsradio/ais.py:117
 msgid "Search and rescue vessel"
 msgstr ""
 
@@ -381,19 +381,19 @@ msgstr ""
 msgid "Start the radio before scanning"
 msgstr ""
 
-#: ohsradio/ais.py:434
+#: ohsradio/ais.py:472
 msgid "Start the radio to see ships: AIS needs the receiver"
 msgstr ""
 
-#: ohsradio/ais.py:579
+#: ohsradio/ais.py:621
 msgid "Stopped"
 msgstr ""
 
-#: ohsradio/ais.py:578
+#: ohsradio/ais.py:620
 msgid "Stopped: nobody had the ship map open"
 msgstr ""
 
-#: ohsradio/ais.py:580
+#: ohsradio/ais.py:622
 msgid "Stopped: the radio stopped"
 msgstr ""
 
@@ -402,11 +402,11 @@ msgstr ""
 msgid "Stopped: the radio was wanted ({why})"
 msgstr ""
 
-#: ohsradio/ais.py:581
+#: ohsradio/ais.py:623
 msgid "Stopped: the receiver was taken back"
 msgstr ""
 
-#: ohsradio/ais.py:114
+#: ohsradio/ais.py:122
 msgid "Tanker"
 msgstr ""
 
@@ -436,7 +436,7 @@ msgstr ""
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
-#: ohsradio/ais.py:406
+#: ohsradio/ais.py:444
 msgid "The client must name itself: 1-64 letters, digits, '.', '_', ':' or '-'"
 msgstr ""
 
@@ -477,11 +477,11 @@ msgstr ""
 msgid "The receiver is in use: {text}"
 msgstr ""
 
-#: ohsradio/ais.py:394
+#: ohsradio/ais.py:432
 msgid "The receiver is listening to AIS for the ship map: close the map, or stop AIS, to tune or change mode"
 msgstr ""
 
-#: ohsradio/ais.py:396
+#: ohsradio/ais.py:434
 msgid "The receiver is listening to AIS for the ship map: stop AIS to transmit"
 msgstr ""
 
@@ -550,15 +550,15 @@ msgstr ""
 msgid "This Pluto runs firmware {version}, not ADI's numbered firmware, so the program does not know what its environment commands do and will not run them. The steps below are ADI's."
 msgstr ""
 
-#: ohsradio/ais.py:411
+#: ohsradio/ais.py:449
 msgid "Too many screens have the ship map open"
 msgstr ""
 
-#: ohsradio/ais.py:107
+#: ohsradio/ais.py:115
 msgid "Towing"
 msgstr ""
 
-#: ohsradio/ais.py:107
+#: ohsradio/ais.py:115
 msgid "Towing, long or wide"
 msgstr ""
 
@@ -566,7 +566,7 @@ msgstr ""
 msgid "Transmitting"
 msgstr ""
 
-#: ohsradio/ais.py:109
+#: ohsradio/ais.py:117
 msgid "Tug"
 msgstr ""
 
@@ -575,11 +575,11 @@ msgstr ""
 msgid "Tuning to {freq} stops {sessions}: the receiver stays on {lo} to {hi} while they run"
 msgstr ""
 
-#: ohsradio/ais.py:125
+#: ohsradio/ais.py:133
 msgid "Under way sailing"
 msgstr ""
 
-#: ohsradio/ais.py:123
+#: ohsradio/ais.py:131
 msgid "Under way using engine"
 msgstr ""
 
@@ -597,7 +597,7 @@ msgstr ""
 msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""
 
-#: ohsradio/ais.py:114
+#: ohsradio/ais.py:122
 msgid "Wing in ground"
 msgstr ""
 
