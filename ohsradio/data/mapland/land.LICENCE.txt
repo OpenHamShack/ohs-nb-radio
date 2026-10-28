@@ -1,0 +1,13 @@
+Contains information from OpenStreetMap, which is made available here under the
+Open Database License (ODbL).
+
+land.json.gz is a derived database of OpenStreetMap data (c) OpenStreetMap
+contributors (https://www.openstreetmap.org/copyright), and is itself made
+available under the Open Database License 1.0:
+https://opendatacommons.org/licenses/odbl/1-0/
+
+Made by tools/mapland-build.py from osmdata.openstreetmap.de's land polygons
+(land-polygons-split-4326, data of 2026-10-28): cut to (-11.0, 49.0, 2.5, 61.0) (west, south,
+east, north), simplified (Douglas-Peucker, topology kept) to 0.0002 degrees
+for the fine level and 0.005 for the coarse, and cut into cells.
+Any map showing it must credit "(c) OpenStreetMap contributors".
