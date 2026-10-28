@@ -1,0 +1,7 @@
+{
+  "checks": [
+    {"get": "api/status", "keys": ["app", "version", "running", "recordings"]},
+    {"get": "api/state", "keys": ["vfo", "mode"]},
+    {"get": "api/recordings/status"}
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "checks": [
+    {"get": "api/status", "keys": ["app", "version", "running", "rxOwner", "decoders", "recordings"]},
+    {"get": "api/state", "keys": ["vfo", "mode", "deviceStatus"]},
+    {"get": "api/decoders", "keys": ["decoders", "sessions"]},
+    {"get": "api/recordings/status"},
+    {"get": "api/ais/session", "keys": ["state"]},
+    {"get": "api/ais/vessels"},
+    {"get": "api/adsb/session", "keys": ["state"]},
+    {"get": "api/adsb/aircraft"}
+  ]
+}
