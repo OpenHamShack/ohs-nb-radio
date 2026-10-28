@@ -26,6 +26,26 @@
 # believing them, and this is that step, so a release need not be cut by
 # hand around it. A module that fails every time is still red.
 #
+# A green full run is remembered (the suite cache, 28/10/2026). Each
+# release ran the whole suite again - 25 minutes - on a tree some agent
+# had already run green an hour before, often differing only in the
+# store version line the release commit bumps. So a full run (no modules
+# named) that ends green, in a worktree with nothing uncommitted, writes
+# a record to $SUITE_CACHE_DIR (default ~/build/suite-cache, shared by
+# every worktree on this host) named by the committed tree's "effective"
+# hash (below) and a key made of the interpreter (its path, version and
+# every installed distribution) and the ohsdigi module the tests import
+# (ohscore/ohsdigi.abi3.so's sha256, or "none"): the same tree under a
+# different Python or ohsdigi is a different run. A dirty worktree never
+# counts, because the record would name a tree the tests did not see;
+# nor does a run during which HEAD moved or a tracked file changed.
+#
+#   tools/run-suite-split.sh --if-needed [-j N]
+#
+# exits 0 at once, printing "tree <hash> already green at <time>", when
+# that record exists; otherwise it runs the full suite as above (and
+# records it if green). store-release.sh runs the suite this way.
+#
 # The tests' scratch files (tempfile, so $TMPDIR) go to a folder of this
 # run's own on disk, $SUITE_TMP_ROOT/<run> (default ~/build/tmp), removed
 # when the run ends, never to /tmp: on the development VM /tmp is a 12 GB
@@ -36,9 +56,19 @@
 # of them removes it.
 set -u
 cd "$(dirname "$0")/.."
-JOBS=1
-if [ "${1:-}" = "-j" ]; then JOBS=$2; shift 2; fi
+JOBS=1 IF_NEEDED=0
+while :; do
+    case ${1:-} in
+        -j) JOBS=$2; shift 2 ;;
+        --if-needed) IF_NEEDED=1; shift ;;
+        *) break ;;
+    esac
+done
+if [ $IF_NEEDED = 1 ] && [ $# -gt 0 ]; then
+    echo "--if-needed is for the full suite: name no modules" >&2; exit 2
+fi
 PY=${PYTHON:-python3}
+CACHE_DIR=${SUITE_CACHE_DIR:-$HOME/build/suite-cache}
 TIMEOUT=${TIMEOUT:-1200}
 LOG_DIR=${LOG_DIR:-$HOME/build/suite-split-$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$LOG_DIR"
@@ -54,6 +84,75 @@ fi
 export TMPDIR=$SUITE_TMP
 # Any way out but the exec below: a run interrupted by hand is cleaned too.
 trap 'rm -rf "$SUITE_TMP"' EXIT
+
+# The tree with every store/*/module.yaml's top-level "version:" line
+# blanked, so a store release commit - which changes only that line -
+# has the effective tree of the commit before it. Built in an index file
+# of this run's own (GIT_INDEX_FILE), so the worktree's real index is
+# never touched: read HEAD's tree into it, put a copy of each module.yaml
+# with that one line replaced in place of the real one (hash-object -w
+# stores the copy, a few hundred bytes), and write-tree. Why that line is
+# safe to ignore: nothing the suite runs reads a store module.yaml's
+# version (the apps report VERSION's; the store form is built and tested
+# by build-store.sh and store-check.sh, never here). A test that started
+# reading it would make this unsafe, so that would have to change too.
+effective_tree() {
+    idx=$SUITE_TMP/effective-index
+    rm -f "$idx"
+    GIT_INDEX_FILE=$idx git read-tree HEAD || return 1
+    for f in $(git ls-tree -r --name-only HEAD store | grep '^store/[^/]*/module\.yaml$'); do
+        blob=$(git show "HEAD:$f" | sed 's/^version:.*/version: (ignored by the suite cache)/' | git hash-object -w --stdin) || return 1
+        GIT_INDEX_FILE=$idx git update-index --cacheinfo "100644,$blob,$f" || return 1
+    done
+    GIT_INDEX_FILE=$idx git write-tree
+    rm -f "$idx"
+}
+
+# What the tests ran with besides the tree. Every installed distribution
+# is in it because a venv upgraded in place (PyQt6, numpy) is a different
+# run under the same path.
+run_key() {
+    py=$("$PY" -c 'import sys, hashlib, importlib.metadata as m
+d = sorted("%s==%s" % (x.metadata["Name"], x.version) for x in m.distributions())
+print(sys.executable, sys.version.split()[0], hashlib.sha256("\n".join(d).encode()).hexdigest()[:16])') || return 1
+    if [ -f ohscore/ohsdigi.abi3.so ]; then
+        dig=$(sha256sum ohscore/ohsdigi.abi3.so | cut -c1-16)
+    else
+        dig=none
+    fi
+    echo "python=$py"
+    echo "ohsdigi=$dig"
+}
+
+# Only the first process of a run decides whether it may be recorded: the
+# reruns below exec this script with the red modules named, keep the PID,
+# and inherit the decision; a runner started by a test of this script
+# (another PID) decides for itself, and names its modules, so never records.
+if [ "${SUITE_CACHE_PID:-}" != "$$" ]; then
+    SUITE_CACHE_FILE= SUITE_CACHE_TREE= SUITE_CACHE_INFO=
+    if [ $# -eq 0 ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+            echo "suite cache: the worktree has uncommitted changes, so this run will not be recorded"
+        elif SUITE_CACHE_TREE=$(git rev-parse 'HEAD^{tree}') && eff=$(effective_tree) && info=$(run_key); then
+            key=$(printf '%s\n' "$info" | sha256sum | cut -c1-16)
+            SUITE_CACHE_FILE=$CACHE_DIR/$eff-$key
+            SUITE_CACHE_INFO="tree=$eff
+committed_tree=$SUITE_CACHE_TREE
+commit=$(git rev-parse HEAD)
+$info"
+            if [ $IF_NEEDED = 1 ] && [ -f "$SUITE_CACHE_FILE" ]; then
+                echo "tree $eff already green at $(sed -n 's/^time=//p' "$SUITE_CACHE_FILE")"
+                exit 0
+            fi
+        else
+            echo "suite cache: could not work out this tree's key, so this run will not be recorded"
+            SUITE_CACHE_FILE=
+        fi
+    fi
+    SUITE_CACHE_PID=$$
+    export SUITE_CACHE_PID SUITE_CACHE_FILE SUITE_CACHE_TREE SUITE_CACHE_INFO
+fi
+
 if [ $# -eq 0 ]; then
     set -- $(cd tests && ls test_*.py | sed 's/\.py$//')
 fi
@@ -118,3 +217,16 @@ if [ -n "$bad" ]; then
     exit 1
 fi
 echo "all green"
+# Written last, and only if the tree the run began on is still what is
+# checked out with nothing changed: a commit made mid-run, or a test that
+# rewrote a tracked file, means the record would not name what ran.
+if [ -n "${SUITE_CACHE_FILE:-}" ]; then
+    if [ "$(git rev-parse 'HEAD^{tree}' 2>/dev/null)" != "$SUITE_CACHE_TREE" ] || [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+        echo "suite cache: the worktree changed during the run, so it is not recorded"
+    else
+        mkdir -p "$CACHE_DIR"
+        printf '%s\ntime=%s\nlogs=%s\n' "$SUITE_CACHE_INFO" "$(date -Is)" "$LOG_DIR" > "$SUITE_CACHE_FILE.$$"
+        mv "$SUITE_CACHE_FILE.$$" "$SUITE_CACHE_FILE"
+        echo "suite cache: recorded $(basename "$SUITE_CACHE_FILE")"
+    fi
+fi
