@@ -51,7 +51,7 @@ from ..engine import ReceiverHeld, SpanPinned, TxRefused
 from ..padactions import PAD_TX_ACTIONS
 from ..i18n.text import _
 from .. import shacklibs, smeter_cal
-from . import overlay, shack, spectrum, ws
+from . import overlay, shack, spectrum, uiv1, ws
 from .audio import CHANNELS, MIC_FORMAT
 from .autotx import AutoTx, Refused
 from .recording import server_recordings
@@ -166,10 +166,14 @@ class AppInfo:
     transmit facts (each app knows where its signal goes on air)."""
 
     def __init__(self, app_id: str, kind: str, name: str, version: str, onair_body, device_for,
-                 commit: str = ""):
+                 commit: str = "", screens=None):
         self.app_id, self.kind, self.name, self.version, self.commit = app_id, kind, name, version, commit
         self.onair_body = onair_body        # radio -> {"freqHz", "bandwidthHz", "mode"}
         self.device_for = device_for        # device setting -> broker device name, "" for none
+        # The app's ui/1 screens (uiv1.py): an object with descriptor(srv,
+        # req), screen(srv, id, params, req) and data(srv, name, req); None
+        # serves none (ui/v1 answers 404).
+        self.screens = screens
 
 
 class Server:
@@ -684,7 +688,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Cache-Control", "no-store")
+        if "Cache-Control" not in (extra or {}):
+            self.send_header("Cache-Control", "no-store")
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -1336,6 +1341,73 @@ class _Handler(BaseHTTPRequestHandler):
             return
         log.info("band scan of %s started by %s", "+".join(got["bands"]), who.get("user", "?"))
         self._send(202, got)
+
+    # ui/v1 (uiv1.py, docs/SERVER-API.md "ui/1 screens"): the app's
+    # server-driven screens. NB serves none yet and answers 404.
+    def _ui(self, who):
+        screens = self.srv.info.screens
+        if screens is None:
+            self._error(404, _("This app serves no screens."), "not_found")
+            return None, None
+        if not uiv1.ui_major_ok(self.headers.get("X-OpenHamShack-UI")):
+            self._error(406, _("This app serves ui/1 screens, which this OpenHamShack app cannot show."),
+                        "ui_unsupported", ui=[uiv1.UI_VERSION])
+            return None, None
+        req = uiv1.Request(self._base(), uiv1.parse_components(self.headers.get("X-OpenHamShack-Components")),
+                           who.get("level", "view"), self.headers.get("X-OpenHamShack-UI"))
+        return screens, req
+
+    def _send_ui(self, body: dict) -> None:
+        """A descriptor or screen: its rev as the ETag, 304 when the client
+        has it (§5.7), and never through with_urls (uiv1.py says why)."""
+        rev = uiv1.rev_of(body)
+        if "screen" in body:
+            body = {**body, "rev": rev}
+        etag = f'"{rev}"'
+        # no-cache, not no-store: kept, but asked about every time, so a
+        # screen never opens from a stale copy (§5.7) and costs a 304.
+        extra = {"ETag": etag, "X-OpenHamShack-UI": uiv1.UI_VERSION, "Cache-Control": "no-cache"}
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            for k, v in extra.items():
+                self.send_header(k, v)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self._send(200, dumps(body), extra=extra)
+
+    def get_ui_app(self, who, q):
+        screens, req = self._ui(who)
+        if screens is not None:
+            self._send_ui(screens.descriptor(self.srv, req))
+
+    def get_ui_screen(self, who, q):
+        screens, req = self._ui(who)
+        if screens is None:
+            return
+        sid = urlsplit(self.path).path.rstrip("/")[len("/ui/v1/screen/"):]
+        params = {k: v[0] for k, v in q.items()}
+        try:
+            doc = screens.screen(self.srv, sid, params, req)
+        except uiv1.UnknownScreen:
+            self._error(404, _("There is no screen called {id}").format(id=sid), "unknown_screen")
+            return
+        self._send_ui(doc)
+
+    def get_ui_data(self, who, q):
+        """A screen's own data feed (`get:ui/v1/data/<name>`): what an
+        existing route has, shaped for binding where that route's own shape
+        cannot be bound to (Radio's DAB station is behind a session id)."""
+        screens, req = self._ui(who)
+        if screens is None:
+            return
+        name = urlsplit(self.path).path.rstrip("/")[len("/ui/v1/data/"):]
+        try:
+            body = screens.data(self.srv, name, req)
+        except uiv1.UnknownScreen:
+            self._error(404, _("There is nothing at {path}").format(path=self.path), "not_found")
+            return
+        self._send(200, body)
 
     # api/ais and api/map (docs/SERVER-API.md "AIS" and "Map"): Radio's ships
     # on a map. NB has neither and answers 404.
@@ -2163,6 +2235,7 @@ ROUTES = {
     ("GET", "/api/adsb/aircraft"): ("view", _Handler.get_adsb_aircraft),
     ("GET", "/api/map/info"): ("view", _Handler.get_map_info),
     ("GET", "/api/map/land"): ("view", _Handler.get_map_land),
+    ("GET", "/ui/v1/app"): ("view", _Handler.get_ui_app),
     ("POST", "/api/decoders/sessions"): ("control", _Handler.post_decoder_session),
     ("POST", "/api/decoders/codecs/rescan"): ("control", _Handler.post_codecs_rescan),
     ("GET", "/api/decoders/files"): ("view", _Handler.get_decoder_files),
@@ -2190,6 +2263,8 @@ PREFIX_ROUTES = {
     ("GET", "/api/dab/slides/"): ("view", _Handler.get_dab_slide),
     ("GET", "/api/dab/logos/"): ("view", _Handler.get_dab_logo),
     ("GET", "/api/dab/schedule/"): ("view", _Handler.get_dab_schedule),
+    ("GET", "/ui/v1/screen/"): ("view", _Handler.get_ui_screen),
+    ("GET", "/ui/v1/data/"): ("view", _Handler.get_ui_data),
     ("PUT", "/api/local-frequencies/mine/"): ("control", _Handler.put_local_mine),
     ("DELETE", "/api/local-frequencies/mine/"): ("control", _Handler.delete_local_mine),
 }
