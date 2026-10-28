@@ -37,7 +37,7 @@ the desktop apps.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET /` | view | a status page and the Recordings (record, play, download, delete); nothing fetched from elsewhere, one small script that posts to `api/recordings` |
-| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `dialLabel` (Radio: what the dial is on, `null` off any known entry: "The dial label" below; absent in QO-100 NB), `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `span` (what the receiver covers and whether background decoder sessions pin it: "The pinned span" below; `{}` in QO-100 NB), `broadcastGain` (the receiver gain a DAB station or wide FM plays with in place of the operator's: "Broadcast gain" below; `{}` while none plays, and in QO-100 NB), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below), `dmrIds` (Radio: the DMR callsign list, "DMR" below; absent in QO-100 NB) |
+| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `presence` (Radio on a controller with client presence: `{"service", "connected", "clients", "released"}`, "Client presence" below; absent otherwise), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `dialLabel` (Radio: what the dial is on, `null` off any known entry: "The dial label" below; absent in QO-100 NB), `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `span` (what the receiver covers and whether background decoder sessions pin it: "The pinned span" below; `{}` in QO-100 NB), `broadcastGain` (the receiver gain a DAB station or wide FM plays with in place of the operator's: "Broadcast gain" below; `{}` while none plays, and in QO-100 NB), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below), `dmrIds` (Radio: the DMR callsign list, "DMR" below; absent in QO-100 NB) |
 | `GET api/state` | view | `Radio.state()`: every key |
 | `GET api/spec` | view | the settings registry (type, limits, choices, help, auth, restart) |
 | `POST api/set` | control (transmit for `auth` keys) | `{key: value, …}` or `{"changes": {…}}` through `Radio.set()`, all or nothing; answers `{"changed": {…}}`. A tune out of the span background decoders pin is `409 span_pinned` with the sessions it would stop, unless the body has `"dropSessions": true` ("The pinned span" below); a receiver DAB holds is `409 receiver_busy`. The station profile's keys (callsign, locator, country, licence, class, own licence, conditions) are refused: they are set on the controller. So are the device addresses and audio devices (the broker and the API own those). |
@@ -48,8 +48,8 @@ the desktop apps.
 | `POST api/halt` | control | stop transmitting now, whoever keyed |
 | `GET api/memories`, `POST api/recall {"name"}` | view, control | memories |
 | `GET api/log`, `POST api/log`, `GET api/log.adi` | view, control, view | the station's shared logbook as this app shows it (ENGINE-API `log_qso`), and ADIF |
-| `GET api/events?kinds=state,toast,meter,lock,events` | view | WebSocket: one JSON message per feed item, `{"kind": …, …item}`; first `{"kind": "hello", "status": …}`. `wide` and `zoom` only when asked: `{"kind", "t", "startHz", "binHz", "n", "cdb"}`, `cdb` the bins as little-endian int16 centi-dB in base64; a `wide` item may add `dcBins: [lo, hi]`, the bins (inclusive, into `cdb`) filled in over the receiver's DC spike (Radio: "The DC spike" below). A decode (`events`) that names a sender (`call`) also carries its DXCC entity when cty.dat can place it: `country` (cty.dat's name), `dxcc` (primary prefix), `continent`; absent otherwise. |
-| `GET api/spectrum/v1` | view | WebSocket: spectrum/1 and overlay/1, the shared waterfall feed and the labels on it (below, "spectrum/1 and overlay/1"). Beside `wide`/`zoom` on `api/events`, which stay as they are. |
+| `GET api/events?kinds=state,toast,meter,lock,events[&client=<id>]` | view | WebSocket: one JSON message per feed item, `{"kind": …, …item}`; first `{"kind": "hello", "status": …}`. `wide` and `zoom` only when asked: `{"kind", "t", "startHz", "binHz", "n", "cdb"}`, `cdb` the bins as little-endian int16 centi-dB in base64; a `wide` item may add `dcBins: [lo, hi]`, the bins (inclusive, into `cdb`) filled in over the receiver's DC spike (Radio: "The DC spike" below). A decode (`events`) that names a sender (`call`) also carries its DXCC entity when cty.dat can place it: `country` (cty.dat's name), `dxcc` (primary prefix), `continent`; absent otherwise. |
+| `GET api/spectrum/v1[?client=<id>]` | view | WebSocket: spectrum/1 and overlay/1, the shared waterfall feed and the labels on it (below, "spectrum/1 and overlay/1"). Beside `wide`/`zoom` on `api/events`, which stay as they are. `client` (here, on `api/events` and on `api/audio/rx`): the client's presence id, so the socket closes when that client's presence goes (Radio: "Client presence" below); optional, `400 bad_request` when it is not an id. |
 | `GET api/overlay/v1?loHz=&hiHz=` | view | overlay/1's snapshot over HTTP, the same message the socket sends on subscribe (below) |
 | `GET api/events` (state resync) | view | A `state` item is a diff, published once, and a client too slow to drain its queue loses the oldest. When that has happened the server sends the whole state before any later diff: a `state` message in the usual shape, `{"kind": "state", "changes": {…every key…}, "full": true}`. `full` is new and optional (absent on ordinary diffs); a client that merges `changes` as it always has needs no change, and one that wants to can replace its copy instead. Diffs it had not yet received are folded into the snapshot, not sent after it. Other kinds (meter, spectrum, events) still drop oldest-first. |
 | `GET api/events?kinds=…,cwskim,cwspot` | view | Radio's CW skimmer (ENGINE-API `cwskim`, `cwspot`). Neither kind is in the default set, so a client that does not ask never gets them. `cwskim` comes once a second, at most `cwSkimMax` channels (about 8 kB/s at 64). `cwspot` is coalesced to at most 5 items a second. A slow client loses snapshots, which do no harm, and spots, which it recovers through `rev`. |
@@ -65,7 +65,7 @@ the desktop apps.
 | `GET api/overpower` | view | QO-100 NB only (404 `not_found` elsewhere): `{"state", "beacon", "marginDb", "capture", "lastCapture", "events": [...]}` - signals over the middle beacon and LEILA sirens of the last 30 minutes, open ones first, each as ENGINE-API `overpower` describes. The same list comes as `overpower` items on `api/events?kinds=…,overpower` (not in the default set) on every change and once a second while anything is active. A `leila` entry is the siren pattern measured on six real sirens; why LEILA marks a station is unknown, so show it as "LEILA?". Tapping an entry only tunes: `POST api/set {"vfo": …}` at Control level, never TX. |
 | `GET`/`POST`/`DELETE api/smeter/calibrate` | view / control / control | Radio only (404 `not_found` elsewhere, like `api/overpower` above): the S-meter calibration table, below. |
 | `POST api/overpower/capture` | control | save the last 20 s of receive IQ now (the LEILA evidence ring; `leilaCapture` must be on): `202 {"ok": true}`, the file then appears in Recordings as `…-LEILA`; `409 nothing_to_save` with the sentence why not. Receive only. |
-| `GET api/audio/rx[?channels=1\|2][&behind=<s>]` | view | receive audio, raw PCM over a long-lived response, its format in the headers before any audio: `Content-Type: audio/L16; rate=<rate>; channels=<n>` and `X-Audio-Format: {"encoding": "s16le", "rate": <rate>, "channels": <n>}`. The rate is the app's: **48000 for Radio** (since 23/10/2026), 12000 for QO-100 NB. **Mono unless `?channels=2`** (below, "Receive audio format"); `400 bad_channels` for anything but 1 or 2. Radio: `behind=<s>` plays the timeshift from that long ago (below, "Timeshift"), `409 no_timeshift` without one |
+| `GET api/audio/rx[?channels=1\|2][&behind=<s>][&client=<id>]` | view | receive audio, raw PCM over a long-lived response, its format in the headers before any audio: `Content-Type: audio/L16; rate=<rate>; channels=<n>` and `X-Audio-Format: {"encoding": "s16le", "rate": <rate>, "channels": <n>}`. The rate is the app's: **48000 for Radio** (since 23/10/2026), 12000 for QO-100 NB. **Mono unless `?channels=2`** (below, "Receive audio format"); `400 bad_channels` for anything but 1 or 2. Radio: `behind=<s>` plays the timeshift from that long ago (below, "Timeshift"), `409 no_timeshift` without one |
 | `GET api/audio/tx` | transmit | WebSocket: binary frames of PCM are the microphone while it is open (voice modes; keying is still `api/ptt`), always **12 kHz mono s16le** in both apps; the first text frame is `{"kind": "hello", "format": {"encoding": "s16le", "rate": 12000, "channels": 1}}` |
 | `POST api/shack/pad/action` | control (transmit for `power`) | the controller's input host: `{"action", "kind", "step"}` from `<app>/pad-actions.json`; answers the pad faces. `ptt` is refused here: a pad keys through `api/ptt` like any client. |
 | `GET api/shack/busy` | the platform | `{"busy": <on air>, "why"}` for the update gate |
@@ -107,14 +107,14 @@ decoded by shack_sdr.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET api/decoders` | view | `{"decoders": [entry…], "codecs": [codec…], "limits": {"sessions", "cpuMax", "threads"}, "sessions": [session…]}`. Fetch it once when a view opens. The first fetch after a start may take a moment: it is when the codecs are first looked for. |
-| `POST api/decoders/sessions` | control | `{"decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45, "shift": 170, "reverse": false}}`. `201` with the session, or `400 bad_params`, `404 unknown_decoder`, `409 decoder_unavailable` (`needs` names a codec when that is why; a slot mode, which runs only as the mode, says so too), `409 outside_span` (in Radio: it, the other sessions and the dial cannot fit in one span), `409 receiver_busy` (DAB plays), `429 too_many_sessions` (`decodersMax`, default 4), `503 not_running`; for DAB also `409 span_pinned` (background sessions pin the span: `sessions` lists them; send `"dropSessions": true` to stop them and play), `409 receiver_busy`, `on_air`, `rate_too_low`, `out_of_range` (below). Sessions are kept in the settings and start again with the radio, except DAB's. |
+| `POST api/decoders/sessions` | control | `{"decoder": "rtty", "freqHz": 14083500, "params": {"baud": 45.45, "shift": 170, "reverse": false}}`. `201` with the session, or `400 bad_params`, `404 unknown_decoder`, `409 decoder_unavailable` (`needs` names a codec when that is why; a slot mode, which runs only as the mode, says so too), `409 outside_span` (in Radio: it, the other sessions and the dial cannot fit in one span), `409 receiver_busy` (DAB plays), `429 too_many_sessions` (`decodersMax`, default 4), `503 not_running`; for DAB also an optional `"client": "<id>"`, the client asking (Radio: the station ends when the last client that asked for it goes, "Client presence" below), and `409 span_pinned` (background sessions pin the span: `sessions` lists them; send `"dropSessions": true` to stop them and play), `409 receiver_busy`, `on_air`, `rate_too_low`, `out_of_range` (below). Sessions are kept in the settings and start again with the radio, except DAB's. |
 | `DELETE api/decoders/sessions/{id}` | control | stop it: `{"stopped": true}`; `404 unknown_session` (the `vfo` session stops with its mode, never here) |
 | `GET api/decoders/sessions/{id}?since=<rev>` | view | the session, with `results`: its kept results (the last 500 or 30 minutes) newer than `rev`. Fetch it after a gap in `rev`. `404 unknown_session`. |
 | `POST api/decoders/sessions/{id}` | control | `{"params": {"service": "C3A7"}}`: change a running session's parameters live (DAB's station). `200` with the session; `400 bad_params` (a value the decoder refuses, or another DAB block), `404 unknown_session` |
 | `POST api/decoders/codecs/rescan` | control | look for codecs again without a restart: `{"codecs": [...]}`; also looks at the controller's host libraries again (`hostLibs`) |
 | `GET api/decoders/files` | view | the pictures decoders saved (SSTV's, whether a session's or the mode's), newest first: `{"files": [{"name", "session", "decoder", "t", "size"}...]}`. `t` is UTC seconds, `size` bytes; `session` and `decoder` are `""` for a picture saved before 23/10/2026. Answers with the radio stopped too. |
 | `GET api/decoders/files/{name}[?download=1]` | view | one of them, `Content-Type: image/png`; `download=1` adds `Content-Disposition: attachment`. `404 no_file` for a name not in the list (a path or a dotted name included). |
-| `POST api/decoders/sessions/{id}/listen` | control | `{"listen": true}`: hear the session's sound instead of the demodulator's on `api/audio/rx` (and the desktop's speaker, and a recording); `{"listen": false}` gives the demodulator back. One session at a time: listening to another takes over. `200` with the session (`listening` true or false); `404 unknown_session`, `409 no_audio` (its decoder makes no sound), `400 bad_params` (`listen` not true or false). Stopping the session ends it; it is never saved, so after a restart the radio is heard. Since 28/10/2026 (DMR). |
+| `POST api/decoders/sessions/{id}/listen` | control | `{"listen": true}`: hear the session's sound instead of the demodulator's on `api/audio/rx` (and the desktop's speaker, and a recording); `{"listen": false}` gives the demodulator back. One session at a time: listening to another takes over. `200` with the session (`listening` true or false); `404 unknown_session`, `409 no_audio` (its decoder makes no sound), `400 bad_params` (`listen` not true or false). An optional `"client": "<id>"` beside `listen` names who listens (Radio: listening ends when the last of them goes, "Client presence" below). Stopping the session ends it; it is never saved, so after a restart the radio is heard. Since 28/10/2026 (DMR). |
 
 A DAB session's sound replaces the demodulator's (below) by itself; any
 other session that makes sound (DMR's voice, below) does when listened to
@@ -930,6 +930,71 @@ end. Code `ohscore/server/autotx.py`, tests `tests/test_server_autotx.py`.
 
 Tested only into the simulator: nothing in this server has keyed a radio.
 
+## Client presence (Radio)
+
+When a client goes, what it started for itself ends, and a radio nobody is
+using goes back to the station (openhamshack `docs/CLIENT-UI-PLAN.md`
+§7.2-7.4, as built on 28/10/2026; code `ohscore/server/presence.py` and
+`Server.client_gone` in `ohscore/server/app.py`; tests
+`tests/test_ham_presence.py`). Radio only: QO-100 NB keeps its feature
+leases. Receive only: nothing here keys.
+
+**The platform keeps presence, Radio follows it.** A client renews `POST
+api/shack/v1/presence {"client", "app": "shack-radio", "screen", "holds"}`
+on the controller every 10 s and says goodbye on the way out; 30 s without
+a renewal is gone. Radio reads `api/shack/v1/presence/events` (`arrived`,
+`moved`, `gone{why: goodbye|expired}`) under its app token, only when the
+controller's services map lists `"presence": 1`. Without it - an older
+controller, the desktop, a run with no token - nothing changes.
+
+**Who holds what.** The `client` id is the client's one stable id: the
+transmit lease's `remote`, AIS's `client`. A client with presence sends it
+where it makes a hold:
+
+| Hold (client-scoped) | Named by |
+|---|---|
+| a DAB station | `"client"` in `POST api/decoders/sessions` (a start, `replace` too) |
+| listening to a session | `"client"` in `POST api/decoders/sessions/{id}/listen` |
+| the ship and aircraft maps | `"client"` in `POST api/ais/session` / `api/adsb/session`, as before; `"ais"` / `"adsb"` in its presence holds renews them without renewing the session |
+| receive audio, spectrum/1 and overlay/1, `api/events` | `?client=<id>` on `api/audio/rx`, `api/spectrum/v1`, `api/events` |
+
+All optional and backward compatible: a hold made without an id, or by a
+client the platform has never listed, is never ended by presence (an older
+client keeps today's behaviour, CLIENT-UI-PLAN §12). Station-scoped work
+is never ended by presence: background decoder sessions (they are saved),
+the CW skimmer, recordings, the nightly band scan.
+
+**When a client goes** (goodbye at once; otherwise its 30 s lease):
+
+1. its audio, spectrum and `api/events` streams close;
+2. a DAB station or listen it was the **last** client to ask for ends at
+   once - no linger (Brian, 28/10/2026) - the receiver back on the dial,
+   mode and repeater offset from before (`rxOwner` `{}`), as a stop does;
+   it leaves the AIS/ADS-B session, which ends at once if it was the last;
+3. if the radio is then held for nothing - no client's stream or socket,
+   no held receiver, no decoder session, skimmer, recording or scan, not
+   on the air, no transmit lease, Enable TX not armed - Radio **gives it
+   back**: the engine stops and the broker's claim is released, as
+   `api/stop` releases it, so the Hardware page shows it free and another
+   app can claim it. `api/status` then has `running` false, `radioError`
+   "" and `presence.released` true. The radio is still wanted: the next
+   client to arrive in Radio, or any client's `POST`/`DELETE` (bar
+   `api/stop`, `api/halt`) or stream opened (`api/audio/rx`,
+   `api/spectrum/v1`, `api/events`), claims it again for receive, a
+   second or two, before the request is answered; a nightly scan falling due does too, and gives it back
+   after.
+
+**Transmit is untouched** (§7.4): nothing here unkeys or disarms. While the
+radio is on the air nothing is released; it is done once it is not. A
+vanished client's transmit lease and Enable TX arm (5 s) have ended long
+before its presence (30 s) does.
+
+**A controller restart** forgets every client and sends no `gone`. Radio
+lists `GET api/shack/v1/presence` each time its event stream (re)connects
+and every minute; a client seen before and missing from the list has one
+lease (30 s) to reappear - a client still there does, within one renewal -
+and is gone, `expired`, if it does not.
+
 ## DAB (Radio)
 
 DAB and DAB+ from one Band III block through shack_sdr's DAB decoder
@@ -989,8 +1054,10 @@ runs at a time.
 - Transmitting is refused: `txBlocked` is "The receiver is playing DAB from
   block 11D: stop the DAB station to transmit", and `api/ptt` answers
   `onAir` false with it in `txError`.
-- **Stopping** (`DELETE api/decoders/sessions/{id}`, `api/stop`, or the
-  radio stopping) puts back the dial, mode and repeater offset from
+- **Stopping** (`DELETE api/decoders/sessions/{id}`, `api/stop`, the
+  radio stopping, or - on a controller with client presence - the last
+  client that asked for the station going: "Client presence" below)
+  puts back the dial, mode and repeater offset from
   before (`prior`), and the receiver follows the dial again. A DAB session
   is never saved in `decoderSessions` and never starts again with the
   radio: a start that retuned to Band III by itself would lose the dial.
@@ -2042,10 +2109,14 @@ seconds (30) while the map stays open - every 10 s is right. `<id>` is the
 client's own stable name, 1-64 of `A-Za-z0-9._:-` (the same id it uses as
 `remote` elsewhere does). Closing the map, it calls `DELETE
 api/ais/session?client=<id>`; a client that simply vanishes is forgotten
-when its lease runs out. When no client is left the session ends `lingerS`
-(60 s) later - long enough for a TV moving between views - and the
-receiver goes back exactly as it was: the dial, mode and repeater offset,
-and the receiver's centre. `DELETE api/ais/session?all=1` (control) ends it
+when its lease runs out. When no client is left the session ends **at
+once** (`lingerS` 0 since 28/10/2026; it was 60 s, long enough for a TV
+moving between views, until Brian decided on no linger: CLIENT-UI-PLAN
+7.3) and the receiver goes back exactly as it was: the dial, mode and
+repeater offset, and the receiver's centre. A client with client presence
+and `"ais"` in its holds is renewing this lease through presence, and its
+presence going ends its share at once ("Client presence" below); a client
+without presence renews the lease as before. `DELETE api/ais/session?all=1` (control) ends it
 at once whoever has the map open (an operator who wants the radio back).
 
 While it runs AIS **holds the receiver** like a DAB station: `rxOwner` is
@@ -2063,7 +2134,7 @@ Every answer of the session routes is the session view (also `ais` in
 ```json
 {"state": "running", "why": null, "text": "Listening to AIS on 161.975 and 162.025 MHz",
  "clients": 1, "startedAt": "2026-10-28T06:20:31Z", "endsInS": null,
- "centreHz": 162000000.0, "leaseS": 30.0, "lingerS": 60.0,
+ "centreHz": 162000000.0, "leaseS": 30.0, "lingerS": 0.0,
  "vessels": 6, "rev": 412, "frames": 380, "channelA": 191, "channelB": 189, "damaged": 3}
 ```
 
@@ -2191,9 +2262,10 @@ decoder); tests `tests/test_ham_adsb.py`. Receive only: nothing here keys.
 **The session.** `POST api/adsb/session {"client": "<id>"}` (control),
 again at least every `leaseS` (30) seconds while the map is open;
 `DELETE api/adsb/session?client=<id>` closing it; `DELETE
-api/adsb/session?all=1` (control) to end it at once. It ends `lingerS`
-(60 s) after the last client, and the receiver goes back exactly as it
-was. A client with both maps open runs one session or the other, never
+api/adsb/session?all=1` (control) to end it at once. It ends as soon as
+the last client goes (`lingerS` 0, as AIS), and the receiver goes back
+exactly as it was; presence renews it and ends a client's share as for
+AIS (`"adsb"` in holds). A client with both maps open runs one session or the other, never
 both: each holds the whole receiver, so starting ADS-B while AIS runs is
 `409 receiver_busy` (and the reverse).
 
@@ -2237,7 +2309,7 @@ it whether the radio runs or not:
 ```json
 {"state": "running", "why": null, "text": "Listening to ADS-B on 1090 MHz",
  "clients": 1, "startedAt": "2026-10-28T09:20:31Z", "endsInS": null,
- "centreHz": 1090000000.0, "rateHz": 6000000.0, "leaseS": 30.0, "lingerS": 60.0,
+ "centreHz": 1090000000.0, "rateHz": 6000000.0, "leaseS": 30.0, "lingerS": 0.0,
  "aircraft": 6, "rev": 412, "messages": 1525, "df17": 1135, "aircraftSeen": 6}
 ```
 
