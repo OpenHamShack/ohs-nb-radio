@@ -27,6 +27,8 @@ rig on: the stations fade in over a second or two).
   session finds stations with no radio.
 - **AIS**: six fictional ships and a buoy in the Firth of Clyde on
   161.975 and 162.025 MHz (simais.py), so the ship map fills with no radio.
+- **ADS-B**: six fictional aircraft around Prestwick on 1090 MHz
+  (simadsb.py), for the aircraft map.
 - **Broadcast FM**: six fictional stations on Band II from shack_sdr's FM
   stereo and RDS test transmitter (simfm.py), so wide FM is heard in
   stereo with RDS, and the band scanner finds something, with no radio.
@@ -293,6 +295,8 @@ class HamSim(SimCore):
         self.fm = None
         # Ships off the Ayrshire coast on AIS's two channels (simais.py).
         self.ais = None
+        # Aircraft around Prestwick on 1090 MHz (simadsb.py).
+        self.adsb = None
         # A DMR repeater on 70 cm likewise (simdmr.py).
         self.dmr = None
         if self.signals:
@@ -303,6 +307,8 @@ class HamSim(SimCore):
                 self.fm = FmBand()
                 from .simais import AisFleet
                 self.ais = AisFleet(t0=time.time())
+                from .simadsb import AdsbAir
+                self.adsb = AdsbAir(t0=time.time())
                 from .simdmr import DmrBand
                 self.dmr = DmrBand()
         self._init_loop()
@@ -597,11 +603,11 @@ class HamSim(SimCore):
             z = dab.take(self.n, len(y), self.fs, self.rx_if)
             if z is not None:
                 y += z
-        fleet = self.ais
-        if fleet is not None and fleet.in_view(self.rx_if, self.fs):
-            z = fleet.take(self.n, len(y), self.fs, self.rx_if)
-            if z is not None:
-                y += z
+        for air in (self.ais, self.adsb):
+            if air is not None and air.in_view(self.rx_if, self.fs):
+                z = air.take(self.n, len(y), self.fs, self.rx_if)
+                if z is not None:
+                    y += z
         self._loopback(y, 0.0)
         self.n += m * g.L
         return y
