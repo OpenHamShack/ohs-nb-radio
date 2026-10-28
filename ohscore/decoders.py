@@ -1055,6 +1055,9 @@ class Decoders:
                 # on a feed or into the kept results.
                 pics = self._pictures()
                 it = pics.take(it) if pics is not None else {k: v for k, v in it.items() if k != "raw"}
+                dec = getattr(vfo[1], "decoder", "") if vfo is not None and sid == vfo[0] else \
+                    (fixed[sid].decoder if sid in fixed else "")
+                it = self._frame(dec, it)
             elif it.get("type") == "image":
                 # A picture's rows are bytes, which no feed client can read:
                 # base64, as the SSTV events' rows always were; and a saved
@@ -1195,6 +1198,19 @@ class Decoders:
             except Exception:  # noqa: BLE001 - see above
                 log.warning("the app's addition to a decoder feed failed", exc_info=True)
         return out
+
+    def _frame(self, decoder: str, it: dict) -> dict:
+        """A result as clients get it: whatever the app adds (Radio names
+        DMR's IDs and talkgroups: Engine.decoder_frame). As with _meta,
+        a failure costs the addition, never the result."""
+        add = getattr(self.engine, "decoder_frame", None)
+        if add is None:
+            return it
+        try:
+            return add(decoder, it)
+        except Exception:  # noqa: BLE001 - see above
+            log.warning("the app's addition to a decoder result failed", exc_info=True)
+            return it
 
     def _refresh_now_next(self, fixed: dict) -> None:
         """Once a second: a held DAB session whose services' now or next has
