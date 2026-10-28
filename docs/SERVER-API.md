@@ -83,6 +83,9 @@ the desktop apps.
 | `GET api/local-frequencies?radiusKm=&category=` | view | Radio only: what there is to listen to near the station (below, "Local frequencies") |
 | `POST api/local-frequencies/mine`, `PUT`/`DELETE api/local-frequencies/mine/{id}` | control | Radio only: the operator's own list ("my frequencies") |
 | `POST api/local-frequencies/refresh` | control **and** the administrator flag | Radio only: download newer data (below) |
+| `GET ui/v1/app` | view | Radio only (404 `not_found` in QO-100 NB): the ui/1 app descriptor the OpenHamShack launcher draws its tiles from (below, "ui/1 screens") |
+| `GET ui/v1/screen/{id}[?params]` | view | Radio only: one ui/1 screen document, `radio/home`, `radio/dab`, `radio/fm` or `radio/ships`; `404 unknown_screen`, `406 ui_unsupported` for a client that takes only another major version (below) |
+| `GET ui/v1/data/dab` | view | Radio only: the DAB station playing, flat for a screen to bind to (below) |
 
 ## Decoders
 
@@ -2426,6 +2429,91 @@ so offline costs one request a minute, not one a tile; at most
 `mapTileCacheMb` (default 200) of tiles, the least recently shown going
 first. Settings: `mapOnlineTiles` (off: no traffic at all and no tile,
 cached or not) and `mapTileCacheMb`.
+
+## ui/1 screens (Radio)
+
+Radio's TV screens as server-driven ui/1 documents (openhamshack
+`docs/CLIENT-UI-PLAN.md` §5-6, step 1b), which the OpenHamShack client
+draws natively; a new panel then needs no client release. Built with
+ohs-libs `shack_ui` (pinned in `tools/vendor`), which checks every
+document against ohs-libs `spec/schemas/ui.schema.json` as it is served,
+so a screen that would break a client, or that has an action declaring
+`transmit`, is never sent. Code `ohsradio/screens.py`,
+`ohscore/server/uiv1.py`; tests `tests/test_ham_screens.py`; what each
+screen replaces on the Android TV, and what it leaves out,
+`docs/UI-PARITY-RADIO.md`. Receive only: every action is an existing
+route at its existing level, and no screen places `ptt` or `enableTx`.
+
+**Requests.** The client sends `X-OpenHamShack-UI: 1.0` and
+`X-OpenHamShack-Components: waterfall/1, map.ais/1, audio/1, ...` (a
+native component, or one of its layers after a dot, and the newest
+version it draws). A native component the list lacks is left out and its
+fallback sent in its place; with no header at all (a browser, curl) every
+native component goes out with its fallback beside it. A client whose
+`X-OpenHamShack-UI` has another major version gets `406 {"code":
+"ui_unsupported", "ui": ["1.0"]}`. Each answer carries `ETag` (the
+document's `rev`, a hash of its content) and `Cache-Control: no-cache`;
+`If-None-Match` with it answers `304`. Every path in a document is
+relative to the app's base (`api/set`, never `/api/set`), whatever
+`X-Forwarded-Prefix` says; documents are not given `url`s beside their
+paths, as other answers are.
+
+**`GET ui/v1/app`**:
+
+```json
+{"ui": "1.0", "app": "shack-radio", "kind": "radio", "name": "Radio", "version": "0.1.22",
+ "icon": null, "minClient": "1.0", "spectrum": 1, "overlay": 1,
+ "screens": ["radio/home", "radio/dab", "radio/fm", "radio/ships"],
+ "data": {"status": {"src": "get:api/status", "poll": 15}},
+ "status": {"text": {"bind": "status.dialLabel.text"}, "onAir": {"bind": "status.onAir"},
+            "running": {"bind": "status.running"}},
+ "entries": [{"id": "radio", "title": "Radio", "screen": "radio/home", "icon": "radio",
+              "status": {"text": {"bind": "status.dialLabel.text"}, "onAir": {"bind": "status.onAir"}}},
+             {"id": "dab", "title": "DAB Radio", "screen": "radio/dab", "icon": "dab", "status": {...}},
+             {"id": "fm", "title": "FM", "screen": "radio/fm", "icon": "fm", "status": {...}},
+             {"id": "ships", "title": "Ships", "screen": "radio/ships", "icon": "ships", "status": {...}}]}
+```
+
+`entries` are the launcher's tiles in that order (§6.2); each `status`
+binds into `data` (`api/status`, every 15 s): DAB's text is
+`rxOwner.text`, Ships' `ais.text`. `icon` is null until Radio serves a PNG
+of its own; an entry's `icon` names one the client has. No Aircraft entry
+until there is an ADS-B screen.
+
+**The screens.** Each binds `state` (`ws:api/events?kinds=state`, the
+merged state diffs) and, where it shows a meter or the stereo flag,
+`meter` (`ws:api/events?kinds=meter`).
+
+| Screen | Binds | Does (method, path, body; level) |
+|---|---|---|
+| `radio/home` | the dial (`state.vfo`, `freq`), mode, `dialLabel.text`, RDS `ps`/`rt`, the signal (`meter.rx`, `db`), `rxOwner.text` (who has the receiver), `error`; native `waterfall` (`stream` main, the band, dial, channels, beacons, stations and sessions layers) and `audio` (`api/audio/rx`) | Frequency: `POST api/set {"changes": {"vfo": $value}}`; Mode (a choice of `state.MODES`): `{"changes": {"mode": $value}}`; Band down/up: `POST api/shack/pad/action {"action": "band", "kind": "turn", "step": -1\|1}`; Volume: `POST api/set {"volume": $value}`; Start the radio: `POST api/start` (all control); Mute: the `audio.mute` native verb; opens `radio/dab`, `radio/fm`, `radio/ships` |
+| `radio/dab` | `dab` (`get:ui/v1/data/dab`, every second): title, programme text, slide or logo, detail ("DAB+ · 64 kb/s · Varied"), ensemble, `whyText`, transmitters heard; `state.bandScan.text`; native `audio` | A tile per service of `api/dab/stations`, by ensemble: `POST api/decoders/sessions {"decoder": "dab", "freqHz", "params": {"block", "service"}, "replace": true}`; Stop: `{"decoder": "dab", "stop": true}` ("DAB" above: neither needs the session id); Scan now: `POST api/scan {"band": "dab"}`; Volume (all control); Mute |
+| `radio/fm` | RDS `ps`, `rt`, `ptyName`, `tp`; the dial; `meter.stereo`; `rxOwner.text`; `state.bandScan.text`; native `audio` | A tile per station of `api/fm/stations`, by frequency and A-Z (`tabs`): `POST api/set {"changes": {"vfo": best.hz, "mode": "wfm"}}`; Tune by frequency: the same with `$value`; Scan now: `POST api/scan {"band": "fm"}`; Volume (all control); Mute |
+| `radio/ships` | `ais` (`get:api/ais/vessels`, every 10 s): `session.text` and the nearest ships, a row each bound by index (`ais.vessels.0.name`, `shipTypeText`, `distanceKm`), as many as the table held when the screen opened (at most 12); `rxOwner.text`; native `map` with layer `ais` | The map component, as the TV's map does today: `POST api/ais/session {"client"}` every 10 s while it shows and `DELETE api/ais/session?client=` when it closes (control), `api/map/info`, `api/map/land`, `api/map/tiles/{z}/{x}/{y}.png`, `api/ais/vessels[/{mmsi}]`, `api/events?kinds=ais` (view); its props name each path. A row selects its ship on the map: `local` `map.ais.selected` with the row's `mmsi` binding |
+
+A screen is built when it is asked for: the station lists are as the last
+scan left them, so a client asks again after a `stations` event or a
+change of `stationsAt` (or simply on opening the screen).
+
+**`GET ui/v1/data/dab`** (view): what the DAB screen binds to, from the
+DAB session playing (whose own view, `GET api/decoders/sessions/{id}`,
+needs its id):
+
+```json
+{"playing": true, "session": "ds_3f2a", "block": "11D", "service": "C221", "title": "Shack MP2 Tone",
+ "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right", "detail": "DAB · 128 kb/s · Pop music",
+ "ensemble": "Shack Test Mux · 11D", "imagePath": "api/dab/slides/C221?rev=7",
+ "imageUrl": "/apps/radio/api/dab/slides/C221?rev=7", "why": null, "whyText": "",
+ "transmitters": [...as in the session's meta...],
+ "transmittersText": "Crystal Palace, 4 km, 0 dB\nWrotham, 31 km, -8.5 dB"}
+```
+
+`service` is the station asked for, so a change shows at once; `dls`
+follows when the decoder has it. `imagePath` is the station's latest
+slide, else its logo, else null. `transmittersText` is one line per
+transmitter, worded here because ui/1 has no repeated row to fill from a
+list. While nothing plays: `playing` false, `title` "Not playing", the
+rest null or empty.
 
 ## What it is not (yet)
 
