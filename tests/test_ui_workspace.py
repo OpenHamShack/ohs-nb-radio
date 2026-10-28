@@ -477,7 +477,15 @@ class Strip(WindowCase):
         self.run_for(radio, 2.5)
         texts = [e[0] for e in win.status.entries(bridge.st)]
         self.assertFalse([t for t in texts if "frame" in t or "paint" in t], texts)
-        self.assertIn("frame", win.status.timings)
+        # window.on_tick fills `timings` once a *real* second of ticks has
+        # accumulated (bridge.py's dt is wall-clock, for the meters'
+        # ballistics) - not once `sim_s` of simulated signal has passed,
+        # which the sim can do in far less wall-clock time on a quiet host.
+        # `run_for(radio, 2.5)` alone was a bet that 2.5 sim-seconds would
+        # not finish before 1 real second had: true on a quiet host, false
+        # under load from sibling sessions, so wait for the fill itself.
+        self.assertTrue(self.run_for(radio, until=lambda: bool(win.status.timings)),
+                         "window.timings_text was never applied to the strip")
         win.status.grab()                                    # painted: the items have their places
         cpu = next((x0, x1) for x0, x1, k in win.status.hits if k == "cpu")
         tip = win.status.tooltip_at((cpu[0] + cpu[1]) / 2)
