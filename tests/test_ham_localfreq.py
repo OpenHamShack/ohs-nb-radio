@@ -222,6 +222,135 @@ class Mine(unittest.TestCase):
         self.assertEqual(lfq.listing(GLASGOW, 50, "pmr")["entries"], [])
 
 
+class DialLabel(unittest.TestCase):
+    """What the dial is on (LocalFrequencies.dial_label, docs/SERVER-API.md
+    "The dial label"), over Toys' tiny sources and the operator's own
+    entries. Station JJ00AA, 2.3 km from the equator and the meridian."""
+
+    HERE = "JJ00AA"
+
+    def setUp(self):
+        Toys.setUp(self)
+        # An 8.33 kHz channel and its neighbour, so a step tighter than the
+        # bandwidth is exercised; Near Field is 10 km away, Far Field 220.
+        toy(self.bundled, "ourairports.json.gz", [
+            {"ref": "NEAR", "name": "Near Field", "lat": 0.1, "lon": 0.0,
+             "freqs": [[118_500_000, "TWR", 8333], [118_508_333, "GND", 8333]]},
+            {"ref": "FAR", "name": "Far Field", "lat": 2.0, "lon": 0.0, "freqs": [[120_000_000, "TWR"]]},
+        ], "ourairports", defaults={"category": "airband", "mode": "am", "step": 25000})
+
+    def label(self, hz, mode="fm", bw=12_500, loc=HERE, radius=100):
+        return self.lf.dial_label(hz, mode, bw, loc, radius)
+
+    def mine(self, **kw):
+        return self.lf.mine.add({"mode": "fm", **kw}, MODES)
+
+    def test_an_exact_match_says_what_the_entry_holds(self):
+        got = self.label(118_500_000, "am", 8_000)
+        self.assertEqual((got["kind"], got["name"], got["sub"], got["source"]), ("airband", "Near Field", "TWR",
+                                                                                 "ourairports"))
+        self.assertEqual(got["text"], "Near Field · TWR · AM")
+        self.assertEqual(got["id"], "ourairports:NEAR:118500000")
+        self.assertEqual((got["distanceKm"], got["bearingDeg"]), (9.9, 332))
+        # Nothing a bundled entry does not hold is made up.
+        for k in ("callsign", "place", "cc", "ctcss", "network", "rxOffsetHz"):
+            self.assertIsNone(got[k], k)
+
+    def test_within_the_bandwidth_or_the_step_whichever_is_tighter(self):
+        # AM's 8 kHz: 4 kHz either side, inside the 8.33 kHz step.
+        self.assertEqual(self.label(118_503_900, "am", 8_000)["sub"], "TWR")
+        self.assertIsNone(self.label(118_504_100, "am", 8_000))
+        # The neighbouring channel is nearer: it, not the one below.
+        self.assertEqual(self.label(118_506_000, "am", 8_000)["sub"], "GND")
+        # Wide FM's 180 kHz would reach a channel 12 kHz away; PMR446's
+        # 12.5 kHz step keeps the label to the channel it is on.
+        self.assertEqual(self.label(446_006_250 + 12_000, "wfm", 180_000)["name"], "PMR446 Ch 1")
+        self.assertIsNone(self.label(446_006_250 + 13_000, "wfm", 180_000))
+        # A narrow CW filter names only what it is on.
+        self.assertIsNone(self.label(118_500_400, "cw", 500))
+
+    def test_nothing_near_is_null(self):
+        self.assertIsNone(self.label(145_000_000))
+        # No bandwidth: only an exact dial.
+        self.assertIsNotNone(self.label(118_500_000, "am", 0))
+        self.assertIsNone(self.label(118_500_001, "am", 0))
+
+    def test_a_positioned_entry_counts_only_within_the_radius(self):
+        self.assertIsNone(self.label(120_000_000, "am", 8_000, radius=100))
+        self.assertEqual(self.label(120_000_000, "am", 8_000, radius=300)["name"], "Far Field")
+
+    def test_without_a_locator_the_tables_and_mine_still_answer(self):
+        self.assertIsNone(self.label(118_500_000, "am", 8_000, loc=""))
+        self.assertEqual(self.label(446_006_250, loc="")["name"], "PMR446 Ch 1")
+        self.mine(name="Hilltop", freqHz=145_600_000, category="repeater", locator="JJ00AB")
+        got = self.label(145_600_000, loc="")
+        self.assertEqual(got["name"], "Hilltop")
+        self.assertIsNone(got["distanceKm"])
+
+    def test_offline_with_no_data_at_all(self):
+        empty = Path(self.data) / "nothing-bundled"
+        bare = lf.LocalFrequencies(self.data / "bare", empty)
+        self.assertIsNone(bare.dial_label(446_006_250, "fm", 12_500, ""))
+        self.assertIsNone(bare.dial_label(446_006_250, "fm", 12_500, self.HERE))
+        # A broken list of the operator's own is no list, not an error.
+        (self.data / "bare").mkdir()
+        (self.data / "bare" / lf.MINE_FILE).write_text("{not json", encoding="utf-8")
+        self.assertIsNone(bare.dial_label(446_006_250, "fm", 12_500, self.HERE))
+
+    def test_the_operators_own_first_a_repeater_before_the_rest(self):
+        self.assertEqual(self.label(446_006_250)["kind"], "pmr")
+        # The operator's entry wins though the bundled channel is nearer.
+        self.mine(name="Club Net", freqHz=446_010_000, category="net", sub="Tuesdays")
+        got = self.label(446_006_250)
+        self.assertEqual((got["kind"], got["name"], got["source"]), ("mine", "Club Net", "mine"))
+        self.assertEqual(got["text"], "Club Net · Tuesdays · FM")
+        self.assertIsNone(got["callsign"])
+        # A repeater of theirs wins over another of theirs, nearer or not.
+        self.mine(name="Repeater One", freqHz=446_000_000, category="repeater")
+        self.assertEqual(self.label(446_006_250)["name"], "Repeater One")
+        # Inside one rank the nearest in frequency.
+        self.mine(name="Repeater Two", freqHz=446_005_000, category="repeater")
+        self.assertEqual(self.label(446_006_250)["name"], "Repeater Two")
+        self.assertEqual(self.label(446_001_000)["name"], "Repeater One")
+
+    def test_a_repeater_label_and_its_input(self):
+        e = self.mine(name="Repeater One", freqHz=145_712_500, category="repeater", sub="Hilltop",
+                      locator="JJ00AB", notes="CTCSS 103.5 CC1")
+        got = self.label(145_712_500)
+        self.assertEqual((got["kind"], got["callsign"], got["place"], got["mode"]),
+                         ("repeater", "Repeater One", "Hilltop", "fm"))
+        self.assertEqual(got["text"], "Repeater One · Hilltop · FM")
+        self.assertEqual(got["id"], f"mine:{e['id']}")
+        # The UK's 2 m pairs: it listens 600 kHz below.
+        self.assertEqual(got["rxOffsetHz"], -600_000)
+        self.assertIsNotNone(got["distanceKm"])
+        # Notes are free text: no tone or colour code is read out of them.
+        self.assertEqual((got["ctcss"], got["cc"], got["network"]), (None, None, None))
+        # Off the repeater pairs (a 2 m simplex frequency), no input known.
+        self.mine(name="Odd One", freqHz=145_500_000, category="repeater")
+        self.assertIsNone(self.label(145_500_000)["rxOffsetHz"])
+        # The plan in force's pairs when given: none here.
+        self.assertIsNone(self.lf.dial_label(145_712_500, "fm", 12_500, self.HERE, 100, [])["rxOffsetHz"])
+        # Only a repeater has an input.
+        self.mine(name="Calling", freqHz=433_500_000, category="simplex")
+        self.assertIsNone(self.label(433_500_000)["rxOffsetHz"])
+
+    def test_an_edit_is_seen_at_once_and_says_so(self):
+        told = []
+        self.lf.mine.on_change = lambda: told.append(1)
+        e = self.mine(name="Repeater One", freqHz=145_712_500, category="repeater")
+        self.assertEqual(self.label(145_712_500)["name"], "Repeater One")
+        self.lf.mine.update(e["id"], {"name": "Repeater Renamed"}, MODES)
+        self.assertEqual(self.label(145_712_500)["name"], "Repeater Renamed")
+        self.lf.mine.delete(e["id"])
+        self.assertIsNone(self.label(145_712_500))
+        self.assertEqual(len(told), 3)
+        # Written by something else (a restore): read again by its stamp.
+        other = lf.MineStore(self.lf.mine.path)
+        other.add({"name": "Restored", "freqHz": 145_712_500, "mode": "fm"}, MODES)
+        self.assertEqual(self.label(145_712_500)["name"], "Restored")
+
+
 class Builders(unittest.TestCase):
     def test_833_channel_names_become_frequencies(self):
         self.assertEqual(lf.eight33(118.005), (118_000_000, 8333))

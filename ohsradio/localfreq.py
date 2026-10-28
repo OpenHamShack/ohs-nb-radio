@@ -38,6 +38,7 @@ dial, mode and step it is given.
 """
 from __future__ import annotations
 
+import bisect
 import csv
 import gzip
 import io
@@ -53,6 +54,7 @@ from pathlib import Path
 
 from ohscore.countries import distance_bearing, locator_position
 
+from ohsradio import bands
 from ohsradio.i18n import _
 
 log = logging.getLogger("ohsradio.localfreq")
@@ -297,6 +299,17 @@ class MineStore:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.lock = threading.Lock()
+        # The file as last read, by its stamp: the dial label asks on
+        # every change of the dial, and a stat is all that costs while the
+        # file stands still. The stamp has the inode and size beside the
+        # time because a write is a rename over the file, and two inside
+        # one tick of the file system's clock would otherwise look alike.
+        self._seen: tuple | None = None
+        self._rows: list[dict] = []
+        # Called (no arguments, outside the lock) after every change, so
+        # Radio's dial label follows an entry added on the dial at once
+        # rather than at the next turn of it.
+        self.on_change = None
 
     def entries(self) -> list[dict]:
         with self.lock:
@@ -304,13 +317,32 @@ class MineStore:
 
     def _read(self) -> list[dict]:
         try:
+            st = self.path.stat()
+        except FileNotFoundError:
+            return []
+        except OSError as e:
+            log.warning("my frequencies unreadable, listed as empty: %s", e)
+            return []
+        stamp = (st.st_mtime_ns, st.st_size, st.st_ino)
+        if stamp == self._seen:
+            return self._rows
+        try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return []
         except (OSError, ValueError) as e:
             log.warning("my frequencies unreadable, listed as empty: %s", e)
             return []
-        return [e for e in data.get("entries", []) if isinstance(e, dict) and e.get("id")]
+        self._rows = [e for e in data.get("entries", []) if isinstance(e, dict) and e.get("id")]
+        self._seen = stamp
+        return self._rows
+
+    def _changed(self) -> None:
+        if self.on_change is not None:
+            try:
+                self.on_change()
+            except Exception:  # noqa: BLE001  the edit is saved whatever a listener does
+                log.exception("my frequencies listener")
 
     def _write(self, entries: list[dict]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -321,24 +353,28 @@ class MineStore:
     def add(self, body: dict, modes) -> dict:
         e = clean_mine(body, modes)
         with self.lock:
-            entries = self._read()
+            entries = list(self._read())
             if len(entries) >= MINE_MAX:
                 raise Invalid(_("My frequencies holds at most {n} entries").format(n=MINE_MAX))
             e = {"id": "m" + secrets.token_hex(4), **e}
             entries.append(e)
             self._write(entries)
+        self._changed()
         return e
 
     def update(self, eid: str, body: dict, modes) -> dict | None:
         with self.lock:
-            entries = self._read()
+            entries = list(self._read())
             for i, old in enumerate(entries):
                 if old["id"] == eid:
                     e = {"id": eid, **clean_mine(body, modes, {k: v for k, v in old.items() if k != "id"})}
                     entries[i] = e
                     self._write(entries)
-                    return e
-        return None
+                    break
+            else:
+                return None
+        self._changed()
+        return e
 
     def delete(self, eid: str) -> bool:
         with self.lock:
@@ -347,7 +383,49 @@ class MineStore:
             if len(keep) == len(entries):
                 return False
             self._write(keep)
-            return True
+        self._changed()
+        return True
+
+
+# ---------------------------------------------------------------- the dial label
+# The bundled entries sorted by frequency, per set of files (LocalFrequencies._dial_rows).
+_DIAL_INDEX: dict[tuple, tuple] = {}
+_DIAL_LOCK = threading.Lock()
+
+
+def _label(src: str, e: dict, place: tuple | None, eid: str, repeaters=None) -> dict:
+    """The dial label for one matched entry (docs/SERVER-API.md "The dial
+    label").
+
+    Only what the entry really holds is said. The operator's entries have
+    no callsign, place, colour code, network or CTCSS field (MINE_FIELDS):
+    a repeater's name is taken as its callsign, its `sub` as the place,
+    and the rest stay null rather than being read out of free-text notes,
+    where "CC1" or "103.5" might mean anything."""
+    mine = src == "mine"
+    kind = ("repeater" if e.get("category") == "repeater" else "mine") if mine else e["category"]
+    sub = e.get("sub", "") or ""
+    mode = e.get("mode", "") or ""
+    rx_offset = None
+    if kind == "repeater":
+        # Its input from the plan in force's repeater pairs, the same
+        # table the dial's own "auto" shift reads (bands.auto_shift): a
+        # second idea of where repeaters listen would disagree with it.
+        sh = bands.auto_shift(e["freqHz"], repeaters)
+        rx_offset = int(round(sh)) if sh else None
+    out = {"kind": kind, "name": e["name"], "callsign": e["name"] if kind == "repeater" else None,
+           "place": (sub or None) if mine else None, "sub": sub, "mode": mode,
+           "cc": None, "ctcss": None, "network": None, "distanceKm": None, "bearingDeg": None,
+           "freqHz": int(e["freqHz"]), "rxOffsetHz": rx_offset, "source": src,
+           "id": eid}
+    if place is not None:
+        out["distanceKm"] = round(place[0], 1)
+        out["bearingDeg"] = round(place[1])
+    # "GB7IR · Irvine · DMR": name, place (or what the entry says under its
+    # name), mode, each only when there is one. A colour code and network
+    # would follow the mode once an entry can hold them.
+    out["text"] = " · ".join(p for p in (out["name"], sub, mode.upper()) if p)
+    return out
 
 
 # ---------------------------------------------------------------- the listing
@@ -492,6 +570,92 @@ class LocalFrequencies:
                         "coverage": data.get("coverage", ""), "attribution": attr,
                         "refreshable": SOURCES[src]["refresh"]})
         return out
+
+    # ------------------------------------------------------------ the dial label
+    def _dial_rows(self) -> tuple[list[int], list[tuple]]:
+        """Every bundled or refreshed entry sorted by frequency, as
+        (frequencies, (source, index in its source, entry)) for bisect.
+
+        Kept per process, by the files' stamps, not per instance: the
+        label is asked for on every change of the dial, the airfields are
+        some 27,000 entries, and every Radio a process makes (the tests
+        make hundreds) reads the same release's files."""
+        paths = tuple((str(p), p.stat().st_mtime_ns, p.stat().st_size)
+                      for src in SOURCES for p in self._paths(src))
+        with _DIAL_LOCK:
+            hit = _DIAL_INDEX.get(paths)
+        if hit is not None:
+            return hit
+        rows = sorted(((e["freqHz"], src, i, e) for src in SOURCES for i, e in enumerate(self.source(src)[0])),
+                      key=lambda r: r[0])
+        built = ([r[0] for r in rows], [r[1:] for r in rows])
+        with _DIAL_LOCK:
+            if len(_DIAL_INDEX) >= 4:            # a refresh, or a test's toy folders: keep only the newest few
+                _DIAL_INDEX.clear()
+            _DIAL_INDEX[paths] = built
+        return built
+
+    def dial_label(self, vfo_hz: float, mode: str, bandwidth_hz: float, locator: str,
+                   radius_km: float | None = None, repeaters=None) -> dict | None:
+        """What the dial is on, if it is on something Radio knows: the
+        operator's own entries and the bundled lists (docs/SERVER-API.md
+        "The dial label"); None when nothing is within reach.
+
+        An entry is matched when the dial is within half the receive
+        bandwidth of it, or within its own channel step where that is
+        tighter (an 8.33 kHz airband channel next to the one the operator
+        means). Of several, the operator's own come first - a repeater
+        among them before anything else they entered - then the bundled
+        lists; inside each, the nearest in frequency, then the nearest on
+        the ground, then those with no position. A bundled entry with a
+        position counts only within `radius_km` of the station, and not at
+        all without a locator, exactly as the listing does; the operator's
+        own count wherever they are. `mode` is the dial's: it decides
+        nothing here beyond the bandwidth it was given with, so the label
+        names a repeater however the operator is listening to it.
+        `repeaters` are the plan in force's schemes (bands.RepeaterScheme)
+        for a repeater's input; the UK's when not given.
+
+        Reads nothing but stats once the files are in memory: the operator's
+        list is kept by its stamp (MineStore) and the bundled ones here."""
+        vfo = float(vfo_hz)
+        half = max(0.0, float(bandwidth_hz or 0.0)) / 2.0
+        here = locator_position(locator or "")
+        radius = float(radius_km if radius_km is not None else DEFAULT_RADIUS_KM)
+        far = float("inf")
+        best: tuple | None = None
+        for i, m in enumerate(self.mine.entries()):
+            off = abs(m["freqHz"] - vfo)
+            if off > half:
+                continue
+            place = None
+            pos = locator_position(m.get("locator", "")) if m.get("locator") else None
+            if pos is not None and here is not None:
+                place = distance_bearing(here[0], here[1], pos[0], pos[1])
+            rank = 0 if m.get("category") == "repeater" else 1
+            cand = (rank, off, place[0] if place else far, i, ("mine", m, place, f"mine:{m['id']}"))
+            best = cand if best is None or cand[:4] < best[:4] else best
+        if best is None or best[0] > 1:
+            freqs, rows = self._dial_rows()
+            lo, hi = bisect.bisect_left(freqs, vfo - half), bisect.bisect_right(freqs, vfo + half)
+            for k in range(lo, hi):
+                src, i, e = rows[k]
+                off = abs(e["freqHz"] - vfo)
+                if off > (min(half, e["step"]) if e.get("step") else half):
+                    continue
+                place = None
+                if e.get("area") or e.get("lat") is not None:
+                    if here is None:
+                        continue
+                    place = place_of(e, here)
+                    if place[0] > radius:
+                        continue
+                cand = (2, off, place[0] if place else far, k, (src, e, place, f"{src}:{e['ref'] or i}:{e['freqHz']}"))
+                best = cand if best is None or cand[:4] < best[:4] else best
+        if best is None:
+            return None
+        src, e, place, eid = best[4]
+        return _label(src, e, place, eid, repeaters)
 
     # ------------------------------------------------------------ refresh
     def refresh(self, fetch, locator: str, radius_km: float, openaip_key: str = "") -> dict:
