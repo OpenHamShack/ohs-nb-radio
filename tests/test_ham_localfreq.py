@@ -569,6 +569,37 @@ class OnTheRadio(unittest.TestCase):
         self.assertTrue(all(e.get("distanceKm", 0) <= 30 for e in out["entries"] if e["category"] != "mine"))
         self.assertEqual(r.local_frequencies(80)["radiusKm"], 80)
 
+    def test_the_dial_label_follows_the_dial(self):
+        """dialLabel in the state, as api/state and api/status carry it:
+        it appears, changes and goes as the dial crosses an entry's edge
+        (the FM passband, 6.25 kHz either side), and an entry added or
+        deleted on the dial shows at once, without a turn of it."""
+        r = make_radio(locator=GLASGOW)
+        self.addCleanup(close, r)
+        r.set(vfo=145_712_500, mode="fm")
+        self.assertIsNone(r.state()["dialLabel"])
+        e = r.localfreq.mine.add({"name": "Repeater One", "freqHz": 145_712_500, "mode": "fm",
+                                  "category": "repeater", "sub": "Hilltop"}, MODES)
+        got = r.state()["dialLabel"]
+        self.assertEqual((got["kind"], got["text"]), ("repeater", "Repeater One · Hilltop · FM"))
+        self.assertEqual(got["rxOffsetHz"], -600_000)          # the station country's (UK) 2 m pairs
+        r.set(vfo=145_712_500 + 6_000)
+        self.assertEqual(r.state()["dialLabel"]["name"], "Repeater One")
+        r.set(vfo=145_712_500 + 7_000)
+        self.assertIsNone(r.state()["dialLabel"])
+        r.localfreq.mine.add({"name": "Repeater Two", "freqHz": 145_725_000, "mode": "fm",
+                              "category": "repeater"}, MODES)
+        self.assertEqual(r.state()["dialLabel"]["name"], "Repeater Two")
+        r.set(vfo=145_718_000)
+        self.assertEqual(r.state()["dialLabel"]["name"], "Repeater One")    # 5.5 kHz away; Two is 7
+        r.localfreq.mine.delete(e["id"])
+        self.assertIsNone(r.state()["dialLabel"])
+        # A narrower passband narrows the reach: USB's is 300-2700 Hz.
+        r.set(vfo=145_725_000 + 1_000, mode="usb")
+        self.assertEqual(r.state()["dialLabel"]["name"], "Repeater Two")
+        r.set(vfo=145_725_000 + 1_500)
+        self.assertIsNone(r.state()["dialLabel"])
+
 
 if __name__ == "__main__":
     unittest.main()

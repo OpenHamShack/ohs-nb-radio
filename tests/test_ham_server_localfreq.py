@@ -132,6 +132,33 @@ class LocalFrequenciesApi(unittest.TestCase):
         self.assertEqual(a["radiusKm"], 75)
 
 
+    def test_the_dial_label_in_state_and_status(self):
+        """docs/SERVER-API.md "The dial label": api/state and api/status
+        carry dialLabel, null off any entry, and it changes as the dial
+        moves onto, along and off one."""
+        s, a = self.req("POST", "/api/set", {"changes": {"vfo": 145_712_500, "mode": "fm"}}, level="control")
+        self.assertEqual(s, 200, a)
+        for path in ("/api/state", "/api/status"):
+            s, a = self.req("GET", path)
+            self.assertIn("dialLabel", a, path)
+            self.assertIsNone(a["dialLabel"], path)
+        s, e = self.req("POST", "/api/local-frequencies/mine", {"name": "Repeater One", "freqHz": 145_712_500,
+                                                                 "mode": "fm", "category": "repeater"},
+                        level="control")
+        self.assertEqual(s, 201, e)
+        for path in ("/api/state", "/api/status"):
+            s, a = self.req("GET", path)
+            self.assertEqual(a["dialLabel"]["text"], "Repeater One · FM", path)
+            self.assertEqual(a["dialLabel"]["id"], f"mine:{e['id']}", path)
+        self.req("POST", "/api/set", {"changes": {"vfo": 145_725_000}}, level="control")
+        s, a = self.req("GET", "/api/status")
+        self.assertIsNone(a["dialLabel"])
+        # Onto a bundled channel: the marine table's calling channel.
+        self.req("POST", "/api/set", {"changes": {"vfo": 156_800_000}}, level="control")
+        s, a = self.req("GET", "/api/status")
+        self.assertEqual((a["dialLabel"]["kind"], a["dialLabel"]["freqHz"]), ("marine", 156_800_000))
+
+
 class NotOnNb(unittest.TestCase):
     def test_nb_has_none(self):
         from ohsnb import server as nb_server

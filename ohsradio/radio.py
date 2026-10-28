@@ -528,6 +528,28 @@ class Radio(Engine):
     def _derive(self):
         super()._derive()
         self._licence_warnings(self.st.get("licenceInfo") or {})
+        self._dial_label()
+
+    def _dial_label(self) -> None:
+        """dialLabel: what the dial is on, when it is on a frequency the
+        operator entered or the bundled lists know (localfreq.dial_label;
+        docs/SERVER-API.md "The dial label"), within the receive passband.
+
+        Beside the derived status rather than in _derived, which runs under
+        the engine lock: the first label of a run reads the bundled lists
+        (about 0.1 s, once per process), and no set() should wait on that
+        while holding the lock every other thread wants. After that it is a
+        few stats and a bisect, so it is simply worked out again whenever
+        the derived status is."""
+        s = self.st
+        try:
+            label = self.localfreq.dial_label(s["vfo"], s["mode"], s["rxFilterHi"] - s["rxFilterLo"],
+                                              s.get("locator", ""), s.get("localRadiusKm", 100),
+                                              self._repeaters()[0])
+        except Exception:  # noqa: BLE001  a label is a nicety: an unreadable list must never stop a tune
+            self.log.exception("dial label")
+            label = None
+        self._status(dialLabel=label)
 
     def _licence_warnings(self, info: dict) -> None:
         """The licence guard's warnings - not its refusals - as the transmit
@@ -1396,13 +1418,17 @@ class Radio(Engine):
     # ------------------------------------------------------------------ local frequencies
     @property
     def localfreq(self):
-        """Local frequencies (ohsradio/localfreq.py): read from the bundled
-        files on first use, never at start (a desktop that never opens the
-        view never reads them), and the operator's list in the data folder."""
+        """Local frequencies (ohsradio/localfreq.py): the bundled files, and
+        the operator's list in the data folder. Read on first use, which
+        since the dial label (28/10/2026) is the first derived status, at
+        start: the label needs them, the read is about 0.1 s and 20 MB once
+        per process, and it happens off the engine lock (_dial_label)."""
         lf = self.__dict__.get("_localfreq")
         if lf is None:
             from . import localfreq
             lf = self.__dict__["_localfreq"] = localfreq.LocalFrequencies(self.data_dir)
+            # An entry added, changed or deleted on the dial relabels it now.
+            lf.mine.on_change = self._dial_label
         return lf
 
     def local_frequencies(self, radius_km: float | None = None, category: str | None = None) -> dict:

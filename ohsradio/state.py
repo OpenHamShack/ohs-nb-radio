@@ -332,6 +332,10 @@ with REG.after("txDial"):
                                     "the converter's IF for it."),
         ("shift", "float", 0.0, "Repeater shift applied to the transmit dial now, Hz."),
         ("channel", "str", "", "Channel name of the dial in the plan in force (the UK's RV55, V40, RB4...)."),
+        ("dialLabel", "dict", None, "What the dial is on, from the operator's own frequencies and the bundled "
+                                    "local-frequency lists (localfreq.py): {kind, name, callsign, place, sub, mode, "
+                                    "cc, ctcss, network, distanceKm, bearingDeg, freqHz, rxOffsetHz, source, id, "
+                                    "text}; null when nothing known is within the receive passband."),
         ("spanLo", "float", 0.0, "Lowest frequency the wide scope can show now."),
         ("spanHi", "float", 0.0, "Highest frequency the wide scope can show now."),
         ("licenceInfo", "dict", {}, "The licence and plan under the transmit dial: class, limit, segment, level, why."),

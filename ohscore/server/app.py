@@ -386,9 +386,10 @@ class Server:
                 # radioError is then a passing state, not a fault.
                 "reconnecting": self.reclaim is not None,
                 # Radio's map sessions (docs/SERVER-API.md "AIS", "ADS-B")
-                # and its DMR ID list ("DMR"), as api/state has them; absent
-                # in an app with none (NB).
-                **{k: st[k] for k in ("ais", "adsb", "dmrIds") if k in st},
+                # and its DMR ID list ("DMR") and what the dial is on ("The
+                # dial label"), as api/state has them; absent in an app with
+                # none (NB).
+                **{k: st[k] for k in ("ais", "adsb", "dmrIds", "dialLabel") if k in st},
                 "device": st.get("device"), "mode": st.get("mode"), "vfo": st.get("vfo"),
                 "txDial": st.get("txDial"), "simulator": bool(st.get("simWhy")),
                 "broker": self.broker.view() if self.broker is not None else None,

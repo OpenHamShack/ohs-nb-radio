@@ -37,7 +37,7 @@ the desktop apps.
 | Method, path | Level | Does |
 |---|---|---|
 | `GET /` | view | a status page and the Recordings (record, play, download, delete); nothing fetched from elsewhere, one small script that posts to `api/recordings` |
-| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `span` (what the receiver covers and whether background decoder sessions pin it: "The pinned span" below; `{}` in QO-100 NB), `broadcastGain` (the receiver gain a DAB station or wide FM plays with in place of the operator's: "Broadcast gain" below; `{}` while none plays, and in QO-100 NB), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below), `dmrIds` (Radio: the DMR callsign list, "DMR" below; absent in QO-100 NB) |
+| `GET api/status` | view | the app and radio at a glance: `app`, `kind`, `name`, `version`, `running`, `onAir`, `txError`, `txBlocked`, `tx.remote` (the lease; its presence says this server has it), `radioError`, `reconnecting` (true while a claim the broker lost is being taken back; `radioError` then says "Reconnecting to the station…"), `autoTx` (below), `device`, `mode`, `vfo`, `txDial`, `dialLabel` (Radio: what the dial is on, `null` off any known entry: "The dial label" below; absent in QO-100 NB), `simulator`, `broker`, `audio`, `station`, `sharedLog`, `recordings`, `decoders` (`{"available", "sessions", "cpuMax", "codecsMissing"}`: whether to show a Decoders view; `codecsMissing` is `null` until the first look, never a scan of its own), `rxOwner` (the decoder session holding the receiver, `{}` while the operator has it: "DAB" below), `span` (what the receiver covers and whether background decoder sessions pin it: "The pinned span" below; `{}` in QO-100 NB), `broadcastGain` (the receiver gain a DAB station or wide FM plays with in place of the operator's: "Broadcast gain" below; `{}` while none plays, and in QO-100 NB), `hostLibs` (on a controller, the host libraries it lends, `{}` elsewhere: "Host libraries" below), `dmrIds` (Radio: the DMR callsign list, "DMR" below; absent in QO-100 NB) |
 | `GET api/state` | view | `Radio.state()`: every key |
 | `GET api/spec` | view | the settings registry (type, limits, choices, help, auth, restart) |
 | `POST api/set` | control (transmit for `auth` keys) | `{key: value, …}` or `{"changes": {…}}` through `Radio.set()`, all or nothing; answers `{"changed": {…}}`. A tune out of the span background decoders pin is `409 span_pinned` with the sessions it would stop, unless the body has `"dropSessions": true` ("The pinned span" below); a receiver DAB holds is `409 receiver_busy`. The station profile's keys (callsign, locator, country, licence, class, own licence, conditions) are refused: they are set on the controller. So are the device addresses and audio devices (the broker and the API own those). |
@@ -1806,6 +1806,73 @@ refresh_running` while one runs. The answer:
 Not used, by Brian's choice: RepeaterBook, UKRepeater/ETCC, G3USF's list,
 NATS AIP, VATSIM. No repeater list is shipped; repeaters are the
 operator's own entries.
+
+### The dial label
+
+What the dial is on, named beside the frequency (Brian, 28/10/2026: "name
+the repeater that is selected"): `dialLabel` in `api/state` (and its
+`state` diffs) and `api/status`, worked out again whenever the dial,
+mode or filter changes and whenever "my frequencies" is edited. Radio
+only; absent in NB. Code `LocalFrequencies.dial_label` in
+`ohsradio/localfreq.py`, `Radio._dial_label`; tests `DialLabel` and
+`OnTheRadio` in `tests/test_ham_localfreq.py`, and
+`tests/test_ham_server_localfreq.py`. It reads only what Radio already
+has, the lists above and the operator's own: no repeater list is fetched
+or shipped for it (the paragraph above; nor do UKRepeater or the RSGB's
+ETCC API carry a licence that would allow it).
+
+```json
+{"kind": "repeater", "name": "GB3GA", "callsign": "GB3GA", "place": "Glasgow", "sub": "Glasgow", "mode": "fm",
+ "cc": null, "ctcss": null, "network": null, "distanceKm": 12.3, "bearingDeg": 270,
+ "freqHz": 145712500, "rxOffsetHz": -600000, "source": "mine", "id": "mine:m3f2a9c1d",
+ "text": "GB3GA · Glasgow · FM"}
+```
+
+`null` when nothing is in reach.
+
+- **Reach:** an entry is matched when the dial (`vfo`) is within half the
+  receive passband of its `freqHz` (`rxFilterHi - rxFilterLo`: 6.25 kHz
+  either side in FM, the AM width in AM, 1.2 kHz in USB), or within the
+  entry's own `step` where that is tighter, so a wide filter never names
+  the 8.33 kHz channel next door. The mode decides nothing else: a
+  repeater is named however it is being listened to.
+- **Which, of several:** the operator's own entries first, and among
+  them one whose category is `repeater` before any other; then the
+  bundled lists. Inside each, the nearest in frequency, then the nearest
+  on the ground, then those with no position. A bundled entry with a
+  position counts only within `localRadiusKm` of the station and only
+  with a locator set, as in the listing; the operator's own count
+  wherever they are.
+- **`kind`:** `repeater` (one of "my frequencies" with category
+  `repeater`), `mine` (any other of them), or the bundled entry's
+  category (`airband`, `enroute`, `marine`, `pmr`, `cb`, `lpd`, `beacon`).
+  `source` and `id` are the listing's, so a client can open the entry.
+- **`text`:** what to show, the parts the entry has joined with " · ":
+  its name, its `sub`, its mode in capitals ("Glasgow Airport · TWR
+  Glasgow Tower · AM").
+- **Only what is stored is said.** "My frequencies" has no callsign,
+  place, CTCSS, colour code or network field, and none is read out of
+  `notes`. For a repeater of the operator's, `callsign` is its `name`
+  and `place` its `sub`; for everything else `callsign` and `place` are
+  null. `cc`, `ctcss` and `network` are always null today: they are in
+  the shape so a client can be written for them, and will be filled only
+  if "my frequencies" gains those fields (a separate decision).
+- **`rxOffsetHz`:** for a `repeater`, where it listens relative to
+  `freqHz` (its input is `freqHz + rxOffsetHz`): the plan in force's
+  repeater pairs (`ohsradio/plans/repeaters.py`), the table the dial's
+  own `rptShift: "auto"` uses. `null` for anything else, and for a
+  repeater off those pairs.
+- **`distanceKm`, `bearingDeg`:** from the station's locator, as in the
+  listing; `null` without a locator or a position.
+- **Cost:** no network and no reading per change: the bundled entries
+  are indexed by frequency once per process and the operator's file is
+  read again only when its stamp changes. The first label of a run reads
+  the bundled lists (about 0.1 s).
+
+The desktop shows `text` on the readout's title line beside the
+frequency (not in the one-line Tight header, which has no room).
+OpenHamShack Remote's TV mode can show it under the frequency; nothing
+there is built yet.
 
 ## AIS (Radio)
 
