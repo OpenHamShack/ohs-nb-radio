@@ -49,6 +49,8 @@ the desktop apps.
 | `GET api/memories`, `POST api/recall {"name"}` | view, control | memories |
 | `GET api/log`, `POST api/log`, `GET api/log.adi` | view, control, view | the station's shared logbook as this app shows it (ENGINE-API `log_qso`), and ADIF |
 | `GET api/events?kinds=state,toast,meter,lock,events` | view | WebSocket: one JSON message per feed item, `{"kind": …, …item}`; first `{"kind": "hello", "status": …}`. `wide` and `zoom` only when asked: `{"kind", "t", "startHz", "binHz", "n", "cdb"}`, `cdb` the bins as little-endian int16 centi-dB in base64; a `wide` item may add `dcBins: [lo, hi]`, the bins (inclusive, into `cdb`) filled in over the receiver's DC spike (Radio: "The DC spike" below). A decode (`events`) that names a sender (`call`) also carries its DXCC entity when cty.dat can place it: `country` (cty.dat's name), `dxcc` (primary prefix), `continent`; absent otherwise. |
+| `GET api/spectrum/v1` | view | WebSocket: spectrum/1 and overlay/1, the shared waterfall feed and the labels on it (below, "spectrum/1 and overlay/1"). Beside `wide`/`zoom` on `api/events`, which stay as they are. |
+| `GET api/overlay/v1?loHz=&hiHz=` | view | overlay/1's snapshot over HTTP, the same message the socket sends on subscribe (below) |
 | `GET api/events` (state resync) | view | A `state` item is a diff, published once, and a client too slow to drain its queue loses the oldest. When that has happened the server sends the whole state before any later diff: a `state` message in the usual shape, `{"kind": "state", "changes": {…every key…}, "full": true}`. `full` is new and optional (absent on ordinary diffs); a client that merges `changes` as it always has needs no change, and one that wants to can replace its copy instead. Diffs it had not yet received are folded into the snapshot, not sent after it. Other kinds (meter, spectrum, events) still drop oldest-first. |
 | `GET api/events?kinds=…,cwskim,cwspot` | view | Radio's CW skimmer (ENGINE-API `cwskim`, `cwspot`). Neither kind is in the default set, so a client that does not ask never gets them. `cwskim` comes once a second, at most `cwSkimMax` channels (about 8 kB/s at 64). `cwspot` is coalesced to at most 5 items a second. A slow client loses snapshots, which do no harm, and spots, which it recovers through `rev`. |
 | `GET api/cwskim` | view | Radio only: `{"state", "why"?, "band", "segment", "cover", "channels", "carriers", "spotsRev", "spots": [...]}`. That is the `cwskim` item, plus every spot of the last 30 minutes (at most 500, newest first, each a `cwspot` `spot`). Fetch it when a view opens, and after a gap in `rev`. It is `{"state": "off", ...}` with empty lists while `cwSkim` is false. A tap on a spot or channel only tunes: one `POST api/set {"mode": "cw", "vfo": dial}` at Control level, never a reply and never Enable TX (Brian, 13/10/2026). |
@@ -393,6 +395,142 @@ things deal with it; code `ohscore/dsp/dcblock.py`, `Engine._dc_mask`,
   moves the centre instead, the least that clears it; pinned, the pin
   moves likewise while every session still fits. `span` says where the
   centre is.
+
+## spectrum/1 and overlay/1
+
+The waterfall feed every OpenHamShack app is to serve in one shape, and
+what is drawn on it (openhamshack CLIENT-UI-PLAN.md §2 and §3; the JSON
+is ohs-libs `spec/schemas/spectrum.schema.json` and `overlay.schema.json`,
+the binary row the vectors in `spec/vectors/spectrum/`). Code
+`ohscore/server/spectrum.py` and `overlay.py`, the encoding ohs-libs'
+`shack_spectrum` (vendored, the store images only); tests
+`tests/test_server_spectrum.py`. Both apps serve it. Receive only:
+nothing here keys, and no action on an item transmits.
+
+**The old feeds stay.** `wide` and `zoom` on `api/events` are unchanged,
+byte for byte: installed Remotes and the desktop apps read them, and each
+goes one Remote release after the last client reading it has moved
+(§2.5). A client finds spectrum/1 from the app's UI descriptor, never by
+probing.
+
+**`GET api/spectrum/v1`** upgrades to a WebSocket. Text frames are JSON,
+binary frames are rows. Nothing in it is a URL, so `X-Forwarded-Prefix`
+does not enter into it; it works the same over HTTP and HTTPS. Ping every
+30 s (the socket answers pings). A desktop build run with `--server` has
+no `shack_spectrum` and answers `503 spectrum_unavailable` instead.
+
+| Stream | From | |
+|---|---|---|
+| `main` | the engine's `wide` feed | the wide scope, cropped to the app's span |
+| `zoom` | the engine's `zoom` feed | around the dial (`zoomSpanHz`, `zoomPan`) |
+
+The client subscribes, any time and as often as it likes; a new
+subscribe for a stream replaces the old one at once:
+
+```json
+{"type": "subscribe", "stream": "main", "cols": 1280, "fps": 15,
+ "loHz": 144100000, "hiHz": 144500000, "reduce": "peak", "depth": 8}
+```
+
+| Field | Rule |
+|---|---|
+| `stream`, `cols` | required. `cols` over 2048 is 2048 |
+| `fps` | a ceiling, by capture time; default and most 25 |
+| `loHz`, `hiHz` | a crop inside the stream's span, default the whole span; outside it is clipped to it (going beyond is a tune: `api/set`) |
+| `reduce` | `peak` (default: a column takes its highest bin) or `mean` (the power average of its bins) |
+| `depth` | 8 (default) or 16 bits a column |
+
+A subscribe the server cannot use is answered `{"type": "error", "code":
+"unknown_stream" | "bad_subscribe" | "bad_message", "stream"?, "message"}`
+and changes nothing; the socket stays open. A socket that has subscribed
+to nothing is sent descriptions but no rows (the box sends nothing for a
+stream nobody watches).
+
+The server sends:
+
+- **`{"type": "stream", …}`** for each stream when the socket opens (once
+  a row of it has been seen) and whenever it changes: `rev`
+  (counted per app, shared by every socket), `centreHz`, `spanHz`,
+  `loHz`, `hiHz`, `binHz`, `rbwHz` (1.5 bins: the Hann window's),
+  `srcBins`, `rate` (`scopeFps`), `units` `dB`, `calibrated` false,
+  `dcBins` as on `wide` ("The DC spike" above), `pinned` `{"by": [ids]}`
+  on `main` while decoder sessions pin the span ("The pinned span"),
+  `label` (Wide, Zoom). `rev` moves when the bins change or the span moves
+  by a whole bin or more; each row carries its own `loHz`, so the
+  tracking's sub-bin corrections in QO-100 NB do not churn it. The order
+  of these messages on a socket numbers the streams: a row's stream index.
+- **`{"type": "levels", "stream", "dbFloor", "dbStep", "noiseDb",
+  "peakDb"}`**: the quantisation window, one per stream for every client
+  (shack_spectrum's `LevelsWindow`: floor the 20th percentile less 10 dB,
+  top at least 60 dB above, moved only after 2 s more than 3 dB out).
+  Sent before the first row of a new subscription and whenever the window
+  moves, with `levelsChanged` on the next row; and again about once a
+  second, while the socket is idle, for `noiseDb`/`peakDb`. `dbStep` is
+  for the subscription's own depth.
+- **Rows**, binary, CLIENT-UI-PLAN §2.3: 32 bytes of header (magic `OS`,
+  version 1, flags `depth16`, `levelsChanged`, `streamChanged`, `gap`;
+  stream index, column count, sequence, capture time in ms, `loHz`,
+  `colHz`), then the columns. Value `v` is `dbFloor + v x dbStep`.
+
+**Latest wins.** Each socket has a writer of its own and at most one row
+waiting per stream. A row made while the client has not taken the last
+replaces the waiting one; the next row written carries `gap`, and the
+sequence (stamped when a row is made) jumps. A slow client sees the
+present with holes, never the past.
+
+**Caps** the client cannot raise: 25 rows a second and 2048 columns a
+stream (asking for more is clamped, not refused), and **8 sockets** an
+app: the ninth is sent `{"type": "error", "code": "busy", "message"}`
+and closed (1013). **Not applied:** the plan's 15 fps for a TV and 4 fps
+and 512 columns for a tunnel (internet) client. The identity headers say
+who and at what level, not what device or path, so this server cannot
+tell either apart and does not guess; every client gets the default caps.
+
+**overlay/1** comes on the same socket, for the range the socket has
+subscribed to see (the union of its streams' crops, a whole span where it
+gave none) **plus half that range's width either side** (§3.1 says "half
+a span" without saying which; the view's own, so a small pan needs
+nothing new):
+
+```json
+{"type": "overlay", "rev": 41, "op": "snapshot" | "upsert" | "remove", "items": [...]}
+```
+
+A `snapshot` on every subscribe; then, four times a second, `upsert` for
+items new or changed and `remove` (`[{"id"}]`) for items gone (the dial
+and sessions are looked at each time; the band plan, local frequencies
+and station lists every 10 s). `rev`
+counts per socket; after a gap, subscribe again for a snapshot.
+**`GET api/overlay/v1?loHz=&hiHz=`** (view) answers the snapshot for
+that range and margin, `rev` 0; without both it uses the wide scope's
+span, and `400 bad_range` when there is none (the radio has not run) or
+the range is not two frequencies, low then high.
+
+An item (§3.2): `id`, `kind`, `layer`, `loHz`, `hiHz`, `centreHz`,
+`label`, `short`, `detail`, `prio`, `readAtHzPerPx`, `role`, `active`,
+`expires` (null), `source`, and `actions` where there is something to do:
+
+| Layer | Kind | From | `role` | First action |
+|---|---|---|---|---|
+| `band` | `segment` | the band plan in force for the station profile, as the transmit guard reads it (shack_bandplan) | `segment.<kind>` for beacon or satellite segments, else by modes: `segment.cw`, `segment.cw-digi`, `segment.all` (four modes or more) | none |
+| `dial` | `dial`, `passband`, `tx` | `api/state`: the dial, the passband the scopes draw, the transmit dial while keyed | `dial`, `passband`, `tx` | none |
+| `channels` | `channel` | Radio's local frequencies, every category but `beacon` | `channel.<category>` (`channel.<userCategory>` for my frequencies: `channel.repeater`) | tune: `POST api/set {"changes": {"vfo", "mode"}}` |
+| `beacons` | `beacon` | the NCDXF/IARU entries of the same list | `beacon.ncdxf` | tune |
+| `stations` | `station` | the band scan's FM list (by `best.hz`, labelled by PS) and DAB ensembles | `station.fm`, `station.dab` | FM tune in `wfm`; DAB one action per service, playing it (`POST api/decoders/sessions`) |
+| `sessions` | `session` | decoder sessions, but the mode's own (`vfo`) | `session.<decoder>`; `active` while `running` or `synced` | none |
+
+Every action is at Control level. QO-100 NB has the band and dial
+layers and its sessions; it has no local frequencies or station lists.
+Spots, bookmarks, alerts and signals are not produced yet. Labels are in
+the server's language, like every other sentence it sends (it does not
+read `Accept-Language` yet); a segment's label is the dataset's own.
+Action paths are relative to the app's base and carry no `url`.
+
+The plan has each app convert its sources through a shared helper in
+ohs-libs (`shack_spectrum.overlay`). That helper does not exist yet
+(`shack_spectrum` 0.2.0 has the row, decimation, levels and sender only),
+so this app's conversion is its own, in `ohscore/server/overlay.py`, to
+move there when it does.
 
 ## Receive audio format
 
