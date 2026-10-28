@@ -1780,7 +1780,11 @@ Every answer of the session routes is the session view (also `ais` in
   was taken back), `null` before the first session. `text` says it in a
   sentence. `endsInS`: seconds until it ends with no client, `null` while
   any client has it. `frames`: messages decoded this session, per channel;
-  `damaged`: bursts that failed their CRC.
+  `damaged`: frames that failed their CRC, counted per slicer (the
+  decoder reads each channel five ways, so one damaged burst counts up to
+  five, and real air shows many: 2097 beside 228 good frames in five
+  minutes off the Clyde); `implausible`: frames with a good CRC whose MMSI
+  or numbers cannot be meant (never put in the table).
 - **Refusals** (`{"error", "code"}`): `400 bad_client` (no or a bad
   `client`); `409 span_pinned` with `sessions` (background decoder
   sessions pin the span: AIS would stop them; again with `"dropSessions":
@@ -1837,6 +1841,12 @@ Every answer of the session routes is the session view (also `ais` in
   50-59 service craft, 60-69 passenger, 70-79 cargo, 80-89 tanker).
 - `distanceKm`, `bearingDeg`: from the station's locator (the station
   profile), `null` without one or without a position.
+- **What gets in.** Only frames shack_sdr calls plausible (the MMSI's
+  form for its message type - ships 2xx-7xx MID, base stations 00MID,
+  aids 99MID, SAR 111MID, the 970/972/974 beacons - and every number in
+  range): an implausible one never creates a vessel. A position that could
+  not follow the vessel's last (more than 60 knots plus 1 km) is set aside
+  and counted in `jumps`; a later one that agrees with it is believed.
 - A vessel not heard for `aisKeepMinutes` (a setting, 1-1440, default 60)
   is dropped. The table is kept on the controller and survives a restart:
   a map opened after one shows the ships it had, with their real ages.

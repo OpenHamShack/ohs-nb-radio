@@ -86,6 +86,14 @@ MAX_CLIENTS = 32
 TRACK_POINTS = 120
 TRACK_MIN_M = 25.0
 TRACK_MIN_S = 60.0
+# The fastest a reported position may move from the last one: 60 knots
+# (the standard's speed field tops out at 102.2, but nothing afloat near a
+# shore station does 60), plus 1 km for GNSS jitter and the slack between
+# when a ship fixed its position and when we heard it. A position past it
+# is set aside (`jumps`); a second one that agrees with it is taken - the
+# old one was the wrong one - so a vessel cannot be stuck on a bad first fix.
+JUMP_MAX_M_S = 60 * 1852.0 / 3600.0
+JUMP_SLACK_M = 1000.0
 SAVE_S = 30.0
 EXPIRE_EVERY_S = 10.0
 # Changes remembered for `since` (a client further behind gets the whole table).
@@ -207,6 +215,11 @@ class VesselTable:
             return None
         if mmsi <= 0:
             return None
+        if f.get("plausible") is False:
+            # shack_sdr's own check (its msg::plausible: the MMSI's form for
+            # the message type, numbers in range): kept off the map, and
+            # never the first word of a new vessel.
+            return None
         with self.lock:
             v = self.v.get(mmsi)
             if v is None:
@@ -237,7 +250,7 @@ class VesselTable:
                 v[to or k] = f[k]
 
         if kind in (1, 2, 3, 18, 19, 27) or (kind in (4, 9, 11, 21) and f.get("lat") is not None):
-            if f.get("lat") is not None and f.get("lon") is not None:
+            if f.get("lat") is not None and f.get("lon") is not None and self._believable(v, f, t):
                 v["lat"], v["lon"] = f["lat"], f["lon"]
                 v["positionAt"] = _iso(t)
                 v["positionTs"] = t
@@ -277,6 +290,28 @@ class VesselTable:
             and bow + stern > 0 else None
         v["beam"] = (port + stbd) if isinstance(port, (int, float)) and isinstance(stbd, (int, float)) \
             and port + stbd > 0 else None
+
+    def _believable(self, v: dict, f: dict, t: float) -> bool:
+        """Whether position `f` could follow the vessel's last one (JUMP_*).
+        Not believed, it is kept as `pendingPos`, and a later one that could
+        follow *it* is believed. Off the map either way until then."""
+        def reach(a, b, dt):
+            km, _ = distance_bearing(a[0], a[1], b[0], b[1])
+            return km * 1000.0 <= JUMP_SLACK_M + JUMP_MAX_M_S * max(dt, 0.0)
+
+        new = (f["lat"], f["lon"])
+        if v.get("lat") is None or v.get("positionTs") is None:
+            return True
+        if reach((v["lat"], v["lon"]), new, t - v["positionTs"]):
+            v.pop("pendingPos", None)
+            return True
+        p = v.get("pendingPos")
+        if p is not None and reach((p[0], p[1]), new, t - p[2]):
+            v.pop("pendingPos", None)
+            return True
+        v["pendingPos"] = [new[0], new[1], t]
+        v["jumps"] = int(v.get("jumps") or 0) + 1
+        return False
 
     def _track(self, v: dict, t: float) -> None:
         tr = self.tracks.setdefault(v["mmsi"], deque(maxlen=TRACK_POINTS))
@@ -338,7 +373,10 @@ class VesselTable:
             doc = json.loads(self.path.read_text())
         except (OSError, ValueError):
             return
-        if not isinstance(doc, dict) or doc.get("schema") != 1:
+        # Schema 2 since the decoder read real air right (28/10/2026): a
+        # table saved by beta.13 holds only scrambled frames (its decoder
+        # had each octet's bits reversed) and is dropped, not shown.
+        if not isinstance(doc, dict) or doc.get("schema") != 2:
             return
         for v in doc.get("vessels", []):
             if isinstance(v, dict) and isinstance(v.get("mmsi"), int):
@@ -356,7 +394,7 @@ class VesselTable:
         with self.lock:
             if not self.dirty or (not force and time.time() - self.saved_at < SAVE_S):
                 return
-            doc = {"schema": 1, "rev": self.rev, "vessels": list(self.v.values()),
+            doc = {"schema": 2, "rev": self.rev, "vessels": list(self.v.values()),
                    "tracks": {str(m): list(tr) for m, tr in self.tracks.items()}}
             self.dirty, self.saved_at = False, time.time()
         try:
@@ -385,7 +423,7 @@ class AisService:
         self.sid: str | None = None
         self.index = 0
         self.offset: float | None = None
-        self.counts = {"frames": 0, "channelA": 0, "channelB": 0, "damaged": 0}
+        self.counts = {"frames": 0, "channelA": 0, "channelB": 0, "damaged": 0, "implausible": 0}
         self.expired_at = 0.0
         self._published: dict | None = None
 
@@ -450,7 +488,7 @@ class AisService:
         self.host, self.sid, self.index, self.offset = host, sid, 0, 0.0
         self.state, self.why = "running", None
         self.started_at = time.time()
-        self.counts = {"frames": 0, "channelA": 0, "channelB": 0, "damaged": 0}
+        self.counts = {"frames": 0, "channelA": 0, "channelB": 0, "damaged": 0, "implausible": 0}
         log.info("AIS started: the receiver at %.3f MHz", CENTRE_HZ / 1e6)
 
     def end(self, why: str = "stopped") -> None:
@@ -533,8 +571,12 @@ class AisService:
                 if it.get("type") == "frame" and it.get("frame") == "ais":
                     self._frame(it)
             try:
-                st = host.status(sid).get("counters") or {}
+                # The decoder's counters are in the session's `stats`. Read
+                # as "counters" (beta.13), damaged showed 0 on real air beside
+                # 99 frames, which looked like a CRC never checked.
+                st = host.status(sid).get("stats") or {}
                 self.counts["damaged"] = int(st.get("damaged", 0))
+                self.counts["implausible"] = int(st.get("implausible", 0))
             except Exception:  # noqa: BLE001
                 pass
         t = time.time()

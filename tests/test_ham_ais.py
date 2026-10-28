@@ -56,6 +56,29 @@ def quick_fleet(level_db=-40.0):
     return simais.AisFleet(ships, level_db=level_db)
 
 
+class Damaged:
+    """A ship whose every burst loses 2 ms in its middle, on channel A."""
+
+    def __init__(self):
+        self.made = {}
+
+    def iq(self, t, rx_if):
+        import numpy as np
+        from shack_sdr import _native
+        fs = 1.0 / float(t[1] - t[0])
+        if fs not in self.made:
+            z = np.frombuffer(_native.testsig_ais(
+                [{"t": 0.01, "channel": "A", "fields": {"type": 1, "mmsi": 235777777, "lat": 33_300_000,
+                                                         "lon": -2_940_000}, "level_db": -40.0}],
+                rate=fs, duration_s=0.5, centre_hz=simais.CENTRE_HZ - rx_if), np.complex64).copy()
+            mid = int(0.02 * fs)
+            z[mid:mid + int(0.002 * fs)] = 0
+            self.made[fs] = z
+        z = self.made[fs]
+        k = np.round(t * fs).astype(np.int64) % len(z)
+        return z[k]
+
+
 def has_ais() -> bool:
     m = sdr.load()
     return m is not None and any(e["id"] == "ais" for e in m.catalogue())
@@ -132,6 +155,16 @@ class OnTheSimulator(unittest.TestCase):
         view = r.ais.view()
         self.assertEqual(view["channelA"] + view["channelB"], view["frames"])
         self.assertGreater(view["frames"], 6)
+
+    def test_damaged_bursts_are_counted(self):
+        # A burst with its middle wiped out: its CRC fails on every slicer,
+        # and the session's `damaged` says so (beta.13 read the counters
+        # from the wrong key and always said 0).
+        r = self.radio(stations=[quick_fleet(), Damaged()])
+        r.ais.join("tv-1")
+        self.assertTrue(wait(r, lambda: r.ais.view()["damaged"] > 0, 30), r.ais.view())
+        self.assertNotIn(235777777, {v["mmsi"] for v in r.ais.table.view()["vessels"]})
+        self.assertIn("implausible", r.ais.view())
 
     def test_it_stops_after_the_last_client_and_gives_the_receiver_back(self):
         r = self.radio()
@@ -294,6 +327,33 @@ class TheTable(unittest.TestCase):
         again = aismod.VesselTable(t.path)
         self.assertEqual(again.vessel(7)["track"], tr)
         self.assertEqual(again.rev, t.rev)
+
+    def test_an_implausible_frame_never_enters_the_table(self):
+        t = self.table()
+        self.assertIsNone(t.heard({"type": 1, "mmsi": 2906440, "lat": 10.0, "lon": 120.0, "plausible": False,
+                                   "implausible": "mmsi"}, 1000.0))
+        self.assertEqual((len(t), t.rev), (0, 0))
+
+    def test_a_position_that_could_not_follow_the_last_is_set_aside_until_another_agrees(self):
+        t = self.table()
+        t.heard({"type": 1, "mmsi": 9, "lat": 55.50, "lon": -4.90, "plausible": True}, 1000.0)
+        # 30 s later, 50 km away: no ship does that.
+        v = t.heard({"type": 1, "mmsi": 9, "lat": 55.95, "lon": -4.90, "plausible": True}, 1030.0)
+        self.assertEqual((v["lat"], v["jumps"]), (55.50, 1))
+        # 10 s on, near where it was: believed, and the outlier forgotten.
+        v = t.heard({"type": 1, "mmsi": 9, "lat": 55.501, "lon": -4.90, "plausible": True}, 1040.0)
+        self.assertEqual(v["lat"], 55.501)
+        self.assertNotIn("pendingPos", v)
+        # A first fix that was the wrong one: two agreeing new ones win.
+        t.heard({"type": 1, "mmsi": 9, "lat": 56.40, "lon": -4.90, "plausible": True}, 1050.0)
+        v = t.heard({"type": 1, "mmsi": 9, "lat": 56.401, "lon": -4.90, "plausible": True}, 1060.0)
+        self.assertEqual(v["lat"], 56.401)
+
+    def test_a_table_saved_by_the_scrambling_decoder_is_dropped(self):
+        t = self.table()
+        t.path.parent.mkdir(parents=True, exist_ok=True)
+        t.path.write_text(json.dumps({"schema": 1, "rev": 5, "vessels": [{"mmsi": 2906440, "rev": 5}], "tracks": {}}))
+        self.assertEqual(len(aismod.VesselTable(t.path)), 0)
 
     def test_texts(self):
         self.assertEqual(aismod.ship_type_text(52), "Tug")
