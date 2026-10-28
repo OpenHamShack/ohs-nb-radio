@@ -23,7 +23,7 @@ import threading
 import time
 
 from ..i18n.text import _
-from . import shack
+from . import presence, shack
 from .app import AppInfo, Server
 from .audio import StreamAudio
 
@@ -36,6 +36,20 @@ def platform_broker():
     if not url or not token:
         return None
     return shack.BrokerClient(shack.shack_http(url, token))
+
+
+def platform_presence(srv):
+    """The platform's client presence feed for an app that hangs its
+    client-scoped holds off it (AppInfo.presence: Radio), under the app
+    token; None without the token or for any other app. Whether the
+    controller has the service is the watch's own first question
+    (presence.PresenceWatch.check_service): a controller without it costs
+    one GET now and then, and changes nothing."""
+    url, token = os.environ.get(shack.SHACK_URL_ENV, ""), os.environ.get(shack.SHACK_TOKEN_ENV, "")
+    if not srv.info.presence or not url or not token:
+        return None
+    return presence.PresenceWatch(srv.info.app_id, shack.shack_http(url, token), presence.events_opener(url, token),
+                                  on_gone=srv.client_gone, on_arrive=srv.client_arrived)
 
 
 def pair_store(radio) -> str:
@@ -68,6 +82,7 @@ def main(radio_factory, info: AppInfo, host: str = "0.0.0.0", port: int | None =
     audio = StreamAudio()
     radio = radio_factory(audio)
     srv = Server(radio, info, audio, broker=platform_broker())
+    srv.presence = platform_presence(srv)
     if not srv.secret:
         log.warning("%s is not set: every request will be refused", shack.PROXY_SECRET_ENV)
     stop = threading.Event()
@@ -93,7 +108,10 @@ def main(radio_factory, info: AppInfo, host: str = "0.0.0.0", port: int | None =
             # app (Server.wanted). While the broker loop is re-claiming a
             # claim the broker lost (Server.reclaim) it owns the retries:
             # a plain claim here would only meet 503 broker_restarting.
-            if srv.wanted and srv.reclaim is None and not radio.state().get("running") and now >= retry_at:
+            # Nor while the radio is given back because nobody was using
+            # it (Server.parked): the next client takes it again.
+            if srv.wanted and srv.reclaim is None and not srv.parked and not radio.state().get("running") \
+                    and now >= retry_at:
                 retry_at = now + 10.0
                 srv.start_radio()
     finally:

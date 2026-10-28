@@ -36,5 +36,8 @@ def onair_body(radio) -> dict:
 
 
 def info(version: str, commit: str = "") -> AppInfo:
+    # presence: Radio hangs its client-scoped holds (DAB, a listen, the AIS
+    # and ADS-B maps, the streams) off the platform's client presence, and
+    # gives the radio back when nobody is using it (CLIENT-UI-PLAN 7.3).
     return AppInfo("shack-radio", "radio", "Radio", version, onair_body, lambda dev: DEVICES.get(dev, ""), commit,
-                   screens=screens)
+                   screens=screens, presence=True)

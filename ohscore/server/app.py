@@ -54,7 +54,7 @@ from .. import shacklibs, smeter_cal
 # The host module gets its own import line: the source scrub passes the
 # word only straight after "import ", never mid-list.
 from . import shack
-from . import overlay, spectrum, uiv1, ws
+from . import overlay, presence, spectrum, uiv1, ws
 from .audio import CHANNELS, MIC_FORMAT
 from .autotx import AutoTx, Refused
 from .recording import server_recordings
@@ -169,8 +169,12 @@ class AppInfo:
     transmit facts (each app knows where its signal goes on air)."""
 
     def __init__(self, app_id: str, kind: str, name: str, version: str, onair_body, device_for,
-                 commit: str = "", screens=None):
+                 commit: str = "", screens=None, presence: bool = False):
         self.app_id, self.kind, self.name, self.version, self.commit = app_id, kind, name, version, commit
+        # Whether the app hangs its client-scoped holds off the platform's
+        # client presence (presence.py; CLIENT-UI-PLAN 7.2-7.4). Radio only
+        # so far: NB keeps its feature leases until it is brought over.
+        self.presence = presence
         self.onair_body = onair_body        # radio -> {"freqHz", "bandwidthHz", "mode"}
         self.device_for = device_for        # device setting -> broker device name, "" for none
         # The app's ui/1 screens (uiv1.py): an object with descriptor(srv,
@@ -237,6 +241,32 @@ class Server:
         # overlay's sources.
         self.spectrum = spectrum.Shared()
         self.overlay = overlay.Overlay(radio)
+        # Client presence (presence.py; CLIENT-UI-PLAN 7.2-7.4): who made
+        # each client-scoped hold and each client's open streams, always
+        # kept (cheap); `presence` is the platform's feed, set by run.py
+        # only for an app that asks for it on a controller that lists the
+        # service. Without it nothing below ever ends anything.
+        self.holds = presence.Holds()
+        self.presence: presence.PresenceWatch | None = None
+        # The radio given back to the broker because nobody was using it
+        # (park): the engine stopped and the claim released, still wanted,
+        # so the next client to come takes it again (wake). run.py's retry
+        # stands aside meanwhile, as it does for a re-claim.
+        self.parked = False
+        # A client's leaving freed something: give the radio back once
+        # nothing else holds it. Kept only while what stops it is
+        # transmitting (7.4: retried after), or a nightly scan woke it.
+        self.park_pending = False
+        self._gone_later: list[tuple[str, str]] = []
+        self._gone_lock = threading.Lock()
+        self.events_sockets = 0
+        # A client present in this app with "ais" (or "adsb") in its holds
+        # is renewing that map's lease (7.2): it need not renew it apart.
+        for name in ("ais", "adsb"):
+            svc = getattr(radio, name, None)
+            if svc is not None:
+                svc.vouch = (lambda client, hold=name: self.presence is not None
+                             and self.presence.renews(client, hold))
 
     def _scan_busy(self) -> str:
         """The band scan's reasons to wait that only the server knows."""
@@ -339,9 +369,179 @@ class Server:
         self.digi.disarm(why or _("The radio stopped"))
         self.end_lease(why)
         self.radio.stop()
+        self.parked = False
+        self._give_back()
+
+    def _give_back(self) -> None:
+        """Release the broker's claim on the radio, if this app has one:
+        api/stop's last step, and the park's."""
         dev = self.device()
         if self.broker is not None and dev:
             self.broker.release(dev)
+
+    # ---------------------------------------------------------- presence
+    # CLIENT-UI-PLAN 7.3: when a client goes (goodbye at once, otherwise
+    # its 30 s lease), its streams close; a client-scoped hold it was the
+    # last client of ends at once (no linger, Brian 28/10/2026), the
+    # receiver back to its prior dial and mode; and when the radio is then
+    # held for nothing, the broker's claim is given back so another app, a
+    # desktop or a scan can have it. Station-scoped work - saved background
+    # decoder sessions, the CW skimmer, recordings, the nightly scan - is
+    # never ended, and keeps the radio. Transmit is never touched (7.4).
+    def client_gone(self, client: str, why: str) -> None:
+        """The platform says `client` has gone (presence.PresenceWatch's
+        thread). While the radio is on the air nothing is released (7.4);
+        it is done once it is not (_presence_loop)."""
+        with self._gone_lock:
+            if self.radio.state().get("keyed"):
+                self._gone_later.append((client, why))
+                return
+            closed = self.holds.end_streams(client)
+            ended = []
+            d = self.radio.decoders
+            for kind, sid in self.holds.leave(client):
+                if kind == "held":
+                    if d.stop(sid):
+                        ended.append(f"decoder session {sid}")
+                elif kind == "listen" and d.listening == sid:
+                    try:
+                        d.listen(sid, False)
+                        ended.append(f"listening to {sid}")
+                    except Exception:  # noqa: BLE001 - a session gone since is not listened to
+                        pass
+            for name in ("ais", "adsb"):
+                svc = getattr(self.radio, name, None)
+                if svc is None:
+                    continue
+                with svc.lock:
+                    had = client in svc.clients
+                if not had:
+                    continue
+                svc.leave(client)
+                with svc.lock:
+                    last = svc.state == "running" and not svc.clients
+                if last:
+                    svc.end("idle")
+                    ended.append(name)
+                    # ADS-B reopens the radio at the operator's rate on a
+                    # thread of its own: done before the park looks, or the
+                    # reopen could follow the claim's release.
+                    t = getattr(svc, "restoring", None)
+                    if t is not None:
+                        t.join(15.0)
+            if closed or ended:
+                log.info("presence: %s gone (%s): %d stream(s) closed%s", client, why, closed,
+                         (", ended " + ", ".join(ended)) if ended else "")
+                self.park_pending = True
+        self._maybe_park()
+
+    def client_arrived(self, client: str) -> None:
+        """A client has come to this app: the radio is wanted again."""
+        self.wake(f"client {client}")
+
+    def wake(self, why: str) -> None:
+        """Take back a radio the park gave the broker: someone wants it."""
+        with self._gone_lock:
+            if not self.parked:
+                return
+            self.parked = False
+            self.park_pending = False
+        log.info("presence: taking the radio back (%s)", why)
+        err = self.start_radio()
+        if err:
+            log.info("presence: the radio could not be taken back: %s", err)
+
+    def idle_reason(self) -> str:
+        """Why the radio is still in use ('' when nothing holds it): no
+        client-scoped hold left, no station-scoped hold, nothing on the
+        air. In the store form nobody operates the radio but through a
+        client, so a client's open stream or socket is the operator."""
+        r = self.radio
+        st = r.state()
+        if st.get("keyed") or self.lease is not None or self.digi.remote is not None:
+            return "transmit"
+        if r.held is not None:
+            return "receiver held"
+        if r.decoders.fixed:
+            return "decoder sessions"
+        if st.get("cwSkim"):
+            return "CW skimmer"
+        if getattr(r, "rec", None) is not None or getattr(r, "play", None) is not None \
+                or self.recordings.summary().get("active"):
+            return "recording"
+        if self.audio.listeners() or self.spectrum.clients or self.events_sockets:
+            return "a client's stream"
+        for name in ("ais", "adsb"):
+            svc = getattr(r, name, None)
+            t = getattr(svc, "restoring", None)
+            if svc is not None and (svc.state == "running" or (t is not None and t.is_alive())):
+                return name
+        scan = getattr(r, "bandscan", None)
+        if scan is not None:
+            if scan.thread is not None and scan.thread.is_alive():
+                return "band scan"
+            if self._scan_due(scan):
+                return "band scan due"
+        return ""
+
+    @staticmethod
+    def _scan_due(scan) -> bool:
+        """Whether the nightly scan (station-scoped) is due now."""
+        now = scan.clock()
+        try:
+            return any((t := scan.next_due(b, now)) is not None and t <= now for b in ("fm", "dab"))
+        except Exception:  # noqa: BLE001 - a scanner that cannot say is never woken for
+            return False
+
+    def _maybe_park(self) -> None:
+        """Give the radio back to the broker if a client's leaving left it
+        held for nothing. Only after a leaving (park_pending): a radio
+        nobody with presence ever used keeps today's behaviour. Kept
+        pending only while it is on the air or a scan runs (retried); any
+        other use - an older client listening, a background decoder - ends
+        the wish, and the next leaving asks again."""
+        with self._gone_lock:
+            if not self.park_pending or self.parked:
+                return
+            dev = self.device()
+            if self.broker is None or not dev or not self.wanted or not self.radio.state().get("running"):
+                self.park_pending = False
+                return
+            why = self.idle_reason()
+            if why:
+                if why not in ("transmit", "band scan", "band scan due"):
+                    self.park_pending = False
+                return
+            self.park_pending = False
+            self.parked = True
+            # Only the engine stopped and the claim released: not api/stop's
+            # disarm and end of the transmit lease, which idle_reason has
+            # just said are not there to end. The engine must stop before
+            # the claim goes: another app may open the radio the moment the
+            # broker lends it.
+            self.radio.stop()
+            self._give_back()
+        log.info("presence: nobody is using %s: given back to the station", dev)
+
+    def _presence_loop(self) -> None:
+        while not self.stop_ev.wait(1.0):
+            try:
+                if self.presence is not None:
+                    self.presence.tick()
+                if self._gone_later and not self.radio.state().get("keyed"):
+                    later, self._gone_later = self._gone_later, []
+                    for client, why in later:
+                        self.client_gone(client, why)
+                if self.parked:
+                    scan = getattr(self.radio, "bandscan", None)
+                    if scan is not None and self._scan_due(scan):
+                        # Station-scoped: the nightly scan runs on a parked
+                        # radio as on one nobody is using, then it parks again.
+                        self.wake("the nightly band scan")
+                        self.park_pending = True
+                self._maybe_park()
+            except Exception:  # noqa: BLE001  the loop must outlive one bad pass
+                log.exception("presence")
 
     def serve(self, host: str = "0.0.0.0", port: int = 8080) -> ThreadingHTTPServer:
         server = self
@@ -351,9 +551,13 @@ class Server:
 
         self.httpd = ThreadingHTTPServer((host, port), Handler)
         self.httpd.daemon_threads = True
-        for name, fn in (("lease", self._lease_loop), ("broker", self._broker_loop),
-                         ("digi", self._digi_loop), ("timeshift", lambda: self.timeshift.run(self.stop_ev)),
-                         ("http", self.httpd.serve_forever)):
+        loops = [("lease", self._lease_loop), ("broker", self._broker_loop),
+                 ("digi", self._digi_loop), ("timeshift", lambda: self.timeshift.run(self.stop_ev)),
+                 ("http", self.httpd.serve_forever)]
+        if self.presence is not None:
+            watch = self.presence
+            loops += [("presence", lambda: watch.run(self.stop_ev)), ("presence-tick", self._presence_loop)]
+        for name, fn in loops:
             t = threading.Thread(target=fn, name=f"server-{name}", daemon=True)
             t.start()
             self.threads.append(t)
@@ -366,6 +570,8 @@ class Server:
         # (Engine.save_now; stop_radio saves again at its end).
         self.radio.save_now()
         self.stop_ev.set()
+        if self.presence is not None:
+            self.presence.stop()
         self.recordings.stop()
         if self.httpd is not None:
             self.httpd.shutdown()
@@ -397,6 +603,12 @@ class Server:
                 # True while a claim the broker lost is being taken back:
                 # radioError is then a passing state, not a fault.
                 "reconnecting": self.reclaim is not None,
+                # Client presence (SERVER-API "Client presence"): whether the
+                # controller's service is followed, who is here, and
+                # `released` while the radio is given back to the station
+                # because nobody was using it. Absent without the service.
+                **({"presence": {**self.presence.view(), "released": self.parked}}
+                   if self.presence is not None else {}),
                 # Radio's map sessions (docs/SERVER-API.md "AIS", "ADS-B")
                 # and its DMR ID list ("DMR") and what the dial is on ("The
                 # dial label"), as api/state has them; absent in an app with
@@ -718,6 +930,17 @@ class _Handler(BaseHTTPRequestHandler):
     def _who(self) -> dict | None:
         return shack.shack_identity(self.headers.get, self.srv.secret)
 
+    def _client(self, value) -> str | None:
+        """The client id a request names (presence's `client`, the same id
+        as the transmit lease's `remote` and AIS's `client`), or None when
+        it names none - an older client, which presence never judges.
+        Raises ValueError (400) for one that is not an id."""
+        if value is None or value == "":
+            return None
+        if not isinstance(value, str) or not REMOTE_RE.match(value):
+            raise ValueError(_("The client must name itself: 1-64 letters, digits, '.', '_', ':' or '-'"))
+        return value
+
     def _need(self, who: dict, level: str) -> bool:
         if shack.level_at_least(who["level"], level):
             return True
@@ -775,6 +998,11 @@ class _Handler(BaseHTTPRequestHandler):
             digital = (method, path) in DIGITAL_ROUTES and who["transmit"] == "digital"
             if not digital and not self._need(who, need):
                 return
+            if self.srv.parked and ((method != "GET" and path not in NO_WAKE) or path in WAKE_GETS):
+                # Given back because nobody was using it: whoever asks for
+                # something now - an older client with no presence too -
+                # takes it again first, a second or two.
+                self.srv.wake(f"{method} {path}")
             fn(self, who, query)
         except SpanPinned as e:
             # Any route that tunes (api/set, api/recall, ...) out
@@ -949,6 +1177,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def post_start(self, who, q):
         self.srv.wanted = True
+        self.srv.parked = False
         why = self.srv.start_radio("person", who["device"], reclaim=self.srv.reclaim is not None) if not self.srv.radio.state().get("running") else ""
         self._send(200, {**self.srv.status(), "startError": why})
 
@@ -1073,6 +1302,7 @@ class _Handler(BaseHTTPRequestHandler):
         # A decoder that takes the receiver (DAB) may name its block in
         # params instead of giving freqHz (the block's centre).
         held = isinstance(decoder, str) and d.holds_receiver(decoder)
+        client = self._client(b.get("client"))
         if held and b.get("stop") is True:
             self._held_gives_way(who, b, None, {})
             return
@@ -1085,7 +1315,7 @@ class _Handler(BaseHTTPRequestHandler):
             # receiver; the operator disarms first, as for any key-up.
             self._error(409, _("Not while automatic transmit is armed: switch it off first"), "on_air")
             return
-        if held and b.get("replace") is True and self._held_gives_way(who, b, freq, params):
+        if held and b.get("replace") is True and self._held_gives_way(who, b, freq, params, client):
             return
         try:
             sess = d.start(decoder, None if freq is None else float(freq), params,
@@ -1098,9 +1328,14 @@ class _Handler(BaseHTTPRequestHandler):
             return
         log.info("decoder session %s started by %s: %s at %.0f Hz", sess["id"], who.get("user", "?"), decoder,
                  sess["freqHz"])
+        if held:
+            # Client-scoped: it ends when the last client that asked for
+            # it goes (presence). A background session is station-scoped
+            # (saved, started again with the radio) and never recorded.
+            self.srv.holds.add(("held", sess["id"]), client)
         self._send(201, sess)
 
-    def _held_gives_way(self, who, b: dict, freq, params: dict) -> bool:
+    def _held_gives_way(self, who, b: dict, freq, params: dict, client: str | None = None) -> bool:
         """`"stop": true` and `"replace": true` on POST api/decoders/sessions
         for a decoder that holds the receiver (DAB): what a ui/1 screen
         needs, since its actions are POSTs to fixed paths (CLIENT-UI-PLAN
@@ -1125,6 +1360,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._error(404, _("No {decoder} station is playing").format(decoder=decoder.upper()),
                             "unknown_session")
             else:
+                self._forget_session(sid)
                 log.info("decoder session %s stopped by %s", sid, who.get("user", "?"))
                 self._send(200, {"stopped": True, "id": sid})
             return True
@@ -1142,9 +1378,12 @@ class _Handler(BaseHTTPRequestHandler):
                 self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code)
                 return True
             log.info("decoder session %s set by %s: %s", sid, who.get("user", "?"), params)
+            # Choosing the station is asking for it too.
+            self.srv.holds.add(("held", sid), client)
             self._send(200, sess)
             return True
         d.stop(sid)
+        self._forget_session(sid)
         log.info("decoder session %s stopped by %s for another block", sid, who.get("user", "?"))
         return False
 
@@ -1172,12 +1411,18 @@ class _Handler(BaseHTTPRequestHandler):
         log.info("decoder session %s set by %s: %s", sid, who.get("user", "?"), params)
         self._send(200, sess)
 
+    def _forget_session(self, sid: str) -> None:
+        self.srv.holds.forget(("held", sid))
+        self.srv.holds.forget(("listen", sid))
+
     def _listen(self, who, sid: str) -> None:
         from ..decoders import Refused as DecoderRefused
-        on = self._body().get("listen", True)
+        b = self._body()
+        on = b.get("listen", True)
         if not isinstance(on, bool):
             self._error(400, _("listen is true or false"), "bad_params")
             return
+        client = self._client(b.get("client"))
         try:
             sess = self.srv.radio.decoders.listen(sid, on)
         except DecoderRefused as e:
@@ -1185,6 +1430,12 @@ class _Handler(BaseHTTPRequestHandler):
             return
         log.info("decoder session %s %s by %s", sid, "listened to" if on else "no longer listened to",
                  who.get("user", "?"))
+        # Listening is client-scoped (the session itself may not be); off
+        # is off for everyone, there being one thing heard.
+        if on:
+            self.srv.holds.add(("listen", sid), client)
+        else:
+            self.srv.holds.forget(("listen", sid))
         self._send(200, sess)
 
     def _session_id(self) -> str:
@@ -1208,6 +1459,7 @@ class _Handler(BaseHTTPRequestHandler):
         if sid == "vfo" or not self.srv.radio.decoders.stop(sid):
             self._error(404, _("There is no decoder session called {id}").format(id=sid), "unknown_session")
             return
+        self._forget_session(sid)
         log.info("decoder session %s stopped by %s", sid, who.get("user", "?"))
         self._send(200, {"stopped": True})
 
@@ -1952,11 +2204,15 @@ class _Handler(BaseHTTPRequestHandler):
         # the engine's feed `decoders`, each item sent as kind "decoder".
         asked = [{"decoder": "decoders"}.get(k, k) for k in q.get("kinds", [",".join(FEED_KINDS_DEFAULT)])[0].split(",")]
         kinds = [k for k in dict.fromkeys(asked) if k in radio.FEED_KINDS]
+        client = self._client(q.get("client", [""])[0])
         if not ws.handshake(self):
             return
         sock = ws.Socket(self.rfile, self.wfile)
         feeds = {k: radio.subscribe(k, 256 if k not in SPECTRUM else 8) for k in kinds}
-        gone = threading.Event()
+        # `gone` is the client closing it, or its presence saying it went.
+        token, gone = self.srv.holds.open_stream(client)
+        with self.srv.lock:
+            self.srv.events_sockets += 1
 
         def reader():
             try:
@@ -1997,6 +2253,9 @@ class _Handler(BaseHTTPRequestHandler):
             for f in feeds.values():
                 radio.unsubscribe(f)
             sock.close()
+            with self.srv.lock:
+                self.srv.events_sockets -= 1
+            self.srv.holds.close_stream(token)
 
     def ws_spectrum(self, who, q):
         """spectrum/1 and overlay/1 on one WebSocket (spectrum.py; SERVER-API
@@ -2009,6 +2268,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._error(503, _("The spectrum feed is not available in this installation: {why}").format(why=e),
                         "spectrum_unavailable")
             return
+        client = self._client(q.get("client", [""])[0])
         if not ws.handshake(self):
             return
         sock = ws.Socket(self.rfile, self.wfile)
@@ -2024,13 +2284,21 @@ class _Handler(BaseHTTPRequestHandler):
                 pass
             sock.close(1013)
             return
+        token, ended = self.srv.holds.open_stream(client)
         try:
-            spectrum.Session(self.srv.radio, sock, shared, self.srv.overlay).run()
+            sess = spectrum.Session(self.srv.radio, sock, shared, self.srv.overlay)
+            # The client's presence gone ends the session as the client
+            # closing it would (`gone`); the waiter ends with the session.
+            threading.Thread(target=lambda: (ended.wait(), sess.gone.set()), daemon=True,
+                             name="spectrum-presence").start()
+            sess.run()
         except (OSError, ConnectionError):
             pass
         finally:
+            ended.set()
             shared.leave()
             sock.close()
+            self.srv.holds.close_stream(token)
 
     def get_overlay(self, who, q):
         """overlay/1's snapshot over HTTP (CLIENT-UI-PLAN §3.1): the same
@@ -2065,6 +2333,7 @@ class _Handler(BaseHTTPRequestHandler):
         if channels not in CHANNELS:
             self._error(400, _("channels must be 1 or 2"), "bad_channels")
             return
+        client = self._client(q.get("client", [""])[0])
         if "behind" in q:
             try:
                 behind = float(q["behind"][0])
@@ -2074,11 +2343,17 @@ class _Handler(BaseHTTPRequestHandler):
                 self._error(400, _("behind must be a number of seconds, 0 or more"), "bad_behind")
                 return
             if behind > 0:
-                self._audio_behind(channels, behind)
+                token, ended = self.srv.holds.open_stream(client)
+                try:
+                    self._audio_behind(channels, behind, ended)
+                finally:
+                    self.srv.holds.close_stream(token)
                 return
         a = self.srv.audio
         fmt = a.rx_format(channels)
         silence = bytes(int(fmt["rate"] * IDLE_AUDIO_S) * 2 * channels)
+        # `ended` is set when the client's presence says it has gone.
+        token, ended = self.srv.holds.open_stream(client)
         lq = a.listen(channels)
         try:
             self.send_response(200)
@@ -2088,7 +2363,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
             self.end_headers()
             self.close_connection = True
-            while not self.srv.stop_ev.is_set():
+            while not self.srv.stop_ev.is_set() and not ended.is_set():
                 try:
                     pcm = lq.get(timeout=IDLE_AUDIO_S)
                 except Exception:  # noqa: BLE001  queue.Empty: the engine is not playing
@@ -2104,6 +2379,7 @@ class _Handler(BaseHTTPRequestHandler):
             pass
         finally:
             a.unlisten(lq)
+            self.srv.holds.close_stream(token)
 
     # A timeshifted stream is sent at the pace it plays, PACE_AHEAD_S ahead
     # at most: sent as fast as the network takes it, an hour behind would
@@ -2111,7 +2387,7 @@ class _Handler(BaseHTTPRequestHandler):
     # "behind" would shrink as it did.
     PACE_AHEAD_S = 1.0
 
-    def _audio_behind(self, channels: int, behind: float) -> None:
+    def _audio_behind(self, channels: int, behind: float, ended: threading.Event | None = None) -> None:
         """api/audio/rx?behind=: the timeshift (timeshift.py) from `behind`
         seconds ago, in the same format as live, carrying on from there in
         real time. It ends when the buffer is cleared (the station changed
@@ -2142,7 +2418,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.close_connection = True
             t0, sent = time.monotonic(), 0
             step = int(rate * 0.1)
-            while not self.srv.stop_ev.is_set():
+            while not self.srv.stop_ev.is_set() and not (ended is not None and ended.is_set()):
                 pcm = ts.read(gen, index, step, timeout=IDLE_AUDIO_S)
                 if not len(pcm):
                     continue
@@ -2189,6 +2465,11 @@ class _Handler(BaseHTTPRequestHandler):
 #: the arm's heartbeat. Matches the manifest's `digital: true` rule, which
 #: the controller enforces first. Never api/ptt's key-up or api/audio/tx.
 DIGITAL_ROUTES = {("POST", "/api/ptt/heartbeat")}
+# A radio given back to the station (Server.parked) is taken again by any
+# request but these, which want nothing from it, and by these GETs, which
+# open a stream from it.
+NO_WAKE = frozenset({"/api/stop", "/api/halt", "/api/shack/release", "/api/ptt/heartbeat"})
+WAKE_GETS = frozenset({"/api/audio/rx", "/api/spectrum/v1", "/api/events"})
 # Feeds whose items go out under another kind's name on api/events.
 EVENT_KIND = {"decoders": "decoder"}
 
