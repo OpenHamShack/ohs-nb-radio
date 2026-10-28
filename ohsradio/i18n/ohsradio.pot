@@ -38,6 +38,10 @@ msgstr ""
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
+#: ohsradio/screens.py:257
+msgid "A-Z"
+msgstr ""
+
 #: ohsradio/adsb.py:254
 msgid "ADS-B has the receiver for the aircraft map: stop ADS-B first"
 msgstr ""
@@ -105,6 +109,14 @@ msgstr ""
 msgid "Band III (DAB)"
 msgstr ""
 
+#: ohsradio/screens.py:158
+msgid "Band down"
+msgstr ""
+
+#: ohsradio/screens.py:160
+msgid "Band up"
+msgstr ""
+
 #: ohsradio/ui/settings.py:605
 #, python-brace-format
 msgid "Bands & power, {band}: not a number"
@@ -135,6 +147,10 @@ msgstr ""
 msgid "Broadcast gain {db:g}: watching reception"
 msgstr ""
 
+#: ohsradio/screens.py:256
+msgid "By frequency"
+msgstr ""
+
 #: ohsradio/plutofix.py:473
 msgid "Cancelled: nothing was changed."
 msgstr ""
@@ -157,9 +173,20 @@ msgstr ""
 msgid "Constrained by her draught"
 msgstr ""
 
+#: ohsradio/screens.py:224
+#: ohsradio/screens.py:116
+#: ohsradio/screens.py:165
+msgid "DAB Radio"
+msgstr ""
+
 #: ohsradio/bandscan.py:603
 #, python-brace-format
 msgid "DAB: block {block} ({n} of {of})"
+msgstr ""
+
+#: ohsradio/screens.py:143
+#: ohsradio/screens.py:267
+msgid "Dial"
 msgstr ""
 
 #: ohsradio/ais.py:116
@@ -202,6 +229,12 @@ msgstr ""
 #: ohsradio/plutofix.py:595
 #: ohsradio/plutofix.py:600
 msgid "FIR / sample rate"
+msgstr ""
+
+#: ohsradio/screens.py:281
+#: ohsradio/screens.py:117
+#: ohsradio/screens.py:166
+msgid "FM"
 msgstr ""
 
 #: ohsradio/bandscan.py:574
@@ -248,6 +281,10 @@ msgstr ""
 
 #: ohsradio/ais.py:151
 msgid "Floating buoy or light vessel"
+msgstr ""
+
+#: ohsradio/screens.py:154
+msgid "Frequency"
 msgstr ""
 
 #: ohsradio/adsb.py:100
@@ -310,6 +347,11 @@ msgstr ""
 msgid "Minimum fuel"
 msgstr ""
 
+#: ohsradio/screens.py:144
+#: ohsradio/screens.py:156
+msgid "Mode"
+msgstr ""
+
 #: ohsradio/plutofix.py:578
 msgid "Model"
 msgstr ""
@@ -318,13 +360,33 @@ msgstr ""
 msgid "Moored"
 msgstr ""
 
+#: ohsradio/screens.py:90
+msgid "Mute"
+msgstr ""
+
 #: ohsradio/localfreq.py:358
 #, python-brace-format
 msgid "My frequencies holds at most {n} entries"
 msgstr ""
 
+#: ohsradio/screens.py:314
+msgid "Nearest ships"
+msgstr ""
+
+#: ohsradio/screens.py:205
+msgid "No DAB stations found yet"
+msgstr ""
+
+#: ohsradio/screens.py:259
+msgid "No FM stations found yet"
+msgstr ""
+
 #: ohsradio/localfreq.py:693
 msgid "No openAIP API key is set"
+msgstr ""
+
+#: ohsradio/screens.py:300
+msgid "No ships heard yet: they appear within a minute of the map opening."
 msgstr ""
 
 #: ohsradio/localfreq.py:682
@@ -338,6 +400,10 @@ msgstr ""
 #: ohsradio/localfreq.py:266
 #, python-brace-format
 msgid "Not a field of my frequencies: {fields}"
+msgstr ""
+
+#: ohsradio/screens.py:343
+msgid "Not playing"
 msgstr ""
 
 #: ohsradio/adsb.py:504
@@ -369,6 +435,12 @@ msgstr ""
 #: ohsradio/radio.py:1378
 #, python-brace-format
 msgid "Notch filter not changed: {error}"
+msgstr ""
+
+#: ohsradio/screens.py:141
+#: ohsradio/screens.py:211
+#: ohsradio/screens.py:265
+msgid "Now playing"
 msgstr ""
 
 #: ohsradio/adsb.py:103
@@ -405,6 +477,12 @@ msgstr ""
 
 #: ohsradio/ais.py:145
 msgid "RACON"
+msgstr ""
+
+#: ohsradio/screens.py:108
+#: ohsradio/screens.py:171
+#: ohsradio/screens.py:115
+msgid "Radio"
 msgstr ""
 
 #: ohsradio/adsb.py:109
@@ -453,6 +531,13 @@ msgstr ""
 msgid "Sailing"
 msgstr ""
 
+#: ohsradio/screens.py:260
+#: ohsradio/screens.py:206
+#: ohsradio/screens.py:218
+#: ohsradio/screens.py:275
+msgid "Scan now"
+msgstr ""
+
 #: ohsradio/bandscan.py:294
 msgid "Scanning now"
 msgstr ""
@@ -477,6 +562,16 @@ msgstr ""
 msgid "Set the station's locator to list what is near it; only the channel tables and your own frequencies are listed without it."
 msgstr ""
 
+#: ohsradio/screens.py:316
+#: ohsradio/screens.py:118
+#: ohsradio/screens.py:167
+msgid "Ships"
+msgstr ""
+
+#: ohsradio/screens.py:145
+msgid "Signal"
+msgstr ""
+
 #: ohsradio/adsb.py:98
 msgid "Small aircraft"
 msgstr ""
@@ -489,6 +584,10 @@ msgstr ""
 msgid "Space vehicle"
 msgstr ""
 
+#: ohsradio/screens.py:168
+msgid "Start the radio"
+msgstr ""
+
 #: ohsradio/bandscan.py:441
 msgid "Start the radio before scanning"
 msgstr ""
@@ -499,6 +598,15 @@ msgstr ""
 
 #: ohsradio/ais.py:472
 msgid "Start the radio to see ships: AIS needs the receiver"
+msgstr ""
+
+#: ohsradio/screens.py:241
+#: ohsradio/screens.py:268
+msgid "Stereo"
+msgstr ""
+
+#: ohsradio/screens.py:216
+msgid "Stop"
 msgstr ""
 
 #: ohsradio/adsb.py:502
@@ -673,6 +781,10 @@ msgstr ""
 msgid "There is no data folder to keep a copy in"
 msgstr ""
 
+#: ohsradio/screens.py:78
+msgid "This OpenHamShack app cannot play the sound here."
+msgstr ""
+
 #: ohsradio/plutofix.py:441
 #, python-brace-format
 msgid "This Pluto already runs as {chip}; nothing to change."
@@ -685,6 +797,10 @@ msgstr ""
 #: ohsradio/plutofix.py:211
 #, python-brace-format
 msgid "This Pluto runs firmware {version}, not ADI's numbered firmware, so the program does not know what its environment commands do and will not run them. The steps below are ADI's."
+msgstr ""
+
+#: ohsradio/screens.py:71
+msgid "This needs a newer OpenHamShack app."
 msgstr ""
 
 #: ohsradio/adsb.py:269
@@ -703,12 +819,24 @@ msgstr ""
 msgid "Towing, long or wide"
 msgstr ""
 
+#: ohsradio/screens.py:269
+msgid "Traffic"
+msgstr ""
+
+#: ohsradio/screens.py:214
+msgid "Transmitters heard"
+msgstr ""
+
 #: ohsradio/bandscan.py:348
 msgid "Transmitting"
 msgstr ""
 
 #: ohsradio/ais.py:117
 msgid "Tug"
+msgstr ""
+
+#: ohsradio/screens.py:273
+msgid "Tune by frequency"
 msgstr ""
 
 #: ohsradio/radio.py:904
@@ -728,12 +856,21 @@ msgstr ""
 msgid "Under way using engine"
 msgstr ""
 
+#: ohsradio/screens.py:328
+#, python-brace-format
+msgid "Unknown transmitter {main}/{sub}"
+msgstr ""
+
 #: ohsradio/adsb.py:109
 msgid "Unlawful interference"
 msgstr ""
 
 #: ohsradio/adsb.py:101
 msgid "Unmanned aircraft"
+msgstr ""
+
+#: ohsradio/screens.py:84
+msgid "Volume"
 msgstr ""
 
 #: ohsradio/plutofix.py:539
@@ -972,6 +1109,11 @@ msgstr ""
 msgid "{mhz:.4f} MHz is outside what OpenHamShack Radio tunes (0.1 MHz - 6 GHz)"
 msgstr ""
 
+#: ohsradio/screens.py:230
+#, python-brace-format
+msgid "{mhz} MHz"
+msgstr ""
+
 #: ohsradio/dabtx.py:148
 #, python-brace-format
 msgid "{name}: not a DAB transmitters file"
@@ -982,9 +1124,24 @@ msgstr ""
 msgid "{name}: not a local-frequencies file"
 msgstr ""
 
+#: ohsradio/screens.py:177
+#, python-brace-format
+msgid "{n} kb/s"
+msgstr ""
+
 #: ohsradio/plutofix.py:600
 #, python-brace-format
 msgid "{rate:g} MS/s, FIR as needed"
+msgstr ""
+
+#: ohsradio/screens.py:332
+#, python-brace-format
+msgid "{site}, {db} dB"
+msgstr ""
+
+#: ohsradio/screens.py:330
+#, python-brace-format
+msgid "{site}, {km} km, {db} dB"
 msgstr ""
 
 #: ohsradio/ui/face.py:49

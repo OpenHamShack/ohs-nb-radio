@@ -13,6 +13,7 @@ needs a device a container is not given.
 from __future__ import annotations
 
 from ohscore.server.app import AppInfo
+from ohsradio import screens
 
 # "soapy" is the SDRplay because that is the only SoapySDR receiver the
 # store image can open; another would need its module there and a class
@@ -35,4 +36,5 @@ def onair_body(radio) -> dict:
 
 
 def info(version: str, commit: str = "") -> AppInfo:
-    return AppInfo("shack-radio", "radio", "Radio", version, onair_body, lambda dev: DEVICES.get(dev, ""), commit)
+    return AppInfo("shack-radio", "radio", "Radio", version, onair_body, lambda dev: DEVICES.get(dev, ""), commit,
+                   screens=screens)
