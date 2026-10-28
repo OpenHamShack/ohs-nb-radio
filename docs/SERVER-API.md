@@ -1232,7 +1232,7 @@ Radio under "RTL-SDR and SDRplay"; code `ohsradio/notch.py`, tests
 
 | Setting | Values (default `auto`) | `auto` |
 |---|---|---|
-| `dabNotch` | `auto`, `on`, `off` | out, until the RSP reports overload in three one-second windows running while its span is clear of 174-240 MHz; then in, and out again after 5 minutes with no overload (10, 20... up to 60 if it comes back within the hour). Always out in Band III and while a DAB session or AIS holds the receiver (the notch's stopband, 160-230 MHz, covers AIS's 162 MHz) |
+| `dabNotch` | `auto`, `on`, `off` | out, until the RSP reports overload in three one-second windows running while its span is clear of 150-240 MHz; then in, and out again after 5 minutes with no overload (10, 20... up to 60 if it comes back within the hour). Always out while the span touches 150-240 MHz - the notch's own stopband (>30 dB 160-230 MHz, >20 dB 155-235 on an RSPdx) with a margin: Band III, marine VHF and AIS - and while a DAB session or AIS holds the receiver |
 | `rfNotch` | `auto`, `on`, `off` | in only while the whole span is below 60 MHz and clear of LW (148.5-283.5 kHz) and MW (526.5-1705 kHz); out above 60 MHz |
 
 `on` (in) and `off` (out) hold a notch wherever the receiver is.
@@ -1280,7 +1280,7 @@ station near a strong FM transmitter.
   "rf_notch": {"setting": "auto", "in": false, "why": "band", "text":
   "out: tuned above 60 MHz or within MW or LW broadcasting"}}`. `why`:
   `setting` (on or off), and for `dabNotch` auto `default` (no overload
-  seen), `overload`, `clear` (taken out after the hold), `band_iii`,
+  seen), `overload`, `clear` (taken out after the hold), `stopband` (150-240 MHz),
   `dab`, `ais`; for `rfNotch` auto `below_60mhz` or `band`. `{}` for a radio
   without them.
 

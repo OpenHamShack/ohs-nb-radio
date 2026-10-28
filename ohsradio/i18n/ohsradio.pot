@@ -656,7 +656,7 @@ msgstr ""
 msgid "in range"
 msgstr ""
 
-#: ohsradio/notch.py:209
+#: ohsradio/notch.py:219
 #, python-brace-format
 msgid "in: overload seen at {mhz} MHz"
 msgstr ""
@@ -706,20 +706,20 @@ msgstr ""
 msgid "now {call}, {location}"
 msgstr ""
 
-#: ohsradio/notch.py:217
+#: ohsradio/notch.py:227
 msgid "out: AIS is listening at 162 MHz, inside this notch's stopband"
 msgstr ""
 
-#: ohsradio/notch.py:215
+#: ohsradio/notch.py:225
 msgid "out: a DAB station is playing"
 msgstr ""
 
-#: ohsradio/notch.py:211
+#: ohsradio/notch.py:221
 #, python-brace-format
 msgid "out: no overload for {minutes:g} min"
 msgstr ""
 
-#: ohsradio/notch.py:218
+#: ohsradio/notch.py:228
 msgid "out: no overload seen"
 msgstr ""
 
@@ -732,8 +732,8 @@ msgstr ""
 msgid "out: tuned above 60 MHz or within MW or LW broadcasting"
 msgstr ""
 
-#: ohsradio/notch.py:213
-msgid "out: tuned within Band III"
+#: ohsradio/notch.py:223
+msgid "out: tuned within 150-240 MHz, where this notch would cut what you hear"
 msgstr ""
 
 #: ohsradio/plutofix.py:540

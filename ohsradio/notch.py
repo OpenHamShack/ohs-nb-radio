@@ -11,14 +11,20 @@ default, off. These two settings switch them:
 
 - **`dabNotch`** (shack_sdr's `dab_notch`) auto is **out by default
   everywhere**, and goes in only when the RSP reports overload while its
-  span is clear of Band III, 174-240 MHz (`BAND_III`) - `DabAuto` below.
+  span is clear of 150-240 MHz (`DAB_STOPBAND`) - `DabAuto` below. That
+  is the notch's own stopband (>30 dB over 160-230 MHz on an RSPdx, >20
+  dB over 155-235) with a margin for the skirt, not Band III alone: until
+  28/10/2026 the guard was 174-240 MHz, so overload seen while listening
+  to marine VHF (156-162 MHz) or AIS (161.975/162.025 MHz) could switch in
+  a notch 30 dB deep across the very signal being received (found by the
+  AIS work).
   Measured on ohs-box (24/10/2026, Store Radio beta.7, RSPdx, Antenna A,
   145.300 MHz FM, rxGain 40, back-to-back minutes): with the DAB notch in
   the repeater was about 4 dB weaker (insertion loss) and about 2.5 dB
   lower over the noise floor, and there were no overloads with it in or
   out - so on 2 m it cost 2.5 dB and bought nothing. (beta.7's rule put it
-  in everywhere outside Band III.) In Band III, or while a DAB session
-  holds the receiver, it is always out.
+  in everywhere outside Band III.) Within 150-240 MHz, or while a DAB or
+  AIS session holds the receiver, it is always out.
 - **`rfNotch`** (shack_sdr's `rf_notch`) is in only while the whole span
   lies below 60 MHz (`RF_AUTO_TOP`), and even there out while it touches
   the LW or MW broadcast bands (`AM_BANDS`). The one switch is both an FM
@@ -85,7 +91,11 @@ from . import bcastgain
 
 CHOICES = ("auto", "on", "off")
 
-BAND_III = (174_000_000.0, 240_000_000.0)
+# dabNotch auto never puts the notch in while the span touches this: the
+# RSPdx DAB notch's stopband (>20 dB 155-235 MHz) plus a margin for the
+# skirt (module docstring). It covers Band III (174-240), marine VHF and
+# AIS.
+DAB_STOPBAND = (150_000_000.0, 240_000_000.0)
 FM_BROADCAST = (87_500_000.0, 108_000_000.0)
 # rfNotch auto: in only below this (module docstring). 6 m (50-52 MHz) is
 # under it and far enough from the FM notch's 77 MHz lower edge; 4 m (70
@@ -101,14 +111,14 @@ def _touches(lo: float, hi: float, band: tuple[float, float]) -> bool:
     return lo < band[1] and hi > band[0]
 
 
-def in_band_iii(lo: float, hi: float) -> bool:
-    return _touches(lo, hi, BAND_III)
+def in_stopband(lo: float, hi: float) -> bool:
+    return _touches(lo, hi, DAB_STOPBAND)
 
 
 def auto_dab(lo: float, hi: float, dab_held: bool, overload_in: bool) -> bool:
     """Whether `auto` puts the DAB notch in for a span lo..hi Hz, given
     DabAuto's verdict (`overload_in`)."""
-    return overload_in and not dab_held and not in_band_iii(lo, hi)
+    return overload_in and not dab_held and not in_stopband(lo, hi)
 
 
 def auto_rf(lo: float, hi: float) -> bool:
@@ -165,17 +175,17 @@ class DabAuto:
         """True when the verdict changed. `dab_held`: what holds the
         receiver where the notch must stay out - "dab", "ais" (Radio
         _dab_held), True for DAB - or nothing."""
-        if dab_held or in_band_iii(lo, hi):
+        if dab_held or in_stopband(lo, hi):
             # Never in here, and what was seen elsewhere does not carry in.
             self._win, self.streak = None, 0
-            why = (dab_held if isinstance(dab_held, str) else "dab") if dab_held else "band_iii"
+            why = (dab_held if isinstance(dab_held, str) else "dab") if dab_held else "stopband"
             if self.inn:
                 self.inn, self.out_at, self.why = False, now, why
                 return True
-            if self.why in ("default", "clear", "band_iii", "dab", "ais"):
+            if self.why in ("default", "clear", "stopband", "dab", "ais"):
                 self.why = why
             return False
-        if self.why in ("band_iii", "dab", "ais"):
+        if self.why in ("stopband", "dab", "ais"):
             self.why = "default"
         if self._win is None:
             self._win = {"t": now, "over": False}
@@ -209,8 +219,8 @@ class DabAuto:
             return _("in: overload seen at {mhz} MHz").format(mhz=f"{(self.at_hz or 0) / 1e6:.3f}")
         if self.why == "clear":
             return _("out: no overload for {minutes:g} min").format(minutes=self.hold / 60)
-        if self.why == "band_iii":
-            return _("out: tuned within Band III")
+        if self.why == "stopband":
+            return _("out: tuned within 150-240 MHz, where this notch would cut what you hear")
         if self.why == "dab":
             return _("out: a DAB station is playing")
         if self.why == "ais":

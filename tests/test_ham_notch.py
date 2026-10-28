@@ -12,7 +12,8 @@ would be handed, field by field, not what Radio meant to send.
 - **Automatic** leaves both out on 2 m (in, either costs 2 m about 4 dB)
   and on 11B; on 80 m the broadcast notch goes in. The DAB notch goes in
   only after the RSP reports overload in three one-second windows running
-  outside Band III, and comes out after the clear hold; never in without
+  clear of its own stopband (150-240 MHz: Band III, marine VHF and AIS
+  never), and comes out after the clear hold; never in without
   overload (`DabAuto`, on numbers, and through the stand-in API).
 - **On and off** hold a notch wherever the receiver is tuned.
 - **Live:** a retune or a changed setting is one Update on the running
@@ -182,11 +183,26 @@ class DabAutoOnNumbers(unittest.TestCase):
         t, changes = self.run_for(a, t, notch.HOLD_S, False)
         self.assertEqual([inn for _t, inn in changes], [False])
 
-    def test_never_in_band_iii_and_band_iii_takes_it_out(self):
+    def test_never_in_its_own_stopband_whatever_the_overload(self):
+        # 11B, marine channel 16, AIS: all within 150-240 MHz.
+        for hz in (218.640 * MHZ, 156.8 * MHZ, 162.0 * MHZ):
+            with self.subTest(MHz=hz / MHZ):
+                a = notch.DabAuto()
+                _t, changes = self.run_for(a, 0.0, 30, True, lo=hz - 1.2 * MHZ, hi=hz + 1.2 * MHZ)
+                self.assertEqual(changes, [])
+                self.assertEqual(a.text(), "out: tuned within 150-240 MHz, where this notch would cut what you hear")
+        # Just below the guard (the span's top at 149.9 MHz): overload puts it in.
         a = notch.DabAuto()
-        _t, changes = self.run_for(a, 0.0, 10, True, lo=217.4 * MHZ, hi=219.8 * MHZ)
-        self.assertEqual(changes, [])
-        self.assertEqual(a.text(), "out: tuned within Band III")
+        _t, changes = self.run_for(a, 0.0, 5, True, lo=147.5 * MHZ, hi=149.9 * MHZ)
+        self.assertEqual([inn for _t, inn in changes], [True])
+
+    def test_its_stopband_and_a_dab_session_take_it_out(self):
+        a = notch.DabAuto()
+        t, _ = self.run_for(a, 0.0, 3.5, True)
+        self.assertTrue(a.inn)
+        t, changes = self.run_for(a, t, 0.2, True, lo=155.6 * MHZ, hi=158.0 * MHZ)
+        self.assertEqual([inn for _t, inn in changes], [False])
+        t, _ = self.run_for(a, t, 3.5, True)
         t, _ = self.run_for(a, 10.0, 3.5, True)
         self.assertTrue(a.inn)
         t, changes = self.run_for(a, t, 0.2, True, held=True)
@@ -204,10 +220,16 @@ class TheRule(unittest.TestCase):
         self.assertEqual(self.at(145 * MHZ), {"dab_notch": False, "rf_notch": False})
         self.assertEqual(self.at(218.640 * MHZ), {"dab_notch": False, "rf_notch": False})
 
-    def test_overload_puts_the_dab_notch_in_only_clear_of_band_iii(self):
-        self.assertTrue(self.at(145 * MHZ, overload_in=True)["dab_notch"])
-        self.assertFalse(self.at(174.5 * MHZ, overload_in=True)["dab_notch"])     # the span reaches over 174
-        self.assertTrue(self.at(172.5 * MHZ, overload_in=True)["dab_notch"])      # wholly below it
+    def test_overload_puts_the_dab_notch_in_only_clear_of_150_to_240_mhz(self):
+        self.assertTrue(self.at(145.5 * MHZ, overload_in=True)["dab_notch"])      # 2 m: as before
+        self.assertTrue(self.at(433 * MHZ, overload_in=True)["dab_notch"])        # 70 cm
+        self.assertTrue(self.at(14.2 * MHZ, overload_in=True)["dab_notch"])       # HF
+        # Marine VHF channel 16 and AIS sit in the notch's stopband: never.
+        self.assertFalse(self.at(156.8 * MHZ, overload_in=True)["dab_notch"])
+        self.assertFalse(self.at(162.0 * MHZ, overload_in=True)["dab_notch"])
+        self.assertFalse(self.at(150.9 * MHZ, overload_in=True)["dab_notch"])     # the span reaches over 150
+        self.assertTrue(self.at(148.7 * MHZ, overload_in=True)["dab_notch"])      # wholly below it
+        self.assertFalse(self.at(218.640 * MHZ, overload_in=True)["dab_notch"])
         self.assertFalse(self.at(240.9 * MHZ, overload_in=True)["dab_notch"])
         self.assertTrue(self.at(242 * MHZ, overload_in=True)["dab_notch"])
         # A DAB session takes it out wherever the centre is.
@@ -337,13 +359,19 @@ class NotchesThroughTheApi(unittest.TestCase):
         self.assertFalse(self.options(r, {"dab_notch": False})["dab_notch"])
         self.assertEqual(self.inits(), 1)
 
-    def test_overload_in_band_iii_never_puts_it_in(self):
-        r = self.radio(vfo=218_640_000.0)
-        pump(r, 1)
-        self.overload_for(r, 4.5)
-        view = self.notch_view(r)
-        self.assertEqual((view["dab_notch"]["in"], view["dab_notch"]["why"]), (False, "band_iii"))
-        self.assertFalse(r.dev.notch_want.get("dab_notch"))
+    def test_overload_in_its_stopband_never_puts_it_in(self):
+        # 11B, marine channel 16 and AIS: the RSP reporting overload all along.
+        for hz in (218_640_000.0, 156_800_000.0, 162_000_000.0):
+            with self.subTest(MHz=hz / 1e6):
+                r = self.radio(vfo=hz)
+                pump(r, 1)
+                self.overload_for(r, 4.5)
+                view = self.notch_view(r)
+                self.assertEqual((view["dab_notch"]["in"], view["dab_notch"]["why"]), (False, "stopband"))
+                self.assertFalse(r.dev.notch_want.get("dab_notch"))
+                self.assertFalse([e for e in self.log() if e["ext"] == EXT1_RSPDX_DAB_NOTCH and e["dx_dab"]])
+                close(r)
+                self.ctl.stub_clear()
 
     def test_on_and_off_override_live_with_no_reopen(self):
         r = self.radio()

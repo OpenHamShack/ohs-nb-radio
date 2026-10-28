@@ -62,11 +62,11 @@ with REG.after("sampleRate"):
        help="The SDRplay RSP's DAB notch (about 160-230 MHz), ahead of its LNA: for a strong Band III "
             "transmitter that overloads the receiver wherever it is tuned. In, it costs about 4 dB of signal "
             "and 2.5 dB over the noise on 2 m (measured on an RSPdx at 145.3 MHz). Automatic: out, until the "
-            "radio reports overload for three seconds running while tuned outside 174-240 MHz; then in, and "
+            "radio reports overload for three seconds running while tuned outside 150-240 MHz; then in, and "
             "out again after 5 minutes with no overload (longer if it keeps coming back). Always out within "
-            "174-240 MHz and while a DAB station plays. On or off holds it. RSPdx, RSP1A, RSP1B and RSPduo "
-            "only (not the RSPduo's Hi-Z input); on any other radio, the RSP2 and RSP1 included, it does "
-            "nothing.")
+            "150-240 MHz, its own stopband (Band III, marine VHF and AIS), and while a DAB station or AIS "
+            "plays. On or off holds it. RSPdx, RSP1A, RSP1B and RSPduo only (not the RSPduo's Hi-Z input); on "
+            "any other radio, the RSP2 and RSP1 included, it does nothing.")
     _k("rfNotch", "enum", "auto", "setting", choices=list(notch.CHOICES),
        help="The SDRplay RSP's broadcast notch, ahead of its LNA: one switch for the FM band (about 77-115 MHz) "
             "and MW (about 500-1530 kHz). Automatic: in only while the receiver is tuned below 60 MHz, except "
