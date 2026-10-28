@@ -325,7 +325,27 @@ def mode_tune_target(dial: float, spots: list[tuple[float, float, float]]) -> fl
     return min((t for t, _, _ in spots), key=lambda t: abs(t - dial))
 
 
-class Engine:
+class _EngineType(type):
+    """Runs an engine's after-construction steps once every __init__ in the
+    chain has returned. Adopting the station profile calls set(), which
+    needs the engine whole: the core's own attributes (_hold_tls,
+    activity_hooks) and the app's, which a subclass sets after
+    super().__init__() (Radio's _pin_tls, read by its _after_set). Until
+    28/10/2026 adoption ran half way through Engine.__init__ and failed
+    every time with "station profile not adopted", so an install whose
+    only locator was the shared profile had none: every AIS vessel's
+    distance and bearing was null. Moving the call to the end of
+    Engine.__init__ would still have run it before the app's own set-up,
+    and asking each app to call it last is a rule the next app forgets;
+    this way no subclass can build an engine that adopts too early."""
+
+    def __call__(cls, *a, **kw):
+        engine = super().__call__(*a, **kw)
+        engine._adopt_station()
+        return engine
+
+
+class Engine(metaclass=_EngineType):
     BLOCK_HOPS = 5     # device read = 5 filter-bank hops (75 ms at 1.2 MS/s)
     # A normal end waits for the device's queue (module docstring) for at
     # most what the device said it held plus DRAIN_SLACK, and never longer
@@ -495,14 +515,8 @@ class Engine:
                                title=self.LOG_TITLE, program_id=self.PROGRAM_ID, station=lambda: self.station,
                                freq_field=self.LOG_FREQ_FIELD,
                                identity=lambda: (self.cfg.get("callsign", ""), self.cfg.get("locator", "")))
-        # The profile follows the settings and back only for the program
-        # an operator runs (persist): a test's throw-away engine must not
-        # start a watch thread per radio it builds.
-        if persist:
-            try:
-                self.station_link.adopt()
-            except Exception:  # noqa: BLE001  a damaged store must not stop the radio
-                logging.getLogger(self.LOGGER).warning("station profile not adopted", exc_info=True)
+        # The station profile is adopted once the whole engine is built,
+        # app's part included (_EngineType, _adopt_station), not here.
         self.lock = threading.RLock()
         self.feeds: dict[str, list[Feed]] = {k: [] for k in self.FEED_KINDS}
         # Decoder sessions (ohscore/decoders.py): the host is made by start().
@@ -850,6 +864,18 @@ class Engine:
             if why:
                 self._unkey(f"Unkeyed: {why}", "warn", f"guard: {why}")
         return changed
+
+    def _adopt_station(self) -> None:
+        """The station profile -> the settings and back (StationLink.adopt),
+        once the engine is built (_EngineType). Only for the program an
+        operator runs (persist): a test's throw-away engine must not start
+        a watch thread per radio it builds."""
+        if not self.persist:
+            return
+        try:
+            self.station_link.adopt()
+        except Exception:  # noqa: BLE001  a damaged store must not stop the radio
+            logging.getLogger(self.LOGGER).warning("station profile not adopted", exc_info=True)
 
     @property
     def station(self):
