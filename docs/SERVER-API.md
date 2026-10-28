@@ -109,9 +109,12 @@ decoded by shack_sdr.
 | `POST api/decoders/codecs/rescan` | control | look for codecs again without a restart: `{"codecs": [...]}`; also looks at the controller's host libraries again (`hostLibs`) |
 | `GET api/decoders/files` | view | the pictures decoders saved (SSTV's, whether a session's or the mode's), newest first: `{"files": [{"name", "session", "decoder", "t", "size"}...]}`. `t` is UTC seconds, `size` bytes; `session` and `decoder` are `""` for a picture saved before 23/10/2026. Answers with the radio stopped too. |
 | `GET api/decoders/files/{name}[?download=1]` | view | one of them, `Content-Type: image/png`; `download=1` adds `Content-Disposition: attachment`. `404 no_file` for a name not in the list (a path or a dotted name included). |
+| `POST api/decoders/sessions/{id}/listen` | control | `{"listen": true}`: hear the session's sound instead of the demodulator's on `api/audio/rx` (and the desktop's speaker, and a recording); `{"listen": false}` gives the demodulator back. One session at a time: listening to another takes over. `200` with the session (`listening` true or false); `404 unknown_session`, `409 no_audio` (its decoder makes no sound), `400 bad_params` (`listen` not true or false). Stopping the session ends it; it is never saved, so after a restart the radio is heard. Since 28/10/2026 (DMR). |
 
-A DAB session's sound replaces the demodulator's (below). Not yet:
-`listen` for other sessions (M3).
+A DAB session's sound replaces the demodulator's (below) by itself; any
+other session that makes sound (DMR's voice, below) does when listened to
+(`listen`). Each session in a list says `listening`, and `api/status`
+`decoders` names the session listened to as `listening` (null: the radio).
 
 An entry (the catalogue):
 
@@ -1404,6 +1407,100 @@ reason to refuse the person asking: `409 receiver_busy` ("Not scanning
 now: Automatic transmit is armed", "... A band scan is running already"),
 `409 unsupported`, `400 bad_params` for another `band`, `503 not_running`.
 `both` scans what this radio can (`bands` says which).
+
+## DMR (Radio)
+
+A `dmr` session (since 28/10/2026) decodes a DMR Tier II channel - a
+repeater, a radio on a simplex channel, or a TDMA direct-mode pair - with
+**both timeslots at once**: calls with their IDs, talkgroup or private,
+colour code, talker alias, encrypted and emergency flags, level and bit
+error rate, and short messages. All of that is ohs-libs shack_sdr's own
+Rust (shack_sdr README "DMR"). Its **voice** is AMBE+2, which only the
+user's mbelib turns into sound: Radio never includes it (Settings ›
+Decoders › Codecs; on a controller a host library). Without mbelib
+everything but the sound still decodes, the entry is `available` with
+`partial: true, missing: ["mbelib"]`, and a session says
+`needs_codec:mbelib` while a call goes unheard. **Encrypted calls are
+shown as encrypted and never decoded**, whatever is installed. Receive
+only, like every decoder.
+
+**Start:** `POST api/decoders/sessions {"decoder": "dmr", "freqHz":
+439612500}` at control level - the channel's centre frequency. It takes a
+12.5 kHz channel of the bank at 48 kS/s (any rate from 16 kS/s works), so
+it sits beside the dial and other sessions in the span as any narrow
+decoder does. `params`: `slot`, `"1"`, `"2"` or `"both"` (default), the
+slots whose voice is heard, both mixed; changed live with `POST
+api/decoders/sessions/{id} {"params": {"slot": "2"}}`. To hear it:
+`POST api/decoders/sessions/{id}/listen {"listen": true}` (above); its
+sound is 8 kHz mono in the decoder, converted to the stream's own rate.
+
+**The session's `meta`** (in its view and as `meta` items on the
+`decoder` feed), whenever a slot changes and once a second during a call:
+
+```json
+{"mode": "bs", "cc": 1,
+ "slots": [
+  {"slot": 1, "state": "voice", "src": 9990001, "dst": 99, "callType": "group", "cc": 1,
+   "alias": "MX0TST Test", "encrypted": false, "emergency": false,
+   "callStart": 1793166482.24, "lastHeard": 1793166484.92, "rssiDb": -61.8, "ber": 0.0012},
+  {"slot": 2, "state": "idle", "src": 9990003, "dst": 98, "callType": "group", "cc": 1,
+   "alias": null, "encrypted": true, "emergency": false,
+   "callStart": 1793166478.10, "lastHeard": 1793166479.30, "rssiDb": -62.0, "ber": 0.0}]}
+```
+
+- `mode`: what the channel carries - `bs` (a repeater's output), `ms` (a
+  radio, simplex or a repeater's input) or `direct` (TDMA direct mode);
+  null until a burst is heard. `cc`: the colour code heard.
+- Each slot: `state` `idle`, `voice` (a call in progress) or `data` (a
+  message arriving); `src` and `dst` the radio IDs (DMR IDs, 24-bit);
+  `callType` `group` (`dst` is a talkgroup) or `private` (`dst` is a
+  radio); `alias` the talker alias once its fragments have all arrived;
+  `encrypted`, `emergency`; `callStart` and `lastHeard` UTC seconds;
+  `rssiDb` the channel's power, dB full scale; `ber` the share of bits the
+  error correction fixed over the slot's last two seconds or so (0.01 is
+  1 %).
+- **An idle slot keeps its last call's** `src`, `dst`, `callType`, `cc`,
+  `alias`, `encrypted` and `callStart`, so a client shows "last heard"
+  without keeping history of its own. Fields not yet known are null: a
+  call heard without its header ("late entry") has `src` and `dst` null
+  for up to a superframe (360 ms), until the embedded link control names
+  it.
+
+**Results** on the `decoder` feed and in `GET api/decoders/sessions/{id}`
+(`type: "frame"`, `frame` naming it), each with `slot` (1 or 2):
+
+| `frame` | Fields |
+|---|---|
+| `call_start` | `src`, `dst`, `callType`, `cc`, `encrypted`, `emergency`, `lateEntry` |
+| `call_end` | `src`, `dst`, `callType`, `cc`, `encrypted`, `emergency`, `alias`, `durationS`, `ber` (over the whole call), `rssiDb` |
+| `talker_alias` | `src`, `alias`: as soon as an alias is complete |
+| `sms` | `src`, `dst`, `group`, `text`, `sap`, `srcPort`, `dstPort`, `octets`: a short message (an IP/UDP datagram, Motorola's text messaging and its like) |
+| `data` | as `sms` without `text`: a data message with no text found in it |
+
+The session's `stats` add `bursts`, `syncs`, `misses`, `calls`,
+`voiceFrames`, `lcOk`, `lcBad` and `dataMessages` to the usual ones;
+`snrDb` is the symbols' (about 7 dB over the channel's C/N) and
+`offsetHz` the carrier's offset while `sync` holds.
+
+**Codes** (`why`, worded as `whyText`): `needs_codec:mbelib` - "Calls are
+shown, but their voice needs mbelib: install it to hear them. Radio never
+includes it: see Help › Codecs." (on a controller: "...ask your
+controller's administrator to install it (Controller › Optional
+libraries)"). Refusals of `listen`: `no_audio`.
+
+**The simulator** has a DMR repeater on 439.6125 MHz (colour code 1),
+playing shack_sdr's DMR test transmitter's showcase over and over: on
+slot 1 a talkgroup call from 9990001 to talkgroup 99 with the talker alias
+"MX0TST Test", then an SMS from 9990002 to 9990001 ("Hello from the DMR
+simulator"); on slot 2, overlapping it, a private call from 9990002
+("MX0ABC") to 9990001 and an encrypted call from 9990003 to talkgroup 98.
+Country code 999 is no country's, so the IDs name nobody. With mbelib the
+test voice frames play as a buzz.
+
+**Not yet:** Tier III trunking and CSBKs, rate 1 data, GPS positions in
+the embedded link control, real-air checks (recordings of local repeaters
+are to come), and on a controller mbelib as a host library (its
+`host_libraries` entry waits for the platform to stage it).
 
 ## Host libraries (store form)
 

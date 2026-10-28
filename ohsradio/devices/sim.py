@@ -30,6 +30,9 @@ rig on: the stations fade in over a second or two).
 - **Broadcast FM**: six fictional stations on Band II from shack_sdr's FM
   stereo and RDS test transmitter (simfm.py), so wide FM is heard in
   stereo with RDS, and the band scanner finds something, with no radio.
+- **DMR**: a repeater on 439.6125 MHz playing shack_sdr's DMR test
+  transmitter's showcase (simdmr.py): both slots busy, talker alias, an
+  encrypted call and an SMS, so a DMR session has something to decode.
 - **Our own transmission** comes back, a local signal, at the dial it was
   sent on (half duplex: the engine mutes it, the scope shows it). A
   repeater whose input we transmit on with its tone (or a 1750 Hz
@@ -290,6 +293,8 @@ class HamSim(SimCore):
         self.fm = None
         # Ships off the Ayrshire coast on AIS's two channels (simais.py).
         self.ais = None
+        # A DMR repeater on 70 cm likewise (simdmr.py).
+        self.dmr = None
         if self.signals:
             from . import simdab
             if simdab.available():
@@ -298,6 +303,8 @@ class HamSim(SimCore):
                 self.fm = FmBand()
                 from .simais import AisFleet
                 self.ais = AisFleet(t0=time.time())
+                from .simdmr import DmrBand
+                self.dmr = DmrBand()
         self._init_loop()
 
     # -- set-up -------------------------------------------------------------
@@ -571,9 +578,9 @@ class HamSim(SimCore):
         pick = self.rng.integers(0, len(self.bank), m)
         rot = np.array([1, 1j, -1, -1j], np.complex64)[self.rng.integers(0, 4, m)]
         extra = self.bank[pick] * rot[:, None]
-        fm = self.fm
-        if fm is not None:
-            feeds += fm.feeds(g, self.rx_if, m, background=self.realtime)
+        for extra_band in (self.fm, self.dmr):
+            if extra_band is not None:
+                feeds += extra_band.feeds(g, self.rx_if, m, background=self.realtime)
         y = self.syn.render(m, feeds, extra)
         b = bandmod.band_at(self.rx_if)
         rate = QRN.get(b.name if b else "", 0.0) * activity(b.name, self.hour()) if b else 0.0

@@ -99,7 +99,14 @@ class FmBand:
     """Stations for a simulator to add to what it receives (sim.py
     _generate): `feeds()` gives the synthesis bank its sources for one
     render, made on a worker for a simulator in real time (it must not
-    stall its receive thread) and at once otherwise."""
+    stall its receive thread) and at once otherwise. Other stations made
+    by a shack_sdr test transmitter at a channel rate (simdmr.py's DMR
+    repeater) use the same machinery with their own rate and filter."""
+
+    channel_rate = CHANNEL_RATE
+    cutoff = CUTOFF
+    edge = EDGE
+    thread_name = "sim-fm"
 
     def __init__(self, stations=BAND):
         self.stations = list(stations)
@@ -110,7 +117,7 @@ class FmBand:
         self._lock = threading.Lock()
 
     def _rate(self, geo) -> tuple[int, float]:
-        d = geo.decimation_for(CHANNEL_RATE)
+        d = geo.decimation_for(self.channel_rate)
         return d, geo.fs / d
 
     def feeds(self, geo, rx_if: float, m: int, background: bool) -> list:
@@ -124,13 +131,13 @@ class FmBand:
         for i, st in enumerate(self.stations):
             src = self._src.get(i)
             if src is None:
-                src = self._src[i] = Source(geo, d, cutoff=CUTOFF)
+                src = self._src[i] = Source(geo, d, cutoff=self.cutoff)
                 self._k[i] = 0
             n = m * src.hop
             k = self._k[i]
             self._k[i] = k + n
             off = st.hz - rx_if
-            if abs(off) > geo.fs / 2 - EDGE:
+            if abs(off) > geo.fs / 2 - self.edge:
                 continue
             z = st._loops.get(rate)
             if z is None:
@@ -159,4 +166,4 @@ class FmBand:
                 pass
             with self._lock:
                 self._making.discard(i)
-        threading.Thread(target=run, name="sim-fm", daemon=True).start()
+        threading.Thread(target=run, name=self.thread_name, daemon=True).start()
