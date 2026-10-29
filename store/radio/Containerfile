@@ -87,6 +87,33 @@ RUN set -e; apt-get update; cd /tmp; apt-get download satdump satdump-data \
     && cp x/$R/fonts/font.ttf /out/$R/fonts/ && cp x/$R/maps/nasa_hd.jpg /out/$R/maps/ \
     && cp x/usr/share/doc/satdump/copyright /out/usr/share/doc/satdump/
 
+# radiosonde_auto_rx's programs, for Radio's radiosondes (ohsradio/sonde.py;
+# Brian, 29/10/2026: no sonde demodulator of our own). Pinned: tag v1.9.0,
+# commit 53d03c72ad18ce4357c0cedd1f4acf2bf1efb36e of
+# github.com/projecthorus/radiosonde_auto_rx (GPL-3.0); the build fails if
+# the tag ever names another commit. Only what sonde.py runs is built, as
+# auto_rx's own build.sh builds it: dft_detect (which kind of sonde),
+# iq_dec, fsk_demod, and the RS41, DFM, M10/M20, LMS6, iMet-54 and Meisei
+# demodulators - about 650 kB, linking only libc and libm. VER_JSN_STR is
+# the version every decoder line carries; sonde.AUTO_RX_VERSION refuses
+# lines from any other, so a new pin changes both together. Built to
+# /opt/shack-radio/sonde, sonde.BIN_DIR.
+FROM docker.io/library/debian:13-slim AS sonde
+RUN apt-get update && apt-get install -y --no-install-recommends gcc make libc6-dev git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN set -e; git clone -q --depth 1 --branch v1.9.0 https://github.com/projecthorus/radiosonde_auto_rx /src \
+    && test "$(git -C /src rev-parse HEAD)" = 53d03c72ad18ce4357c0cedd1f4acf2bf1efb36e \
+    && export CFLAGS='-O3 -w -Wno-unused-variable -DVER_JSN_STR="\"1.9.0\""' \
+    && make -C /src/demod/mod rs41mod dfm09mod m10m20mod lms6Xmod imet54mod meisei100mod iq_dec \
+    && make -C /src/utils fsk_demod && make -C /src/scan dft_detect \
+    && mkdir -p /out/opt/shack-radio/sonde /out/usr/share/doc/radiosonde-auto-rx \
+    && cd /src && install -m 0755 demod/mod/rs41mod demod/mod/dfm09mod demod/mod/m10m20mod demod/mod/lms6Xmod \
+         demod/mod/imet54mod demod/mod/meisei100mod demod/mod/iq_dec utils/fsk_demod scan/dft_detect \
+         /out/opt/shack-radio/sonde/ \
+    && install -m 0644 LICENSE /out/usr/share/doc/radiosonde-auto-rx/ \
+    && echo "radiosonde_auto_rx v1.9.0 (53d03c72ad18ce4357c0cedd1f4acf2bf1efb36e), https://github.com/projecthorus/radiosonde_auto_rx" \
+         > /out/usr/share/doc/radiosonde-auto-rx/SOURCE
+
 FROM docker.io/library/debian:13-slim
 
 # libopenblas0-pthread: Debian's numpy links the reference BLAS unless an
@@ -187,6 +214,11 @@ RUN cd /tmp/vendor \
     && python3 -m zipfile -e "$f" /tmp/ohsdigi \
     && install -D -m 0644 /tmp/ohsdigi/ohsdigi/ohsdigi.abi3.so /opt/shack-radio/ohscore/ohsdigi.abi3.so \
     && rm -rf /tmp/vendor /tmp/ohsdigi
+
+# radiosonde_auto_rx's programs from the stage above; a library they lack
+# fails the build here, not the first sonde.
+COPY --from=sonde /out/ /
+RUN ! ldd /opt/shack-radio/sonde/* | grep -q "not found"
 
 RUN useradd --uid 1000 --create-home --home-dir /data --shell /usr/sbin/nologin shack
 
