@@ -2768,9 +2768,10 @@ Meteor-M LRPT passes, predicted and recorded by themselves (Brian,
 29/10/2026): prediction, a plan for each pass, an IQ recording of each pass
 recorded, and after LOS its pictures, decoded by SatDump. Code
 `ohsradio/wxsat.py` (passes, plans, recording), `wxsat_decode.py` (SatDump
-and the pictures), `wxsat_orbit.py` (SGP4, the vendored `sgp4` wheel),
+and the pictures), `wxsat_signal.py` (the signal measure and each pass's
+timeline), `wxsat_orbit.py` (SGP4, the vendored `sgp4` wheel),
 `wxsat_tle.py` (element sets); tests `tests/test_ham_wxsat.py`,
-`tests/test_ham_wxsat_decode.py`. Receive only: nothing here keys.
+`tests/test_ham_wxsat_decode.py`, `tests/test_ham_wxsat_signal.py`. Receive only: nothing here keys.
 
 | Satellite | id (settings) | Frequency | Mode |
 |---|---|---|---|
@@ -2784,10 +2785,13 @@ commissioned in 2024; a move is one line in `wxsat.SATELLITES`.)
 centre of its square on the WGS-84 ellipsoid at height 0. Without a
 locator there are no passes.
 
-### GET api/wxsat/passes[?hours=48] (view)
+### GET api/wxsat/passes[?hours=48][&past=24] (view)
 
-The passes in the sky at any time from an hour ago to `hours` ahead (1-72;
-`400 bad_params` outside), in order of AOS:
+The passes in the sky at any time from `past` hours ago (1-720, default
+24) to `hours` ahead (1-72, default 48), in order of AOS; `400 bad_params`
+for either outside its range. The finished ones are there with what
+became of them - `done`, `failed`, `missed`, `skip-...` - each with its
+`signal`:
 
 ```json
 {"station": {"lat": 55.47917, "lon": -4.54167},
@@ -2797,7 +2801,7 @@ The passes in the sky at any time from an hour ago to `hours` ahead (1-72;
              "aos": "2026-10-29T09:19:21Z", "tca": "2026-10-29T09:26:53Z", "los": "2026-10-29T09:34:20Z",
              "maxElDeg": 41.9, "aosAzDeg": 19.0, "losAzDeg": 175.5,
              "track": [{"t": "2026-10-29T09:19:21Z", "az": 19.0, "el": 0.0}, "...every 10 s, LOS last..."],
-             "plan": "record", "why": null, "imageId": null}]}
+             "plan": "record", "why": null, "imageId": null, "signal": null}]}
 ```
 
 - Times are ISO 8601 UTC. AOS and LOS are the horizon (0°), whatever the
@@ -2831,13 +2835,23 @@ The passes in the sky at any time from an hour ago to `hours` ahead (1-72;
 - `imageId` is set when the pass's pictures are made (`done` after
   `decoding`), and is the pass's `id`; null before, and for a pass that
   has none.
+- `signal` is the URL of the pass's signal timeline
+  (`api/wxsat/passes/{id}/signal`, below) once it has been made - after
+  LOS, or at startup for an older pass whose recording is still there -
+  and null before, and for a pass never recorded.
+- Past passes survive a restart: what happened to each (plan, why,
+  `imageId`) is kept on disk for 32 days, longer than the longest `past`.
+  Their `track`, az and el are propagated from today's element set,
+  which is an approximation days back (an element set is good for about
+  a day): fine for drawing, not a record of where the satellite was. What
+  happened is never recomputed.
 - `tle`: where the element sets come from and how old they are (below).
 
 ### GET api/wxsat/status (view)
 
 ```json
 {"state": "recording", "passId": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137100000,
- "az": 104.2, "el": 38.7, "snrDb": null, "lockPct": null, "lines": null, "etaS": 412,
+ "az": 104.2, "el": 38.7, "snrDb": 6.4, "lockPct": null, "lines": null, "etaS": 412,
  "text": "Recording Meteor-M N2-3 until 09:34 UTC"}
 ```
 
@@ -2845,10 +2859,52 @@ The passes in the sky at any time from an hour ago to `hours` ahead (1-72;
 its id, where the satellite is now, `etaS` to its AOS), `recording` (the
 pass, the satellite's position now, `etaS` to LOS), `decoding` (no pass
 recording, and SatDump is decoding one: its `passId`, `sat`, `freqHz`;
-`az`, `el` and `etaS` null). A recording wins over a decode. `snrDb`,
+`az`, `el` and `etaS` null). A recording wins over a decode. `snrDb` is
+filled while a pass records: the last second's signal measure (one FFT a
+second against the satellite's Doppler-shifted frequency, as the
+timeline's below; `ohsradio/wxsat_signal.py`), the last good figure kept
+through a second with nothing to measure; null in every other state.
 `lockPct` and `lines` stay null: SatDump's CLI reports them only in its
 log as it goes, and a pass's result is its pictures. `text` says it in a
 sentence (also why there are no passes: no locator, or no `sgp4`).
+
+### GET api/wxsat/passes/{id}/signal (view)
+
+How strongly the pass was heard, second by second:
+
+```json
+{"passId": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137100000,
+ "noiseFloorDb": -94.3,
+ "samples": [{"t": "2026-10-29T09:19:21.5Z", "az": 19.0, "el": 0.0, "snrDb": 0.2},
+             {"t": "2026-10-29T09:19:22.5Z", "az": 19.0, "el": 0.1, "snrDb": 0.4}, "...one a second to LOS..."]}
+```
+
+- **A power ratio, not a decode**: it means something before any decoder
+  lock. For each second of the recording, a Welch periodogram (Hann, 50 %
+  overlap, 4096 points) compares the mean power per hertz within 70 kHz of
+  where the satellite should be - its nominal frequency moved by the
+  Doppler shift, from SGP4 and the pass's own element set - with the
+  median power per hertz of the bins well clear of that band on both
+  sides (beyond a further 20 kHz). `snrDb` is 10 log10 of that ratio:
+  **0 dB means nothing is there**; it is signal-plus-noise over noise, so
+  a signal as strong as the noise in the band reads +3 dB, and it never
+  goes far below 0. Anything in the band counts, a carrier or interference
+  as much as LRPT.
+- `t` is the middle of the second (UTC, to a tenth); `az` and `el` the
+  satellite's from the station then, from the same element set; `snrDb`
+  null for a second with too few samples to measure (the recording's last
+  scrap). `noiseFloorDb` is the median of the seconds' noise per hertz,
+  in dB on the receiver's full scale: for comparing passes with each
+  other, not an absolute power. Both figures to a tenth of a dB.
+- Made once, after LOS from the recording (alongside the decode), or at
+  startup for an older pass whose recording is still there. `404
+  no_signal` until then, and for a pass never recorded.
+- **Kept 30 days whatever happens to the recording**: the IQ is pruned by
+  the recordings' disk rules within days, the timeline is not.
+- There is **no `locked` field**: SatDump gives no per-second lock or SNR
+  figure cheaply (its log is free text written as it goes, and its
+  dataset.json a summary of the pass); whether a pass decoded is its
+  `plan` and `imageId`.
 
 ### POST api/wxsat/passes/{id}/record (control)
 

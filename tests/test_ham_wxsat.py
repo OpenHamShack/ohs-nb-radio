@@ -348,8 +348,10 @@ class OnTheServer(unittest.TestCase):
         self.assertEqual(s, 200)
         self.assertEqual(set(v), {"station", "tle", "minElevDeg", "passes"})
         self.assertEqual(set(v["tle"]), {"source", "fetchedUtc", "ageDays", "stale"})
+        # "signal": each pass's timeline URL or null (test_ham_wxsat_signal.py).
         self.assertEqual(set(v["passes"][0]), {"id", "sat", "freqHz", "mode", "aos", "tca", "los", "maxElDeg",
-                                               "aosAzDeg", "losAzDeg", "track", "plan", "why", "imageId"})
+                                               "aosAzDeg", "losAzDeg", "track", "plan", "why", "imageId",
+                                               "signal"})
         self.assertEqual(self.req("GET", "/api/wxsat/passes?hours=0", level="view")[0], 400)
         s, st = self.req("GET", "/api/wxsat/status", level="view")
         self.assertEqual(set(st), {"state", "passId", "sat", "freqHz", "az", "el", "snrDb", "lockPct", "lines",

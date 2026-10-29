@@ -2,12 +2,15 @@
 station and records each one as IQ, by itself (Brian, 29/10/2026;
 docs/SERVER-API.md "Weather satellites"): prediction, the plan for each
 pass and the recording here; decoding the recording into pictures after
-LOS, with SatDump, in wxsat_decode.py.
+LOS, with SatDump, in wxsat_decode.py; how strongly each second of a
+pass was heard, live and as a timeline kept after it, in wxsat_signal.py.
 
     ws = radio.wxsat                     # made with the Radio
     ws.tick()                            # the supervisor, ten times a second
-    ws.passes_view(hours)                # GET api/wxsat/passes
-    ws.status_view()                     # GET api/wxsat/status
+    ws.passes_view(hours, past_hours)    # GET api/wxsat/passes
+    ws.status_view()                     # GET api/wxsat/status (snrDb live while recording)
+    ws.signal_view(pass_id)              # GET api/wxsat/passes/<id>/signal (wxsat_signal.py)
+    ws.backfill_signal()                 # startup: a timeline for each recording that has none
     ws.force(pass_id)                    # POST api/wxsat/passes/<id>/record; raises Refused
     ws.skip(pass_id)                     # DELETE api/wxsat/passes/<id>/record
     ws.images_view()                     # GET api/wxsat/images (wxsat_decode.py)
@@ -107,7 +110,7 @@ from ohscore.countries import locator_position
 from ohscore.decoders import Refused, sessions_text
 from ohscore.dsp.multirate import Decimator
 
-from ohsradio import wxsat_decode, wxsat_orbit, wxsat_tle
+from ohsradio import wxsat_decode, wxsat_orbit, wxsat_signal, wxsat_tle
 from ohsradio.i18n import _
 
 log = logging.getLogger("ohsradio.wxsat")
@@ -121,10 +124,16 @@ BY_ID = {s["id"]: s for s in SATELLITES}
 MAX_RATE = 1_000_000.0
 MIN_RATE = 250_000.0               # LRPT's 120 kHz, the Doppler and the decimator's edge
 TRACK_STEP_S = 10.0
-PAST_S = 3600.0                    # how long an ended pass stays in the list
+PAST_HOURS = 24.0                  # how far back GET api/wxsat/passes lists by default (?past=)
+MAX_PAST_HOURS = 720.0             # and at most: 30 days, a fortnight's horizon map with room
+NEAR_PAST_HOURS = 1.0              # what the supervisor looks back over: it only starts and ends passes
 LATE_S = 30.0                      # a pass with less left than this is not started
 RECOMPUTE_S = 600.0                # the predicted list is made again this often
-KEEP_MARKS_S = 7 * 86_400.0
+# A pass's mark (its plan, file, imageId) is what a finished pass is
+# listed from. It used to be kept a week, for the list's last hour; it
+# must now outlast the longest ?past= a client may ask for, or a pass
+# listed yesterday silently drops out of the same request today.
+KEEP_MARKS_S = (MAX_PAST_HOURS / 24.0 + 2.0) * 86_400.0
 MATCH_S = 300.0                    # the same pass, though a newer element set moved its AOS
 # Holds a person made through a client (Server.end_client_holds ends them):
 # the decoder name a DAB station holds under, and the three maps.
@@ -171,6 +180,9 @@ class WxSat:
         # "floorBytes"}, which the pictures obey too (wxsat_decode.py).
         self.disk = None
         self.decoder = wxsat_decode.Decoder(self.dir, self._decoded, disk=lambda: self.disk() if self.disk else None)
+        self.signal_dir = self.dir / "signal"
+        self.signal = wxsat_signal.SignalWorker(self.signal_dir, self._signal_done)
+        self._meter_said = False       # _feed's meter failing: the trace once, then quietly
         self.marks: dict[str, dict] = self._load_marks()
         self._cache: dict | None = None
         self.error: str | None = None
@@ -196,6 +208,10 @@ class WxSat:
             os.replace(tmp, self._marks_path())
         except OSError:
             log.warning("weather satellites: could not keep the pass plans", exc_info=True)
+        try:
+            wxsat_signal.prune(self.signal_dir, now)
+        except OSError:
+            log.warning("weather satellites: could not prune the signal timelines", exc_info=True)
 
     # ------------------------------------------------------------ settings
     def station(self) -> tuple[float, float] | None:
@@ -234,21 +250,29 @@ class WxSat:
     def _sets(self) -> dict[int, dict]:
         return self.tle.elements([s["norad"] for s in SATELLITES], str(self.radio.st.get("wxsatTle", "") or ""))
 
-    def _predict(self, now: float, hours: float) -> tuple[list[dict], dict]:
-        """(passes from PAST_S ago to `hours` ahead, the element sets used),
-        made again when the sets, the station or the window changed, and
-        every RECOMPUTE_S."""
+    def _predict(self, now: float, hours: float,
+                 past_hours: float = NEAR_PAST_HOURS) -> tuple[list[dict], dict]:
+        """(passes from `past_hours` ago to `hours` ahead, the element sets
+        used), made again when the sets, the station or the window changed
+        (a cache covering a wider window serves a narrower one), and every
+        RECOMPUTE_S.
+
+        A pass days ago is propagated from today's element set, which is
+        only good for about a day (wxsat_orbit.py): its track, az and el
+        are an approximation for display. What happened to it - its plan,
+        why, file and pictures - comes from its mark, kept as it was then
+        and never recomputed."""
         stn = self.station()
         sets = self._sets()
         key = (stn, tuple(sorted((n, s["l1"], s["l2"]) for n, s in sets.items())))
         c = self._cache
-        if c is not None and c["key"] == key and c["start"] <= now - PAST_S and c["end"] >= now + hours * 3600 \
-                and now - c["made"] < RECOMPUTE_S:
+        if c is not None and c["key"] == key and c["start"] <= now - past_hours * 3600 \
+                and c["end"] >= now + hours * 3600 and now - c["made"] < RECOMPUTE_S:
             return c["passes"], sets
         out = []
         self.error = None
         if stn is not None:
-            start, end = now - PAST_S, now + max(hours, 48.0) * 3600.0
+            start, end = now - past_hours * 3600.0, now + max(hours, 48.0) * 3600.0
             for sat in SATELLITES:
                 s = sets.get(sat["norad"])
                 if s is None:
@@ -307,9 +331,18 @@ class WxSat:
             return "missed", _("Radio was not running for this pass")
         return "record", None
 
+    def _mark_id(self, p: dict) -> str:
+        """The id pass `p` was recorded under: its mark's key, which a
+        newer element set moving AOS across a minute does not change."""
+        if p["id"] in self.marks:
+            return p["id"]
+        m = self._mark(p)
+        return next((k for k, v in self.marks.items() if v is m), p["id"]) if m is not None else p["id"]
+
     def _pass_view(self, p: dict, now: float) -> dict:
         plan, why = self.plan(p, now)
         m = self._mark(p) or {}
+        sid = self._mark_id(p)
         sat = p["sat"]
         return {"id": p["id"], "sat": sat["name"], "freqHz": sat["freqHz"], "mode": sat["mode"],
                 "aos": _iso(p["aos"]), "tca": _iso(p["tca"]), "los": _iso(p["los"]),
@@ -317,14 +350,19 @@ class WxSat:
                 "track": [{"t": _iso(t), "az": round(az, 1), "el": round(el, 1) + 0.0}     # never "-0.0" at AOS
                           for t, az, el in wxsat_orbit.track(p["orbit"], *self.station(), p["aos"], p["los"],
                                                               TRACK_STEP_S)],
-                "plan": plan, "why": why, "imageId": m.get("imageId")}
+                "plan": plan, "why": why, "imageId": m.get("imageId"),
+                "signal": wxsat_signal.url(sid) if wxsat_signal.has(self.signal_dir, sid) else None}
 
-    def passes_view(self, hours: float = 48.0) -> dict:
+    def passes_view(self, hours: float = 48.0, past_hours: float = PAST_HOURS) -> dict:
+        """GET api/wxsat/passes: every pass in the sky from `past_hours`
+        ago to `hours` ahead - finished ones with what became of them,
+        from the marks, which survive a restart."""
         now = self.clock()
         with self.lock:
-            found, sets = self._predict(now, hours)
+            found, sets = self._predict(now, hours, past_hours)
             stn = self.station()
-            rows = [self._pass_view(p, now) for p in found if p["los"] > now - PAST_S and p["aos"] < now + hours * 3600]
+            rows = [self._pass_view(p, now) for p in found
+                    if p["los"] > now - past_hours * 3600 and p["aos"] < now + hours * 3600]
         return {"station": {"lat": round(stn[0], 5) if stn else None, "lon": round(stn[1], 5) if stn else None},
                 "tle": self.tle.view(sets, now),
                 "minElevDeg": int(self.radio.st.get("wxsatMinElevDeg", 15)),
@@ -549,7 +587,8 @@ class WxSat:
             log.warning("weather satellites: %s not recorded: %s", p["id"], e)
             return
         self.job = {"pass": p, "rec": rec, "dec": Decimator(dec) if dec > 1 else None, "fs": fs, "phase": 0.0,
-                    "freq": freq, "started": self.clock()}
+                    "freq": freq, "started": self.clock(), "outFs": out_fs,
+                    "snrBuf": np.empty(0, np.complex64), "snrDb": None}
         m.update(plan="recording", why=None, file=rec.data_path.name)
         self._save_marks()
         log.info("weather satellites: recording %s on %.3f MHz at %.0f S/s to %s", p["id"], freq / 1e6, out_fs,
@@ -586,6 +625,37 @@ class WxSat:
                 else:
                     self.decoder.submit(job)
             self._save_marks()
+
+    # ------------------------------------------------------------ signal (wxsat_signal.py)
+    def backfill_signal(self) -> None:
+        """Startup (and so once after the upgrade that brought timelines):
+        every pass whose recording is still on disk but has no signal
+        timeline yet gets one, oldest first, queued on the same nice-19
+        worker a just-ended pass uses - one at a time. Safe every startup:
+        a pass that has its JSON, or whose recording is gone, is skipped
+        at the cost of a stat."""
+        with self.lock:
+            stn = self.station()
+            if stn is None:
+                return
+            live = self.job["pass"]["id"] if self.job is not None else None
+            for pid, m in sorted(self.marks.items(), key=lambda kv: float(kv[1].get("los", 0))):
+                if not m.get("file") or pid == live or wxsat_signal.has(self.signal_dir, pid):
+                    continue
+                data = self.radio.recordings_dir() / str(m["file"])
+                if data.is_file():
+                    self.signal.submit({"passId": pid, "data": data, "lat": stn[0], "lon": stn[1]})
+
+    def _signal_done(self, pass_id: str, ok: bool, why: str | None) -> None:
+        """The signal worker's thread: nothing waits for it, as
+        signal_view and the list read the JSON from disk."""
+        if ok:
+            log.info("weather satellites: %s signal timeline made", pass_id)
+        else:
+            log.warning("weather satellites: %s has no signal timeline: %s", pass_id, why)
+
+    def signal_view(self, pass_id: str) -> dict | None:
+        return wxsat_signal.load(self.signal_dir, pass_id)
 
     def _decoded(self, job: dict, plan: str, why: str | None, image_id: str | None) -> None:
         """The decoder's thread: a pass decoded, or why not."""
@@ -632,6 +702,12 @@ class WxSat:
             plan, why = "failed", rec.error or _("Nothing was received")
         m = self._mark_for(job["pass"])
         m.update(plan=plan, why=why, file=rec.data_path.name, seconds=round(rec.seconds, 1))
+        stn = self.station()
+        if plan == "done" and stn is not None:
+            # The timeline first, then the pictures: each on its own
+            # worker, so they run side by side - "first" is the order
+            # asked, not a wait.
+            self.signal.submit({"passId": job["pass"]["id"], "data": rec.data_path, "lat": stn[0], "lon": stn[1]})
         if plan == "done" and self.decoder.available():
             try:
                 self.decoder.submit(self._decode_job(job["pass"]["id"], m, rec.data_path))
@@ -664,6 +740,38 @@ class WxSat:
             return
         dev = float(r.rx_if) + off if getattr(r, "rx_if", None) is not None else job["freq"]
         job["rec"].push(y, (dev, job["freq"]), time.time() - n / fs)
+        self._meter(job, y)
+
+    def _meter(self, job: dict, y: np.ndarray) -> None:
+        """status_view's live snrDb: a second of what was recorded,
+        measured against the satellite's Doppler-shifted frequency
+        (wxsat_signal.measure). Inline on the receive thread because it is
+        cheap - a few ms of FFTs a second, unlike SatDump's decode, which
+        has its own nice-19 thread - and fenced, because a bug here must
+        never stop the recording. A second with nothing to measure leaves
+        the last figure: a client watching a number is better served by
+        the last one known than by one that flickers to null."""
+        try:
+            buf = np.concatenate((job["snrBuf"], y))
+            need = int(job["outFs"])
+            if len(buf) < need:
+                job["snrBuf"] = buf
+                return
+            job["snrBuf"] = buf[need:]
+            stn = self.station()
+            if stn is None:
+                return
+            # The supervisor's clock, which is time.time() but for a test's.
+            off = job["pass"]["orbit"].doppler_hz(self.clock(), stn[0], stn[1], job["freq"])
+            snr, _noise = wxsat_signal.measure(buf[:need], job["outFs"], off)
+            if snr is not None:
+                job["snrDb"] = snr
+        except Exception:  # noqa: BLE001 - the meter must never break the receive path
+            if not self._meter_said:
+                self._meter_said = True
+                log.warning("weather satellites: the live signal meter failed", exc_info=True)
+            else:
+                log.debug("weather satellites: the live signal meter failed", exc_info=True)
 
     # ------------------------------------------------------------ views
     def texts(self, name: str) -> dict:
@@ -677,8 +785,10 @@ class WxSat:
         """GET api/wxsat/status. A pass recording wins; else the pass
         SatDump is decoding (`decoding`, `etaS` null: SatDump says nothing
         while it works that would make one honest); else the next pass.
-        snrDb, lockPct and lines stay null: SatDump's CLI reports them only
-        in its log as it goes, and the pass's result is the picture."""
+        snrDb is the live meter's while a pass records (_meter,
+        wxsat_signal.py), null otherwise. lockPct and lines stay null:
+        SatDump's CLI reports them only in its log as it goes, and the
+        pass's result is the picture."""
         now = self.clock()
         out = {"state": "idle", "passId": None, "sat": None, "freqHz": None, "az": None, "el": None,
                "snrDb": None, "lockPct": None, "lines": None, "etaS": None, "text": _("No pass is planned")}
@@ -690,6 +800,7 @@ class WxSat:
                 az, el = p["orbit"].look(now, *stn)
                 out.update(state="recording", passId=p["id"], sat=p["sat"]["name"], freqHz=p["sat"]["freqHz"],
                            az=round(az, 1), el=round(el, 1), etaS=max(0, round(p["los"] - now)),
+                           snrDb=None if job.get("snrDb") is None else round(job["snrDb"], 1),
                            text=_("Recording {sat} until {los} UTC").format(
                                sat=p["sat"]["name"], los=time.strftime("%H:%M", time.gmtime(p["los"]))))
                 return out

@@ -341,6 +341,7 @@ class Radio(Engine):
         if self.persist:
             self.wxsat.tle.start()
             self.wxsat.resume_decoding()
+            self.wxsat.backfill_signal()        # recordings from before their timelines (wxsat_signal.py)
         self.restart_lock = threading.Lock()
         self.restarting = False
         self.map_tiles = mapdata.TileCache(Path(self.data_dir) / "maptiles",

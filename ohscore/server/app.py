@@ -2002,8 +2002,9 @@ class _Handler(BaseHTTPRequestHandler):
         return w
 
     def get_wxsat_passes(self, who, q):
-        """GET api/wxsat/passes[?hours=48]: the passes in the next `hours`
-        (1-72), each with its plan."""
+        """GET api/wxsat/passes[?hours=48][&past=24]: the passes in the
+        next `hours` (1-72) and the last `past` hours (1-720), each with
+        its plan."""
         w = self._wxsat()
         if w is None:
             return
@@ -2014,7 +2015,28 @@ class _Handler(BaseHTTPRequestHandler):
         if not 1.0 <= hours <= 72.0:
             self._error(400, _("hours must be a number from 1 to 72"), "bad_params")
             return
-        self._send(200, w.passes_view(hours))
+        try:
+            past = float(q.get("past", ["24"])[0])
+        except ValueError:
+            past = -1.0
+        if not 1.0 <= past <= 720.0:
+            self._error(400, _("past must be a number from 1 to 720"), "bad_params")
+            return
+        self._send(200, w.passes_view(hours, past))
+
+    def get_wxsat_signal(self, who, q):
+        """GET api/wxsat/passes/<id>/signal: the pass's signal timeline
+        (ohsradio/wxsat_signal.py); 404 `no_signal` until it is made, or
+        for anything else under passes/."""
+        w = self._wxsat()
+        if w is None:
+            return
+        parts = urlsplit(self.path).path.rstrip("/").split("/")
+        view = w.signal_view(unquote(parts[-2])) if len(parts) >= 2 and parts[-1] == "signal" else None
+        if view is None:
+            self._error(404, _("There is no signal timeline for that pass"), "no_signal")
+            return
+        self._send(200, view)
 
     def get_wxsat_status(self, who, q):
         w = self._wxsat()
@@ -2919,6 +2941,7 @@ PREFIX_ROUTES = {
     ("GET", "/api/map/tiles/"): ("view", _Handler.get_map_tile),
     ("POST", "/api/wxsat/passes/"): ("control", _Handler.post_wxsat_record),
     ("GET", "/api/wxsat/images/"): ("view", _Handler.get_wxsat_image),
+    ("GET", "/api/wxsat/passes/"): ("view", _Handler.get_wxsat_signal),
     ("DELETE", "/api/wxsat/passes/"): ("control", _Handler.delete_wxsat_record),
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
     ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),
