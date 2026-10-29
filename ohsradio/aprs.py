@@ -144,6 +144,24 @@ def station_kind(symbol: str, speed_kmh, weather: bool) -> str:
     return "station"
 
 
+def wind_fixed(text: str, p) -> None:
+    """A positioned weather report's wind speed in mph, as APRS 1.0.1
+    ch. 12 has it (and direwolf reads it, and shack_packet's own
+    format_weather writes it). shack_packet 0.2.0 reads the CSE/SPD place
+    after a weather symbol as a moving station's speed, in knots
+    (aprs._extras), so its wind_kmh is 15 % high; undone here for the
+    uncompressed form until ohs-libs fixes it. An `s` field, which the
+    library reads right, wins there and is left alone here."""
+    pos = p.position
+    if pos is None or pos.compressed or not pos.symbol.endswith("_") or "wind_kmh" not in p.weather:
+        return
+    at = text.find("_")
+    if at < 0 or re.search(r"s\d{3}", text[at + 8:].split(" ")[0]):
+        return
+    mph = round(p.weather["wind_kmh"] / 1.852)
+    p.weather["wind_kmh"] = round(mph * 1.609344, 1)
+
+
 def packet_text(p) -> str:
     """What a packet said, in its sender's words: the status, the message,
     else the comment."""
@@ -218,6 +236,7 @@ class StationTable:
                     self._recent(name, t, raw, text)
                     out["stations"].append(self._bump(o))
             elif packet is not None:
+                wind_fixed(frame.text(), packet)
                 if packet.position is not None:
                     self._position(v, packet, t)
                 elif packet.weather:
