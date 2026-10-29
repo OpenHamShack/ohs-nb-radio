@@ -84,6 +84,8 @@ the desktop apps.
 | `GET api/aprs/messages` | view | Radio only: the APRS messages and bulletins heard (read only: nothing is ever sent) |
 | `GET api/events?kinds=…,aprs` | view | Radio only: each packet heard, each station as it changes, each message, the session; not in the default set |
 | `GET api/map/info`, `GET api/map/land?bbox=`, `GET api/map/tiles/{z}/{x}/{y}.png` | view | Radio only: the map to draw ships on (below, "Map") |
+| `GET api/wxsat/passes[?hours=48]`, `GET api/wxsat/status`, `GET api/wxsat/images` | view | Radio only: weather-satellite passes, their plans and what is being recorded (below, "Weather satellites") |
+| `POST`/`DELETE api/wxsat/passes/{id}/record` | control | Radio only: force or skip one pass |
 | `GET api/local-frequencies?radiusKm=&category=` | view | Radio only: what there is to listen to near the station (below, "Local frequencies") |
 | `POST api/local-frequencies/mine`, `PUT`/`DELETE api/local-frequencies/mine/{id}` | control | Radio only: the operator's own list ("my frequencies") |
 | `POST api/local-frequencies/refresh` | control **and** the administrator flag | Radio only: download newer data (below) |
@@ -2580,6 +2582,186 @@ on the shore (GM1SIM-7) and a weather station at Prestwick (GM2SIM-13).
 Each packet is real AFSK from shack_packet's own modulator on FM, decoded
 exactly as off the air; one a second, round them in turn, so the map fills
 within a quarter of a minute.
+## Weather satellites (Radio)
+
+Meteor-M LRPT passes, predicted and recorded by themselves (Brian,
+29/10/2026). This is the first half of the feature: prediction, a plan for
+each pass, and an IQ recording of each pass recorded. Decoding the
+pictures comes later; until then `api/wxsat/images` is always `[]` and
+nothing sets the `decoding` plan. Code `ohsradio/wxsat.py` (passes, plans,
+recording), `wxsat_orbit.py` (SGP4, the vendored `sgp4` wheel),
+`wxsat_tle.py` (element sets); tests `tests/test_ham_wxsat.py`. Receive
+only: nothing here keys.
+
+| Satellite | id (settings) | Frequency | Mode |
+|---|---|---|---|
+| Meteor-M N2-3 (NORAD 57166) | `meteor-m2-3` | 137.100 MHz | LRPT |
+| Meteor-M N2-4 (NORAD 59051) | `meteor-m2-4` | 137.900 MHz | LRPT |
+
+(WMO OSCAR, 29/10/2026. N2-4 moved between the two while it was
+commissioned in 2024; a move is one line in `wxsat.SATELLITES`.)
+
+**The station** is the `locator` setting (the station profile's), the
+centre of its square on the WGS-84 ellipsoid at height 0. Without a
+locator there are no passes.
+
+### GET api/wxsat/passes[?hours=48] (view)
+
+The passes in the sky at any time from an hour ago to `hours` ahead (1-72;
+`400 bad_params` outside), in order of AOS:
+
+```json
+{"station": {"lat": 55.47917, "lon": -4.54167},
+ "tle": {"source": "celestrak", "fetchedUtc": "2026-10-29T05:30:00Z", "ageDays": 0.68, "stale": false},
+ "minElevDeg": 15,
+ "passes": [{"id": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137100000, "mode": "LRPT",
+             "aos": "2026-10-29T09:19:21Z", "tca": "2026-10-29T09:26:53Z", "los": "2026-10-29T09:34:20Z",
+             "maxElDeg": 41.9, "aosAzDeg": 19.0, "losAzDeg": 175.5,
+             "track": [{"t": "2026-10-29T09:19:21Z", "az": 19.0, "el": 0.0}, "...every 10 s, LOS last..."],
+             "plan": "record", "why": null, "imageId": null}]}
+```
+
+- Times are ISO 8601 UTC. AOS and LOS are the horizon (0°), whatever the
+  minimum: a pass is recorded horizon to horizon. `id` is the satellite's
+  id and its AOS to the minute; a newer element set moving AOS by a few
+  seconds keeps the plan a client gave it.
+- `plan` and `why` (`why` is a translated sentence, or null):
+  - `record` - it will be recorded: automatic recording on, the satellite
+    enabled, `maxElDeg` at least `minElevDeg`; or a client forced it.
+  - `skip-low` - it never rises to `minElevDeg`.
+  - `skip-disabled` - the satellite is switched off, automatic recording
+    is off, or a client skipped this pass; `why` says which. (The agreed
+    plans have no plain "skip", so a skip by hand is this one.)
+  - `skip-busy` - at AOS a person was using the receiver: a DAB station
+    playing, the AIS or ADS-B map open, or someone listening. Left alone;
+    only `POST .../record` takes it from them.
+  - `skip-conflict` - at AOS the receiver was held by something a pass
+    never preempts: transmitting, the transmit lease or automatic transmit,
+    an IQ or audio recording, a recording playing, the band scan,
+    background decoder sessions, the CW skimmer, another pass.
+  - `recording`, then `done` or `failed` (`why` says what went wrong).
+  - `missed` - it was to be recorded and Radio was not running then.
+  - `decoding` - reserved for the decoder.
+- `imageId` is null until the decoder exists.
+- `tle`: where the element sets come from and how old they are (below).
+
+### GET api/wxsat/status (view)
+
+```json
+{"state": "recording", "passId": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137100000,
+ "az": 104.2, "el": 38.7, "snrDb": null, "lockPct": null, "lines": null, "etaS": 412,
+ "text": "Recording Meteor-M N2-3 until 09:34 UTC"}
+```
+
+`state`: `idle` (nothing to record), `waiting` (the next pass to record:
+its id, where the satellite is now, `etaS` to its AOS), `recording` (the
+pass, the satellite's position now, `etaS` to LOS); `decoding` is the
+decoder's. `snrDb`, `lockPct` and `lines` are the decoder's and null for
+now. `text` says it in a sentence (also why there are no passes: no
+locator, or no `sgp4`).
+
+### POST api/wxsat/passes/{id}/record (control)
+
+Force the pass: recorded whatever its plan. One already in the sky starts
+at once. If the receiver is held only by client-scoped holds - a DAB
+station, a listened decoder session, the AIS or ADS-B map - they are ended
+first, the same ending a client's leaving gets ("Client presence" above:
+the server's `end_client_holds`, beside `client_gone`), whoever made them;
+streams stay open and hear silence while the pass records. Answers `200`
+with the pass (`plan` `record`, or `recording` when it started).
+Refusals, `{"error", "code", "why"}` (`why` is the sentence again):
+`404 unknown_pass`; `409 pass_over`; `409 receiver_busy` - a recording, the
+band scan, background decoders, the CW skimmer or another pass has the
+receiver; `409 on_air` - transmitting, the transmit lease or automatic
+transmit armed. None of those is ever preempted.
+
+### DELETE api/wxsat/passes/{id}/record (control)
+
+Skip the pass: `plan` becomes `skip-disabled` ("Skipped by hand"). One
+being recorded stops now and the receiver goes back as it was; nothing
+else is touched. `200` with the pass, `404 unknown_pass`. A later `POST`
+un-skips it.
+
+### GET api/wxsat/images (view)
+
+`[]`, always, until the decoder exists.
+
+### Recording
+
+A pass **holds the receiver** as AIS does: from AOS to LOS `rxOwner` is
+`{"by": "wxsat", "session": "wxsat", "block": "Meteor-M N2-3", "freqHz":
+137100000, ...}`, the dial is on the satellite's nominal frequency, nothing
+at the dial is demodulated, and a tune or key-up is refused `409
+receiver_busy` with "The receiver is recording a Meteor-M N2-3 pass: skip
+the pass to tune or change mode". It changes the antenna to the pass's
+(`wxsatAntenna`, else the input whose label says 2 m - "2 m", "VHF", "dual
+band", a Diamond X-series model - else the operator's own). At LOS, not
+before, the dial, mode, repeater offset and antenna from before are put
+back. The radio is not given back to the station (presence's park) while
+a pass records or is about to rise, and a parked radio is taken back for
+one.
+
+**The file** is the engine's IQ recording format ("Recordings" above):
+SigMF, `ci16_le` (complex int16, "cs16" in SoapySDR's words), in Radio's
+recordings folder, so it is listed by `api/recordings` like any other,
+named `openhamshack-radio-<UTC start>-137.100MHz-Meteor-M-N2-3-LRPT`.
+`core:frequency` is the satellite's nominal frequency, at 0 Hz in the
+file: the device's samples are shifted there (the hardware need not sit
+exactly on it) and **decimated by the whole number that brings the rate
+to 1 MS/s or below** - 800 kS/s from the RSPdx's 2.4 MS/s, 1 MS/s from a
+2 MS/s device. The rate is `core:sample_rate`; read it rather than
+assuming 1 MS/s. **No Doppler correction**: the satellite drifts +-3.4 kHz
+across the pass, well inside the recording, and following it is the
+decoder's job. The global metadata is the engine's (`openhamshack:device`,
+gain, the app and station), `openhamshack:service` names the satellite
+(`{"kind": "wxsat", "mode": "LRPT", "label", "freqHz", "norad", "passId"}`),
+and `openhamshack:wxsat` carries what a decoder needs: `passId`,
+`satellite`, `norad`, `nominalHz`, `aos`, `tca`, `los`, `maxElDeg`, `tle`
+(the three lines it was predicted from), `tleSource`, `deviceRate`,
+`decimation`, `antenna`, `forced`. A pass is 10-15 minutes, about 3 GB
+at 800 kS/s, and it obeys the same disk rules as every recording
+("Recordings": `RECORDINGS_LIMIT_GB`, the free-space floor, the oldest
+pruned first): with the 10 GB default about three passes are kept. One
+that does not fit is cut short and ends `failed`, saying the disk limit
+stopped it; no room at all is `failed` at AOS.
+
+### Element sets (TLE)
+
+Each satellite takes the first source that has it:
+
+1. **`operator`** - the `wxsatTle` setting: two-line element sets, lines
+   separated by `|` (a setting cannot hold a line break), matched by the
+   NORAD number in the lines, never by the name.
+2. **`celestrak`** - Celestrak's GP data for the weather group, one GET a
+   day of `https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle`
+   in the background while `wxsatOnlineTle` is on, saying only
+   "OpenHamShack-Radio/<version>". Kept in the data folder
+   (`wxsat/celestrak.txt`) and used offline. A failure is silent: backoff
+   from an hour doubling to a day, one log line per cause.
+3. **`bundled`** - `ohsradio/data/wxsat/tle.txt`, shipped with Radio, so a
+   station never online still predicts. Between the cache and the bundle
+   the newer epoch wins.
+
+`tle.source` is the operator's if any set in use is theirs, else
+`celestrak` if any is, else `bundled`. **`ageDays` is measured from the
+element sets' epoch** (the oldest in use), not from when they were
+fetched: accuracy decays from the epoch, Celestrak may serve a set days
+old, and a pasted set has no fetch time. **`stale` is true past 14 days.**
+`fetchedUtc` is when the source in use was fetched (Celestrak: the fetch;
+the bundle: the date it was made; the operator's: null).
+
+### Settings
+
+| Setting | Default | |
+|---|---|---|
+| `wxsatAuto` | `true` | record passes by themselves; off, every pass is `skip-disabled` unless forced |
+| `wxsatMinElevDeg` | `15` | 0-90°: lower passes are `skip-low` |
+| `wxsatSatellites` | `"meteor-m2-3,meteor-m2-4"` | the satellites wanted, comma-separated ids; one left out is `skip-disabled` |
+| `wxsatAntenna` | `""` | the input to record on, by its name or the operator's label; empty: the 2 m one by its label |
+| `wxsatOnlineTle` | `true` | fetch Celestrak's element sets once a day |
+| `wxsatTle` | `""` | the operator's own element sets (lines separated by `\|`) |
+
+All are control level, set with `api/set`.
 
 ## Map (Radio)
 
