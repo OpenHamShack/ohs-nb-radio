@@ -47,6 +47,7 @@ from ohsradio.radio import Radio
 
 from listen_helpers import ListeningSim, make_listener
 from test_server import SECRET
+from test_ham_flightroutes import FakeAdsbdb, ROUTE
 
 HOME = 145_500_000.0
 
@@ -455,6 +456,15 @@ class OverTheApi(unittest.TestCase):
         self.audio = StreamAudio(realtime=False)
         self.radio = Radio(cfg, persist=False, data_dir=tmp.name, audio=self.audio,
                            device=ListeningSim(dict(cfg), 2_400_000.0, [air("SIM202", "SIM303")]))
+        # A fake adsbdb (test_ham_flightroutes.py): SIM202's route is
+        # known, SIM303's is not - persist=False starts no fetcher of its
+        # own, so this test starts it and stops it itself.
+        self.adsbdb = FakeAdsbdb()
+        self.adsbdb.routes = {"SIM202": ROUTE}
+        self.addCleanup(self.adsbdb.close)
+        self.radio.flightroutes.base_url = self.adsbdb.base_url()
+        self.radio.flightroutes.start()
+        self.addCleanup(self.radio.flightroutes.stop)
         self.srv = Server(self.radio, ham_server.info("9.9.9"), self.audio, secret=SECRET)
         httpd = self.srv.serve("127.0.0.1", 0)
         self.port = httpd.server_address[1]
@@ -481,17 +491,28 @@ class OverTheApi(unittest.TestCase):
         s, a = self.req("POST", "/api/set", {"vfo": HOME})
         self.assertEqual((s, a["code"]), (409, "receiver_busy"), a)
         self.assertTrue(wait(self.radio, lambda: shown(self.radio, 2)))
+        # SIM202's route is in the fake adsbdb, SIM303's is not: give the
+        # background lookup (started in setUp) time to land both answers
+        # before reading either from the API.
+        self.assertTrue(wait(self.radio, lambda: "SIM202" in self.radio.flightroutes.cache
+                             and "SIM303" in self.radio.flightroutes.cache, 20.0))
         s, a = self.req("GET", "/api/adsb/aircraft", level="view")
         self.assertEqual(s, 200)
         self.assertTrue(a["full"])
         self.assertEqual((a["station"]["locator"], a["keepMinutes"], a["session"]["state"]), ("IO75RL", 5, "running"))
         km = [v["distanceKm"] for v in a["aircraft"]]
         self.assertEqual(km, sorted(km))
+        routes = {v["callsign"]: v["route"] for v in a["aircraft"]}
+        self.assertEqual(routes["SIM202"],
+                         {"from": "GLA", "to": "LGW", "fromName": "Glasgow Airport",
+                          "toName": "London Gatwick Airport", "fromIcao": "EGPF", "toIcao": "EGKK",
+                          "source": "adsbdb"})
+        self.assertIsNone(routes["SIM303"])
         rev = a["rev"]
         s, b = self.req("GET", f"/api/adsb/aircraft?since={rev}", level="view")
         self.assertFalse(b["full"])
         s, v = self.req("GET", "/api/adsb/aircraft/f00202", level="view")
-        self.assertEqual((s, v["callsign"]), (200, "SIM202"))
+        self.assertEqual((s, v["callsign"], v["route"]["from"]), (200, "SIM202", "GLA"))
         self.assertGreaterEqual(len(v["track"]), 1)
         s, e = self.req("GET", "/api/adsb/aircraft/ABCDEF", level="view")
         self.assertEqual((s, e["code"]), (404, "unknown_aircraft"))
