@@ -13,8 +13,10 @@ import ctypes
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import numpy as np
@@ -470,7 +472,19 @@ sdrplay_api_ErrT sdrplay_api_Close(void) { return sdrplay_api_Success; }
 sdrplay_api_ErrT sdrplay_api_ApiVersion(float *v) { *v = SDRPLAY_API_VERSION; return sdrplay_api_Success; }
 sdrplay_api_ErrT sdrplay_api_LockDeviceApi(void) { locked = 1; return sdrplay_api_Success; }
 sdrplay_api_ErrT sdrplay_api_UnlockDeviceApi(void) { locked = 0; return sdrplay_api_Success; }
+/* As the real service does, a device another handle has selected is not
+   listed until it is released: what kept ohs-box's RSP "not found". */
+static int selected;
+int stub_selected(void) { return selected; }
+/* A callback after the stream was stopped, as the real API made one on
+   ohs-box: the last Init's stream and event callbacks, called now. */
+void stub_fire_late(void) {
+    static short z[16]; sdrplay_api_StreamCbParamsT p; memset(&p, 0, sizeof p);
+    if (cbs.StreamACbFn) cbs.StreamACbFn(z, z, &p, 16, 0, 0);
+    if (cbs.EventCbFn) cbs.EventCbFn(sdrplay_api_PowerOverloadChange, sdrplay_api_Tuner_A, 0, 0);
+}
 sdrplay_api_ErrT sdrplay_api_GetDevices(sdrplay_api_DeviceT *d, unsigned int *n, unsigned int max) {
+    if (selected) { *n = 0; return sdrplay_api_Success; }
     *n = 1; memset(d, 0, sizeof *d); snprintf(d->SerNo, 64, "240309F070"); d->hwVer = hwver; d->valid = 1;
     d->dev = &token; return sdrplay_api_Success;
 }
@@ -478,6 +492,7 @@ sdrplay_api_ErrT sdrplay_api_GetDevices(sdrplay_api_DeviceT *d, unsigned int *n,
    at 50 Hz with a -60 dBfs set point (sdrplay_api_tuner.h, _control.h). */
 sdrplay_api_ErrT sdrplay_api_SelectDevice(sdrplay_api_DeviceT *d) {
     if (!locked) return sdrplay_api_Fail;
+    selected = 1;
     memset(&dev, 0, sizeof dev); memset(&chA, 0, sizeof chA); memset(&chB, 0, sizeof chB);
     dev.fsFreq.fsHz = 2e6;
     chA.tunerParams.gain.gRdB = chB.tunerParams.gain.gRdB = 50;
@@ -485,7 +500,7 @@ sdrplay_api_ErrT sdrplay_api_SelectDevice(sdrplay_api_DeviceT *d) {
     chA.ctrlParams.agc.setPoint_dBfs = chB.ctrlParams.agc.setPoint_dBfs = -60;
     return sdrplay_api_Success;
 }
-sdrplay_api_ErrT sdrplay_api_ReleaseDevice(sdrplay_api_DeviceT *d) { return sdrplay_api_Success; }
+sdrplay_api_ErrT sdrplay_api_ReleaseDevice(sdrplay_api_DeviceT *d) { selected = 0; return sdrplay_api_Success; }
 const char *sdrplay_api_GetErrorString(sdrplay_api_ErrT e) { return "stub error"; }
 sdrplay_api_ErrT sdrplay_api_GetDeviceParams(HANDLE h, sdrplay_api_DeviceParamsT **p) { *p = &params; return sdrplay_api_Success; }
 sdrplay_api_ErrT sdrplay_api_Init(HANDLE h, sdrplay_api_CallbackFnsT *c, void *ctx) {
@@ -500,6 +515,7 @@ sdrplay_api_ErrT sdrplay_api_SwapRspDuoActiveTuner(HANDLE h, sdrplay_api_TunerSe
                                                     sdrplay_api_RspDuo_AmPortSelectT p) { return sdrplay_api_Success; }
 """
 
+REPO = Path(__file__).resolve().parent.parent
 SDRPLAY_INCLUDE = os.environ.get("SHACK_SDRPLAY_INCLUDE", "/usr/local/include")
 
 # What SoapySDRPlay3 0.5.2 set for SoapySDR's overall setGain(RX, 0, g)
@@ -700,6 +716,101 @@ class SoapySdrplayGainThroughTheApi(unittest.TestCase):
                              (True, "soapysdrplay3", [0, 27]))
         finally:
             close(r)
+
+
+# Run in a child process, so that a callback into freed memory shows as its
+# exit status rather than ending the suite: open an RSP on the stand-in API,
+# close it, let the collector have the source, then have the API call back.
+LATE_CALLBACK = r"""
+import gc, sys, ctypes
+from unittest import mock
+from ohscore.devices import registry
+ctl = ctypes.CDLL(sys.argv[1])
+with mock.patch("ohscore.devices.sdrsource.soapy_has_driver", lambda d: False):
+    dev = registry.DeviceRegistry().make({"device": "soapy", "sampleRate": 2_400_000,
+                                          "soapyArgs": "driver=sdrplay,rfgain_sel=4"})
+    dev.open()
+    dev.read(4096)
+    dev.close()
+    del dev
+    for _ in range(3):
+        gc.collect()
+    ctl.stub_fire_late()
+print("survived")
+"""
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class SdrplayCloseReopenAndLateCallbacks(unittest.TestCase):
+    """What ended Store Radio beta.17 on ohs-box twice (29/10/2026): the
+    API calling a callback whose source the garbage collector had already
+    freed ("segfault at 10" in _ctypes), and an RSP opened a second time
+    without the first being closed, which then stayed selected - "No
+    SDRplay RSP was found" on every open - until it was collected while
+    still streaming. On the stand-in API, which, like the service, lists no
+    device another handle has selected until it is released."""
+
+    @classmethod
+    def setUpClass(cls):
+        SoapySdrplayGainThroughTheApi.setUpClass.__func__(cls)
+        cls.ctl.stub_selected.restype = ctypes.c_int
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        SoapySdrplayGainThroughTheApi.setUp(self)
+
+    def make(self):
+        from ohscore.devices import registry
+        dev = registry.DeviceRegistry().make({"device": "soapy", "sampleRate": 2_400_000,
+                                              "soapyArgs": "driver=sdrplay,rfgain_sel=4"})
+        self.addCleanup(dev.close)
+        return dev
+
+    def test_the_api_is_handed_callbacks_that_outlive_the_source(self):
+        # The source still keeps them where the device swaps them in
+        # (sdrsource._CallbackRelay); a shack_sdr that moved them would
+        # silently lose the protection, so this says so first.
+        from shack_sdr.sources import SdrplaySource
+        self.assertTrue(hasattr(SdrplaySource(), "_cbs"))
+        r = subprocess.run([sys.executable, "-c", LATE_CALLBACK, self.lib], cwd=REPO,
+                           env={**os.environ, "SHACK_SDRPLAY_LIB": self.lib},
+                           capture_output=True, text=True, timeout=120)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "survived"), r.stderr[-2000:])
+
+    def test_a_late_callback_after_close_reaches_nothing(self):
+        dev = self.make()
+        dev.open()
+        src = dev.src
+        dev.read(4096)
+        dev.close()
+        before = (src._gathered, src._q.qsize(), src.overloads)
+        self.ctl.stub_fire_late()
+        self.assertEqual((src._gathered, src._q.qsize(), src.overloads), before)
+
+    def test_close_releases_the_rsp_and_it_opens_again(self):
+        dev = self.make()
+        for _ in range(3):
+            dev.open()
+            self.assertEqual(self.ctl.stub_selected(), 1)
+            self.assertEqual(len(dev.read(4096)), 4096)
+            dev.close()
+            self.assertEqual(self.ctl.stub_selected(), 0)
+
+    def test_opening_an_open_device_again_closes_the_first_source(self):
+        # Without this the first source was dropped still selected, and
+        # the second open found no RSP at all.
+        dev = self.make()
+        dev.open()
+        first = dev.src
+        dev.open()
+        self.assertIsNot(dev.src, first)
+        self.assertFalse(first.opened)
+        self.assertEqual(len(dev.read(4096)), 4096)
+        dev.close()
+        self.assertEqual(self.ctl.stub_selected(), 0)
 
 
 class StoreClaims(unittest.TestCase):

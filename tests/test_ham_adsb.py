@@ -303,6 +303,46 @@ class Reopening(unittest.TestCase):
         self.assertEqual(len(alive), 1)
         self.assertTrue(wait(r, lambda: r.running and r.rx_samples > 0, 10))
 
+    def test_a_start_from_elsewhere_during_a_reopen_waits_for_it(self):
+        # ohs-box, beta.17, 29/10/2026: the server's 10 s retry (MainThread,
+        # server/run.py) found running False between the reopen's stop and
+        # start and started the radio too. The two start()s each made a
+        # device, the reopen carried on with the other's, and the RSP it had
+        # opened stayed open with nobody holding it. Here that retry comes
+        # while the 6 MS/s open is under way.
+        r = self.radio()
+        real_open, real_close = ListeningSim.open, ListeningSim.close
+        opened, gate, opening = [], threading.Event(), threading.Event()
+
+        def open_(dev):
+            opened.append(dev)
+            if dev.fs == 6_000_000.0 and not gate.is_set():
+                opening.set()
+                gate.wait(20)
+            return real_open(dev)
+
+        def close_(dev):
+            while dev in opened:
+                opened.remove(dev)
+            return real_close(dev)
+
+        with mock.patch.object(ListeningSim, "open", open_), mock.patch.object(ListeningSim, "close", close_):
+            joined = threading.Thread(target=r.adsb.join, args=("tv-1",), daemon=True)
+            joined.start()
+            self.assertTrue(opening.wait(20))
+            retry = threading.Thread(target=r.start, daemon=True)
+            retry.start()
+            retry.join(1.0)
+            self.assertTrue(retry.is_alive(), "a start went ahead in the middle of the reopen")
+            gate.set()
+            joined.join(30)
+            retry.join(30)
+            self.assertFalse(retry.is_alive())
+            # One device open, the one the radio runs on, at ADS-B's rate.
+            self.assertEqual((r.running, r.geo.fs, r.adsb.state), (True, 6_000_000.0, "running"))
+            self.assertEqual(opened, [r.dev])
+            self.assertTrue(wait(r, lambda: r.rx_samples > 0, 10))
+
     def test_a_read_on_a_closed_device_is_a_sentence_not_a_crash(self):
         dev = SdrplayDevice({}, 2_400_000.0)
         with self.assertRaises(DeviceError) as e:

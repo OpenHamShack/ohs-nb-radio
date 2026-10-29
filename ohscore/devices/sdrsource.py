@@ -153,7 +153,13 @@ class SourceDevice(Device):
             raise DeviceError(sdr.why())
         from shack_sdr.sources import SdrError
         self._error = SdrError
+        if self.src is not None:
+            # Opened twice without a close: the first source would be dropped
+            # still open, holding the receiver from every later open (the
+            # orphaned RSP of 29/10/2026, Engine.run_lock).
+            self.close()
         self.src = self._make()
+        self._prepare(self.src)
         try:
             self.src.open()
             self._apply_saved_antenna()
@@ -164,6 +170,7 @@ class SourceDevice(Device):
                     src.close()
                 except Exception:  # noqa: BLE001 - tidying up a device that never finished opening
                     pass
+                self._retired(src)
             raise DeviceError(_sentence(self.source, e.reason, e.detail)) from e
 
     def _saved_antenna(self) -> str:
@@ -239,6 +246,12 @@ class SourceDevice(Device):
         out, self.left = self.left[:n], self.left[n:]
         return out
 
+    def _prepare(self, src) -> None:
+        """A source just made, before its open: nothing to do for most."""
+
+    def _retired(self, src) -> None:
+        """A source just closed (or that failed to open)."""
+
     def close(self) -> None:
         src, self.src = self.src, None
         if src is not None:
@@ -246,6 +259,7 @@ class SourceDevice(Device):
                 src.close()
             except Exception:  # noqa: BLE001 - a radio already gone is closed
                 pass
+            self._retired(src)
 
     def status(self) -> dict:
         st = {"kind": self.kind, "fs": self.fs, "rxLo": self.rx_if, "tx": "receive only", "lost": self.lost}
@@ -270,6 +284,49 @@ class RtlSdrDevice(SourceDevice):
         return RtlSdrSource(self.rx_if or 145_000_000.0, self.fs, gain, serial=serial, search=_search())
 
 
+class _CallbackRelay:
+    """The three callbacks SDRplay's API is handed at Init, made here and
+    kept for the life of the process, passing each call on to the source
+    while it is open and dropping it once it is closed.
+
+    Why: the API calls back on its own thread through plain function
+    pointers, and a ctypes callback is only valid while its Python object
+    lives. shack_sdr's SdrplaySource makes its callbacks from its own bound
+    methods, so they die with the source, and a source is a reference
+    cycle, freed whenever the garbage collector next runs. Store Radio
+    beta.17 died in _ctypes twice on ohs-box (29/10/2026, "segfault at 10":
+    a callback cleared by the collector, its converters gone, called from
+    C): at 04:59:49, 90 ms after ADS-B closed the RSP at 2.4 MS/s and
+    opened it at 6, with the closed source just collected, and at 05:08:05,
+    when the RSP that a racing start had left open (Engine.run_lock) was
+    collected while it still streamed. SoapySDRPlay3 hands the API static
+    C functions and a context, which never go away; these relays are the
+    same thing in Python. One per open, a few hundred bytes, never freed.
+
+    This belongs in shack_sdr itself (SdrplaySource building its callbacks
+    this way); until it is, the device swaps them in before the source
+    opens (`SdrplayDevice._prepare`), which only works while the source
+    keeps them in `_cbs` - test_sdr_receivers checks that it does."""
+
+    kept: list = []
+
+    def __init__(self, src, mod):
+        self.target = src
+        self.cbs = mod.CallbackFnsT(mod.STREAM_CB(self._stream), mod.STREAM_CB(self._stream),
+                                    mod.EVENT_CB(self._event))
+        _CallbackRelay.kept.append(self)
+
+    def _stream(self, xi, xq, params, n, reset, ctx) -> None:
+        src = self.target
+        if src is not None:
+            src._on_stream(xi, xq, params, n, reset, ctx)
+
+    def _event(self, event, tuner, params, ctx) -> None:
+        src = self.target
+        if src is not None:
+            src._on_event(event, tuner, params, ctx)
+
+
 class SdrplayDevice(SourceDevice):
     kind = source = "sdrplay"
     # 2.4 MS/s is the operator's (Settings offers no other). 6 MS/s only
@@ -291,6 +348,21 @@ class SdrplayDevice(SourceDevice):
         # (the engine's reconnect only re-tunes). None: SDRplay's default,
         # off, until Radio first decides.
         self.notch_want: dict[str, bool] = {}
+
+    def _prepare(self, src) -> None:
+        # The API gets callbacks that outlive the source (_CallbackRelay).
+        from shack_sdr.sources import sdrplay as mod
+        if not hasattr(src, "_cbs"):
+            return              # a shack_sdr that does this itself (test_sdr_receivers notices)
+        relay = _CallbackRelay(src, mod)
+        src._cbs = relay.cbs
+        src._ohs_relay = relay
+
+    def _retired(self, src) -> None:
+        # Closed: anything the API still calls back with goes nowhere.
+        relay = getattr(src, "_ohs_relay", None)
+        if relay is not None:
+            relay.target = None
 
     def _notch_kw(self) -> dict:
         # Only what has been decided: left out is the source's None, SDRplay's

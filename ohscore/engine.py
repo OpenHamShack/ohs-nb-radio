@@ -545,6 +545,18 @@ class Engine(metaclass=_EngineType):
         self.threads: list[threading.Thread] = []
         self.running = False
         self.stop_ev = threading.Event()
+        # One start or stop at a time, and a reopen (Radio.restart_at) holds
+        # it across both. Without it the server's 10 s retry (server/run.py)
+        # saw running False in the gap between a reopen's stop and start
+        # and started the radio too: two start()s each made a device and
+        # assigned self.dev, the reopen's thread carried on with the other's
+        # failed one, and the device it had opened was left open with
+        # nobody holding it. On ohs-box (beta.17, 29/10/2026) that RSP stayed
+        # streaming, so every later open found "No SDRplay RSP", until the
+        # garbage collector freed its ctypes callbacks under the API's
+        # thread and the process died in _ctypes. Re-entrant, because
+        # restart_at holds it while it calls stop() and start().
+        self.run_lock = threading.RLock()
         self.pending: dict = {}
         # Unsaved operator state is written by its own saver thread
         # (_saver_loop), debounced: SAVE_QUIET_S after the last change of a
@@ -972,6 +984,10 @@ class Engine(metaclass=_EngineType):
 
     # --------------------------------------------------------------- lifecycle
     def start(self) -> None:
+        with self.run_lock:
+            self._start_run()
+
+    def _start_run(self) -> None:
         if self.running:
             return
         # A new event for each run, never the last one cleared: a thread of
@@ -1158,6 +1174,10 @@ class Engine(metaclass=_EngineType):
         return {}
 
     def stop(self) -> None:
+        with self.run_lock:
+            self._stop_run()
+
+    def _stop_run(self) -> None:
         if not self.running:
             # Changes made while stopped (or while the radio would not open)
             # have no supervisor to write them: written here, on the way out.
@@ -1782,7 +1802,17 @@ class Engine(metaclass=_EngineType):
         self._unkey(f"Unkeyed: the {self.cfg['device']} stopped responding ({e})", "error", "device lost")
         self._status(error=f"Device problem: {e}", running=False)
         while not ev.wait(2.0):
+            # Never while a start or stop is under way, and only for this
+            # run: a reconnect that reopened self.dev after stop() had closed
+            # it, or once start() had swapped it, would leave a device open
+            # that nothing will close (run_lock's comment). Not waited for:
+            # stop() holds the lock while it joins this thread, and the next
+            # pass sees its event set.
+            if not self.run_lock.acquire(blocking=False):
+                continue
             try:
+                if ev.is_set():
+                    return
                 self.dev.close()
                 self.dev.open()
                 self.dev.set_rx_if(self.rx_if)
@@ -1792,6 +1822,8 @@ class Engine(metaclass=_EngineType):
                 return
             except Exception as e2:  # noqa: BLE001
                 self._status(error=f"Device problem: {e2}")
+            finally:
+                self.run_lock.release()
 
     def _rx_block(self, x: np.ndarray):
         if self.reconf:

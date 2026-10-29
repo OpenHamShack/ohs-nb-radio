@@ -1073,7 +1073,9 @@ class Radio(Engine):
         radio's own threads: stop() joins them. If the device will not open
         at `fs`, it is opened at the operator's rate again and the
         DeviceError raised."""
-        with self.restart_lock:
+        # run_lock across the stop and every retried start, so nothing else
+        # can start the radio in between (Engine.run_lock says what did).
+        with self.restart_lock, self.run_lock:
             self.restarting = True
             try:
                 self.rate_override = fs
