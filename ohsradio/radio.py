@@ -331,6 +331,7 @@ class Radio(Engine):
         self.wxsat = WxSat(self, fetch=wxsat_tle.default_fetch if self.persist else None)
         if self.persist:
             self.wxsat.tle.start()
+            self.wxsat.resume_decoding()
         self.restart_lock = threading.Lock()
         self.restarting = False
         self.map_tiles = mapdata.TileCache(Path(self.data_dir) / "maptiles",

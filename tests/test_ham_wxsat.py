@@ -311,6 +311,9 @@ class OnTheServer(unittest.TestCase):
                                                          quick_fleet()])
         self.radio = Radio(cfg, persist=False, data_dir=tmp.name, audio=self.audio, device=self.dev)
         self.clock = fix(self.radio, self.dir, BEFORE)
+        # No SatDump, whatever this machine has: a pass ends at `done`, as
+        # these tests are about the recording (test_ham_wxsat_decode.py decodes).
+        self.radio.wxsat.decoder.binary = ""
         self.srv = Server(self.radio, ham_server.info("9.9.9"), self.audio, secret=SECRET)
         httpd = self.srv.serve("127.0.0.1", 0)
         self.port = httpd.server_address[1]

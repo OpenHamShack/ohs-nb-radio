@@ -1,8 +1,8 @@
 """Weather satellites: Radio predicts the Meteor-M LRPT passes over the
 station and records each one as IQ, by itself (Brian, 29/10/2026;
-docs/SERVER-API.md "Weather satellites"). Decoding the pictures is a
-later feature; this is the first half - prediction, the plan for each
-pass, and the recording.
+docs/SERVER-API.md "Weather satellites"): prediction, the plan for each
+pass and the recording here; decoding the recording into pictures after
+LOS, with SatDump, in wxsat_decode.py.
 
     ws = radio.wxsat                     # made with the Radio
     ws.tick()                            # the supervisor, ten times a second
@@ -10,6 +10,9 @@ pass, and the recording.
     ws.status_view()                     # GET api/wxsat/status
     ws.force(pass_id)                    # POST api/wxsat/passes/<id>/record; raises Refused
     ws.skip(pass_id)                     # DELETE api/wxsat/passes/<id>/record
+    ws.images_view()                     # GET api/wxsat/images (wxsat_decode.py)
+    ws.composite_view(kind, hours)       # GET api/wxsat/composite
+    ws.image_file(id, product, thumb)    # GET api/wxsat/images/<id>/<product>.jpg
 
 **The satellites** (SATELLITES): Meteor-M N2-3 on 137.100 MHz and N2-4 on
 137.900 MHz, LRPT, as WMO OSCAR lists them on 29/10/2026 (N2-4 moved
@@ -32,7 +35,12 @@ from the `locator` setting (the station profile's), as AIS measures from.
 - `skip-busy` / `skip-conflict` - decided at AOS (below), and kept.
 - `recording`, then `done` or `failed`; `missed` for a pass that should have
   been recorded and was not (Radio not running then).
-- `decoding` is the decoder's, later; nothing sets it yet.
+- `decoding` - recorded, and SatDump is decoding it or it waits its turn
+  (wxsat_decode.py, one pass at a time); then `done` with its `imageId`,
+  or `failed` with why (no lock, too short, SatDump's own failure). A
+  form without SatDump (the desktop) leaves a recorded pass `done` with no
+  imageId, as before the decoder existed. A Radio restarted while a pass
+  was `decoding` decodes it again (resume_decoding).
 
 **At AOS - who has the receiver.** A pass is station-scoped work, like a
 scheduled recording or the nightly band scan, so it never takes the
@@ -99,7 +107,7 @@ from ohscore.countries import locator_position
 from ohscore.decoders import Refused, sessions_text
 from ohscore.dsp.multirate import Decimator
 
-from ohsradio import wxsat_orbit, wxsat_tle
+from ohsradio import wxsat_decode, wxsat_orbit, wxsat_tle
 from ohsradio.i18n import _
 
 log = logging.getLogger("ohsradio.wxsat")
@@ -121,7 +129,7 @@ MATCH_S = 300.0                    # the same pass, though a newer element set m
 # Holds a person made through a client (Server.end_client_holds ends them):
 # the decoder name a DAB station holds under, and the three maps.
 CLIENT_SCOPED = ("dab", "ais", "adsb", "aprs")
-LIVE = ("recording", "done", "failed", "missed", "skip-busy", "skip-conflict")
+LIVE = ("recording", "decoding", "done", "failed", "missed", "skip-busy", "skip-conflict")
 # A 2 m antenna's label, for antenna(): "2 m", "2m", "VHF", a 2 m or 137
 # MHz frequency, a dual-band, or a Diamond X-series vertical's model number
 # (X30 ... X7000: every one is 2 m and 70 cm). Matched case-blind.
@@ -135,6 +143,8 @@ def _iso(t: float | None) -> str | None:
 class WxSat:
     """The passes, their plans and the recording (module docstring). `clock`
     is Unix time (a test's fake clock)."""
+    THUMB_W = wxsat_decode.THUMB_W
+    PROJECTED_KINDS = wxsat_decode.PROJECTED_KINDS
 
     def __init__(self, radio, clock=time.time, fetch=None, folder: Path | None = None):
         self.radio = radio
@@ -156,6 +166,10 @@ class WxSat:
         # which makes room by pruning the oldest first), raising with the
         # sentence when there is none. None: only the pass's length limits it.
         self.room = None
+        # Set by the server: the recordings' {"limitBytes", "freeBytes",
+        # "floorBytes"}, which the pictures obey too (wxsat_decode.py).
+        self.disk = None
+        self.decoder = wxsat_decode.Decoder(self.dir, self._decoded, disk=lambda: self.disk() if self.disk else None)
         self.marks: dict[str, dict] = self._load_marks()
         self._cache: dict | None = None
         self.error: str | None = None
@@ -540,6 +554,60 @@ class WxSat:
         log.info("weather satellites: recording %s on %.3f MHz at %.0f S/s to %s", p["id"], freq / 1e6, out_fs,
                  rec.data_path.name)
 
+    # ------------------------------------------------------------ decoding (wxsat_decode.py)
+    def _decode_job(self, pass_id: str, m: dict, data: Path) -> dict:
+        """What the decoder needs, from the recording's own metadata (the
+        rate it was made at, the element set the pass was predicted from)
+        so a pass resumed after a restart is decoded exactly as it would
+        have been."""
+        meta = json.loads(sigmf.paths(data)[1].read_text(encoding="utf-8"))["global"]
+        wx = meta.get("openhamshack:wxsat") or {}
+        return {"passId": pass_id, "sat": wx.get("satellite") or BY_ID.get(m.get("sat"), {}).get("name", ""),
+                "aos": wx.get("aos") or _iso(m.get("aos")), "maxElDeg": round(float(wx.get("maxElDeg") or 0.0), 1),
+                "data": str(data), "rate": float(meta["core:sample_rate"]), "tle": list(wx.get("tle") or [])}
+
+    def resume_decoding(self) -> None:
+        """Radio started: decode again every pass left `decoding` when it
+        last stopped, failed with why when its recording is gone."""
+        with self.lock:
+            for pid, m in sorted(self.marks.items(), key=lambda kv: float(kv[1].get("los", 0))):
+                if m.get("plan") != "decoding":
+                    continue
+                data = self.radio.recordings_dir() / str(m.get("file") or "")
+                try:
+                    job = self._decode_job(pid, m, data) if m.get("file") and data.is_file() else None
+                except (OSError, ValueError, KeyError):
+                    job = None
+                if job is None:
+                    m.update(plan="failed", why=_("The recording was deleted before it could be decoded"))
+                elif not self.decoder.available():
+                    m.update(plan="done", why=None)
+                else:
+                    self.decoder.submit(job)
+            self._save_marks()
+
+    def _decoded(self, job: dict, plan: str, why: str | None, image_id: str | None) -> None:
+        """The decoder's thread: a pass decoded, or why not."""
+        with self.lock:
+            m = self.marks.get(job["passId"])
+            if m is None:           # kept a week: only a decode a week late finds none
+                return
+            m.update(plan=plan, why=why)
+            if image_id:
+                m["imageId"] = image_id
+            self._save_marks()
+        log.info("weather satellites: %s decoded: %s (%s)", job["passId"], plan, why or image_id)
+
+    def images_view(self) -> list[dict]:
+        return self.decoder.images.listing()
+
+    def composite_view(self, kind: str, hours: float) -> dict:
+        since = _iso(self.clock() - hours * 3600.0)
+        return {"frames": self.decoder.images.composite(kind, since)}
+
+    def image_file(self, image_id: str, product: str, thumb: bool) -> bytes | None:
+        return self.decoder.images.file(image_id, product, thumb)
+
     def radio_stopped(self) -> None:
         """The radio is stopping: a pass being recorded ends here, with the
         receiver given back while the radio still runs (Radio.stop)."""
@@ -563,6 +631,9 @@ class WxSat:
             plan, why = "failed", rec.error or _("Nothing was received")
         m = self._mark_for(job["pass"])
         m.update(plan=plan, why=why, file=rec.data_path.name, seconds=round(rec.seconds, 1))
+        if plan == "done" and self.decoder.available():
+            m["plan"] = "decoding"
+            self.decoder.submit(self._decode_job(job["pass"]["id"], m, rec.data_path))
         self._save_marks()
         log.info("weather satellites: %s %s (%s): %.0f s in %s", job["pass"]["id"], plan, why or "-", rec.seconds,
                  rec.data_path.name)
@@ -598,8 +669,11 @@ class WxSat:
                 "busy": _("A {sat} pass has the receiver: skip it first").format(sat=name)}
 
     def status_view(self) -> dict:
-        """GET api/wxsat/status. Fields the decoder will fill (snrDb,
-        lockPct, lines) are null until it exists."""
+        """GET api/wxsat/status. A pass recording wins; else the pass
+        SatDump is decoding (`decoding`, `etaS` null: SatDump says nothing
+        while it works that would make one honest); else the next pass.
+        snrDb, lockPct and lines stay null: SatDump's CLI reports them only
+        in its log as it goes, and the pass's result is the picture."""
         now = self.clock()
         out = {"state": "idle", "passId": None, "sat": None, "freqHz": None, "az": None, "el": None,
                "snrDb": None, "lockPct": None, "lines": None, "etaS": None, "text": _("No pass is planned")}
@@ -613,6 +687,13 @@ class WxSat:
                            az=round(az, 1), el=round(el, 1), etaS=max(0, round(p["los"] - now)),
                            text=_("Recording {sat} until {los} UTC").format(
                                sat=p["sat"]["name"], los=time.strftime("%H:%M", time.gmtime(p["los"]))))
+                return out
+            cur = self.decoder.current
+            if cur is not None:
+                out.update(state="decoding", passId=cur["passId"], sat=cur["sat"],
+                           freqHz=next((s["freqHz"] for s in SATELLITES if s["name"] == cur["sat"]), None),
+                           text=_("Decoding the {sat} pass of {aos} UTC").format(
+                               sat=cur["sat"], aos=str(cur["aos"])[11:16]))
                 return out
             if self.error:
                 out["text"] = _("Passes cannot be predicted: {error}").format(error=self.error)

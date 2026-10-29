@@ -284,6 +284,9 @@ class Server:
             rec = getattr(self.recordings, "rec", None)
             if rec is not None:
                 wx.room = lambda: rec.prepare("iq")["max_bytes"]
+                # The pictures obey the recordings' limit and floor too.
+                wx.disk = lambda: {"limitBytes": rec.store.limit_bytes, "freeBytes": rec.store.free(),
+                                   "floorBytes": rec.store.floor_bytes}
 
     def _scan_busy(self) -> str:
         """The band scan's reasons to wait that only the server knows."""
@@ -1939,10 +1942,47 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, w.status_view())
 
     def get_wxsat_images(self, who, q):
-        """GET api/wxsat/images: the decoded pictures. None yet: decoding is
-        the feature after this one, and the list's shape is its."""
-        if self._wxsat() is not None:
-            self._send(200, [])
+        """GET api/wxsat/images: every decoded pass's pictures, newest
+        first, with relative URLs (ohsradio/wxsat_decode.py)."""
+        w = self._wxsat()
+        if w is not None:
+            self._send(200, w.images_view())
+
+    def get_wxsat_image(self, who, q):
+        """GET api/wxsat/images/<id>/<product>.jpg[?w=400]: one picture;
+        `w` up to 400 gives its 400 px-wide thumbnail. 404 `no_image` for
+        anything not in the list, a path included."""
+        w = self._wxsat()
+        if w is None:
+            return
+        parts = urlsplit(self.path).path.split("/")
+        data = None
+        if len(parts) >= 2 and parts[-1].endswith(".jpg"):
+            try:
+                width = int(q.get("w", ["0"])[0] or 0)
+            except ValueError:
+                width = 0
+            data = w.image_file(unquote(parts[-2]), unquote(parts[-1])[:-4], 0 < width <= w.THUMB_W)
+        if data is None:
+            self._error(404, _("There is no such weather satellite picture"), "no_image")
+            return
+        self._send(200, data, "image/jpeg", {"Cache-Control": "max-age=86400"})
+
+    def get_wxsat_composite(self, who, q):
+        """GET api/wxsat/composite?product=rgb&hours=24: the projected
+        pictures of one kind, oldest first, to lay over a map."""
+        w = self._wxsat()
+        if w is None:
+            return
+        kind = q.get("product", ["rgb"])[0]
+        try:
+            hours = float(q.get("hours", ["24"])[0])
+        except ValueError:
+            hours = -1.0
+        if kind not in w.PROJECTED_KINDS or not 1.0 <= hours <= 168.0:
+            self._error(400, _("product must be rgb or ir, and hours a number from 1 to 168"), "bad_params")
+            return
+        self._send(200, w.composite_view(kind, hours))
 
     def _wxsat_pass(self, act):
         """POST or DELETE api/wxsat/passes/<id>/record."""
@@ -2761,6 +2801,7 @@ ROUTES = {
     ("GET", "/api/wxsat/passes"): ("view", _Handler.get_wxsat_passes),
     ("GET", "/api/wxsat/status"): ("view", _Handler.get_wxsat_status),
     ("GET", "/api/wxsat/images"): ("view", _Handler.get_wxsat_images),
+    ("GET", "/api/wxsat/composite"): ("view", _Handler.get_wxsat_composite),
     ("GET", "/api/map/info"): ("view", _Handler.get_map_info),
     ("GET", "/api/map/land"): ("view", _Handler.get_map_land),
     ("GET", "/ui/v1/app"): ("view", _Handler.get_ui_app),
@@ -2787,6 +2828,7 @@ PREFIX_ROUTES = {
     ("GET", "/api/aprs/stations/"): ("view", _Handler.get_aprs_station),
     ("GET", "/api/map/tiles/"): ("view", _Handler.get_map_tile),
     ("POST", "/api/wxsat/passes/"): ("control", _Handler.post_wxsat_record),
+    ("GET", "/api/wxsat/images/"): ("view", _Handler.get_wxsat_image),
     ("DELETE", "/api/wxsat/passes/"): ("control", _Handler.delete_wxsat_record),
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
     ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),
