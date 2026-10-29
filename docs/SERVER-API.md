@@ -79,6 +79,10 @@ the desktop apps.
 | `GET api/ais/session`, `POST api/ais/session {"client"}`, `DELETE api/ais/session?client=\|all=1` | view, control, control | Radio only: the AIS session a ship map keeps alive (below, "AIS") |
 | `GET api/ais/vessels[?since=rev]`, `GET api/ais/vessels/{mmsi}` | view | Radio only: the vessel table, and one vessel with its track |
 | `GET api/events?kinds=…,ais` | view | Radio only: each AIS message's sentences, each vessel as it changes, the session; not in the default set |
+| `GET api/aprs/session`, `POST api/aprs/session {"client"}`, `DELETE api/aprs/session?client=\|all=1` | view, control, control | Radio only: the APRS session a station map keeps alive (below, "APRS"); receive only |
+| `GET api/aprs/stations[?since=rev][&sinceS=seconds]`, `GET api/aprs/stations/{call}` | view | Radio only: the APRS stations heard in the last 24 hours, and one with its track and recent packets |
+| `GET api/aprs/messages` | view | Radio only: the APRS messages and bulletins heard (read only: nothing is ever sent) |
+| `GET api/events?kinds=…,aprs` | view | Radio only: each packet heard, each station as it changes, each message, the session; not in the default set |
 | `GET api/map/info`, `GET api/map/land?bbox=`, `GET api/map/tiles/{z}/{x}/{y}.png` | view | Radio only: the map to draw ships on (below, "Map") |
 | `GET api/local-frequencies?radiusKm=&category=` | view | Radio only: what there is to listen to near the station (below, "Local frequencies") |
 | `POST api/local-frequencies/mine`, `PUT`/`DELETE api/local-frequencies/mine/{id}` | control | Radio only: the operator's own list ("my frequencies") |
@@ -956,6 +960,7 @@ where it makes a hold:
 | a DAB station | `"client"` in `POST api/decoders/sessions` (a start, `replace` too) |
 | listening to a session | `"client"` in `POST api/decoders/sessions/{id}/listen` |
 | the ship and aircraft maps | `"client"` in `POST api/ais/session` / `api/adsb/session`, as before; `"ais"` / `"adsb"` in its presence holds renews them without renewing the session |
+| the APRS station map | `"client"` in `POST api/aprs/session`; `"aprs"` in its presence holds renews it without renewing the session |
 | receive audio, spectrum/1 and overlay/1, `api/events` | `?client=<id>` on `api/audio/rx`, `api/spectrum/v1`, `api/events` |
 
 All optional and backward compatible: a hold made without an id, or by a
@@ -970,7 +975,7 @@ the CW skimmer, recordings, the nightly band scan.
 2. a DAB station or listen it was the **last** client to ask for ends at
    once - no linger (Brian, 28/10/2026) - the receiver back on the dial,
    mode and repeater offset from before (`rxOwner` `{}`), as a stop does;
-   it leaves the AIS/ADS-B session, which ends at once if it was the last;
+   it leaves the AIS/ADS-B/APRS session, which ends at once if it was the last;
 3. if the radio is then held for nothing - no client's stream or socket,
    no held receiver, no decoder session, skimmer, recording or scan, not
    on the air, no transmit lease, Enable TX not armed - Radio **gives it
@@ -2427,6 +2432,154 @@ the map with the radio on the simulator and they appear within seconds.
 
 **Not done:** MLAT, ACARS and VDL2; Comm-B contents (an aircraft's
 selected altitude, heading and so on, in DF20/21).
+
+## APRS (Radio)
+
+APRS stations on a map (29/10/2026). Radio decodes APRS on 144.800 MHz -
+1200 baud AFSK on FM, the UK and European channel - **only while a client
+has the APRS map open**, keeps a table of every station, object and item
+heard and every message, and serves it. Code `ohsradio/aprs.py` (and
+shack_packet's SDR monitor and APRS parser, vendored from ohs-libs);
+tests `tests/test_ham_aprs.py`. **Receive only**: nothing here transmits,
+digipeats or acknowledges a message, and there is no route that sends.
+
+**The session** is AIS's, route for route: `POST api/aprs/session
+{"client": "<id>"[, "dropSessions": true]}` (control) when the map opens and
+again at least every `leaseS` seconds (30; every 10 s is right), `DELETE
+api/aprs/session?client=<id>` when it closes, `DELETE api/aprs/session?all=1`
+(control) to end it at once whoever has it open. It ends **at once** when
+the last client goes (`lingerS` 0, CLIENT-UI-PLAN 7.3) and the receiver
+goes back exactly as it was: dial, mode, repeater offset and centre. A
+client with client presence and `"aprs"` in its holds renews the lease
+through presence, and its presence going ends its share at once.
+
+While it runs APRS **holds the receiver**: `rxOwner` is `{"by": "aprs",
+"session": "aprs", "block": "APRS", "freqHz": 144800000, "prior": {...},
+"text": "..."}`, the dial reads 144.800 MHz in FM, and the receiver's
+centre is 144.825 MHz (`centreHz`), 25 kHz above the channel so its own
+DC spike sits on no station. Nothing at the dial is demodulated (silence
+plays): the channel is cut from the receiver's IQ. A tune or a key-up is
+refused `409 receiver_busy`: "The receiver is listening to APRS on 144.800
+MHz for the station map: close the map, or stop APRS, to tune or change
+mode". Only one thing holds the receiver at a time, so APRS, AIS, ADS-B
+and a DAB station refuse one another with the holder's sentence ("APRS
+has the receiver for the station map: stop APRS first"). The operator's
+gain stands, as on 2 m.
+
+Every answer of the session routes is the session view (also `aprs` in
+`api/state` and `api/status`, and `session` items on the feed):
+
+```json
+{"state": "running", "why": null, "text": "Listening to APRS on 144.800 MHz",
+ "clients": 1, "startedAt": "2026-10-29T06:20:31Z", "endsInS": null,
+ "freqHz": 144800000.0, "centreHz": 144825000.0, "leaseS": 30.0, "lingerS": 0.0, "keepS": 86400.0,
+ "stations": 6, "rev": 412, "frames": 73, "packets": 73, "dropped": 0}
+```
+
+- `state`, `why`, `text`, `endsInS`, `clients` as AIS's; `why` (idle)
+  `idle` (nobody had the map open), `stopped`, `radio_stopped`, `lost`.
+  `frames`: AX.25 frames decoded this session (good FCS); `packets`: those
+  that were APRS; `dropped`: receiver blocks the decoder could not keep up
+  with (a busy controller; each loses up to a block of air).
+- **Refusals** (`{"error", "code"}`): `400 bad_client`; `409 span_pinned`
+  with `sessions` (again with `"dropSessions": true` to stop them); `409
+  receiver_busy` (DAB, AIS or ADS-B has the receiver); `409 on_air`
+  (transmitting, or automatic transmit armed); `409 decoder_unavailable`
+  (no shack_packet); `409 rate_too_low` (a receiver below 96 kS/s); `429
+  too_many_clients` (32); `503 not_running`. A view-level client (`403
+  level_too_low`) cannot start APRS but may read the table.
+
+**The stations.** `GET api/aprs/stations` (view):
+
+```json
+{"rev": 412, "full": true, "removed": [], "session": {...the session view...},
+ "stations": [{"call": "GM0SIM-9", "kind": "mobile", "symbol": {"table": "/", "code": ">"},
+               "lat": 55.4705, "lon": -4.612667, "courseDeg": 12.0, "speedKmh": 55.6, "altM": null,
+               "comment": "]On the A77", "status": "", "lastHeard": "2026-10-29T06:21:04Z",
+               "lastHeardTs": 1793254864.0, "firstHeard": "2026-10-29T06:20:33Z",
+               "heardDirect": false, "via": ["MB7SIM*", "WIDE2-1"], "packets": 14, "source": "rf",
+               "wx": null, "rev": 410},
+              {"call": "GM2SIM-13", "kind": "wx", "symbol": {"table": "/", "code": "_"},
+               "lat": 55.509, "lon": -4.594, "courseDeg": null, "speedKmh": null, "altM": null,
+               "comment": "Prestwick WX", "status": "", "heardDirect": true, "via": ["WIDE1-1"],
+               "wx": {"tempC": 11.1, "humidity": 82.0, "pressureHpa": 1004.2, "windDirDeg": 230.0,
+                      "windKmh": 27.8, "gustKmh": 40.2, "rain1hMm": 0.5}, "...": "..."},
+              {"call": "AYRSHOW", "kind": "object", "owner": "GM0SIM", "...": "..."}]}
+```
+
+- One entry per callsign with SSID (`call`), and per name for an object or
+  item (`owner` is the station that placed it), **most recently heard
+  first**. Merged from every packet: positions (plain, compressed,
+  ambiguous - the middle of the square - and Mic-E), status, weather,
+  objects and items. A station heard only sending messages or status has
+  `lat`/`lon` `null`: list it, but it has no place on the map. A killed
+  object or item is removed (`removed`, and a `removed` feed item).
+- `kind`: `object` or `item` (from the packet); else from the last
+  position's symbol: `wx` (a weather station, or weather heard), `igate`
+  (symbol code `&`), `digi` (`#`), `mobile` (a vehicle, person, craft or
+  aircraft symbol, or a reported speed), `station` (anything else).
+  `symbol` is the APRS table (`/`, `\`, or an overlay character) and code,
+  for a client's own icon set; `null` until a position has said it.
+- Units: degrees (`lat` north, `lon` east), degrees true, km/h, metres
+  (`altM`); `wx` in Celsius, %, hPa, degrees, km/h and millimetres in the
+  last hour, each `null` until heard; `wx` itself is `null` for a station
+  that has sent none. Times ISO 8601 UTC; `lastHeardTs` epoch seconds.
+- `heardDirect`: whether its last packet was heard from its own
+  transmitter rather than through a digipeater (`via` shows the path as
+  sent, `*` on each digipeater that has repeated it). Draw a station heard
+  only through a digipeater differently: it is not in direct range.
+  `packets` counts packets, a digipeater's copy of one already heard within
+  30 s not counted again (it may only turn `heardDirect` on). `source` is
+  `"rf"`: everything here came off the air (Radio has no APRS-IS).
+- **Kept 24 hours** (`keepS`), fixed rather than a setting, on the
+  controller (`aprs/stations.json`): a restart keeps the map, and a map
+  opened for the first time in a while shows what was heard today.
+
+**Keeping up.** Every change bumps `rev`. Two filters, either or both:
+
+- `?since=<rev>`: as AIS - only the stations changed after that rev, and
+  the keys removed after it in `removed`, with `full: false`; `full: true`
+  (the whole table) when it is too old or newer than the server's.
+- `?sinceS=<seconds>`: only stations heard in the last that many seconds
+  (`sinceS=3600`: the last hour). The TV contract names this parameter;
+  it is read as seconds, as every `…S` field in this API is (`leaseS`,
+  `endsInS`, `keepS`), not as a rev: a rev has its own parameter, `since`.
+
+Live, `GET api/events?kinds=aprs` (WebSocket, not in the default set):
+
+- `{"kind": "aprs", "type": "station", "rev", "station": {...as above}}` - a
+  station, object or item heard (the whole entry).
+- `{"kind": "aprs", "type": "removed", "rev", "call"}` - dropped after 24
+  hours, or a killed object or item.
+- `{"kind": "aprs", "type": "message", "message": {"t", "from", "to", "text", "id"}}`
+  - a message or bulletin heard for the first time (a retry is not news).
+- `{"kind": "aprs", "type": "packet", "t", "raw", "call", "aprs"}` - every
+  frame decoded, in monitor form (`CALL>DEST,PATH:info`), `aprs` false for
+  a frame that is not APRS: for a packet log.
+- `{"kind": "aprs", "type": "session", "session": {...}}` as AIS's.
+
+`GET api/aprs/stations/{call}` (view; `{call}` with its SSID, any case):
+one entry as above plus `track`, `[{"t", "lat", "lon"}]` oldest first - a
+point each time it has moved 25 m, the last 240 in 24 hours - and
+`recent`, its last 20 packets `[{"t", "raw", "text"}]`, `raw` the monitor
+line and `text` what it said (its status, message or comment). `404
+unknown_station` when nothing by that name was heard in the last day.
+
+`GET api/aprs/messages` (view): every message and bulletin heard in the
+last 24 hours, oldest first, `[{"t", "from", "to", "text", "id"}]` (`id`
+the sender's message number, `null` for none; a bulletin is to `BLN…`).
+Read only, whoever it is addressed to: Radio never acknowledges or answers
+one, so a station sending to this one's call sees no ack.
+
+Simulator: Radio's simulator puts fictional stations around Ayr on
+144.800 (`ohsradio/devices/simaprs.py`, every call ending `SIM`): a
+digipeater (MB7SIM), a home station with a status line, an object (the
+Ayr show's talk-in) and a message to GM4BRI (GM0SIM), a Mic-E car on the
+A77 heard direct and through the digipeater in turn (GM0SIM-9), a walker
+on the shore (GM1SIM-7) and a weather station at Prestwick (GM2SIM-13).
+Each packet is real AFSK from shack_packet's own modulator on FM, decoded
+exactly as off the air; one a second, round them in turn, so the map fills
+within a quarter of a minute.
 
 ## Map (Radio)
 

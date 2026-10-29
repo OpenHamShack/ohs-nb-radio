@@ -267,9 +267,9 @@ class Server:
         self._gone_later: list[tuple[str, str]] = []
         self._gone_lock = threading.Lock()
         self.events_sockets = 0
-        # A client present in this app with "ais" (or "adsb") in its holds
-        # is renewing that map's lease (7.2): it need not renew it apart.
-        for name in ("ais", "adsb"):
+        # A client present in this app with "ais" (or "adsb", "aprs") in its
+        # holds is renewing that map's lease (7.2): it need not renew it apart.
+        for name in ("ais", "adsb", "aprs"):
             svc = getattr(radio, name, None)
             if svc is not None:
                 svc.vouch = (lambda client, hold=name: self.presence is not None
@@ -416,7 +416,7 @@ class Server:
                         ended.append(f"listening to {sid}")
                     except Exception:  # noqa: BLE001 - a session gone since is not listened to
                         pass
-            for name in ("ais", "adsb"):
+            for name in ("ais", "adsb", "aprs"):
                 svc = getattr(self.radio, name, None)
                 if svc is None:
                     continue
@@ -478,7 +478,7 @@ class Server:
             return "recording"
         if self.audio.listeners() or self.spectrum.clients or self.events_sockets:
             return "a client's stream"
-        for name in ("ais", "adsb"):
+        for name in ("ais", "adsb", "aprs"):
             svc = getattr(r, name, None)
             t = getattr(svc, "restoring", None)
             if svc is not None and (svc.state == "running" or (t is not None and t.is_alive())):
@@ -616,11 +616,11 @@ class Server:
                 # because nobody was using it. Absent without the service.
                 **({"presence": {**self.presence.view(), "released": self.parked}}
                    if self.presence is not None else {}),
-                # Radio's map sessions (docs/SERVER-API.md "AIS", "ADS-B")
-                # and its DMR ID list ("DMR") and what the dial is on ("The
-                # dial label"), as api/state has them; absent in an app with
-                # none (NB).
-                **{k: st[k] for k in ("ais", "adsb", "dmrIds", "dialLabel") if k in st},
+                # Radio's map sessions (docs/SERVER-API.md "AIS", "ADS-B",
+                # "APRS") and its DMR ID list ("DMR") and what the dial is on
+                # ("The dial label"), as api/state has them; absent in an app
+                # with none (NB).
+                **{k: st[k] for k in ("ais", "adsb", "aprs", "dmrIds", "dialLabel") if k in st},
                 "device": st.get("device"), "mode": st.get("mode"), "vfo": st.get("vfo"),
                 "txDial": st.get("txDial"), "simulator": bool(st.get("simWhy")),
                 "broker": self.broker.view() if self.broker is not None else None,
@@ -1751,6 +1751,90 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._send(200, v)
 
+    # api/aprs (docs/SERVER-API.md "APRS"): Radio's APRS stations, shaped as
+    # api/ais is. Receive only: there is no route that sends anything. NB
+    # has none and answers 404.
+    def _aprs(self):
+        a = getattr(self.srv.radio, "aprs", None)
+        if a is None:
+            self._error(404, _("This app has no APRS."), "not_found")
+        return a
+
+    def get_aprs_session(self, who, q):
+        a = self._aprs()
+        if a is not None:
+            self._send(200, a.view())
+
+    def post_aprs_session(self, who, q):
+        """POST api/aprs/session {"client": id[, "dropSessions": true]}: this
+        client has the APRS map open - start APRS, or keep it running. Again
+        at least every leaseS seconds while the map is open."""
+        from ..decoders import Refused as DecoderRefused
+        a = self._aprs()
+        if a is None:
+            return
+        b = self._body()
+        if a.state != "running" and self.srv.digi.remote is not None:
+            # Armed, the next over would key wherever APRS had taken the
+            # receiver; the operator disarms first, as for AIS.
+            self._error(409, _("Not while automatic transmit is armed: switch it off first"), "on_air")
+            return
+        try:
+            view = a.join(b.get("client"), drop_sessions=b.get("dropSessions") is True)
+        except DecoderRefused as e:
+            more = {"sessions": e.sessions} if e.sessions is not None else {}
+            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+            return
+        self._send(200, view)
+
+    def delete_aprs_session(self, who, q):
+        """DELETE api/aprs/session?client=id: this client closed the map.
+        ?all=1: stop APRS now, whoever has the map open."""
+        a = self._aprs()
+        if a is None:
+            return
+        if q.get("all", [""])[0] in ("1", "true"):
+            a.end("stopped")
+            log.info("APRS stopped by %s", who.get("user", "?"))
+            self._send(200, a.view())
+            return
+        self._send(200, a.leave(q.get("client", [""])[0]))
+
+    def get_aprs_stations(self, who, q):
+        """GET api/aprs/stations[?since=rev][&sinceS=seconds]: every station
+        heard in the last day, or what changed, or what was heard lately."""
+        a = self._aprs()
+        if a is None:
+            return
+        try:
+            since = int(q["since"][0]) if "since" in q else None
+            since_s = float(q["sinceS"][0]) if "sinceS" in q else None
+            if since_s is not None and not 0 <= since_s < float("inf"):
+                raise ValueError(since_s)
+        except ValueError:
+            self._error(400, _("since is a whole number (a rev) and sinceS a number of seconds"), "bad_params")
+            return
+        self._send(200, {**a.table.view(since, since_s), "session": a.view()})
+
+    def get_aprs_station(self, who, q):
+        a = self._aprs()
+        if a is None:
+            return
+        call = unquote(self._session_id()).upper()
+        v = a.table.station(call)
+        if v is None:
+            self._error(404, _("Nothing called {call} has been heard in the last day").format(call=call),
+                        "unknown_station")
+            return
+        self._send(200, v)
+
+    def get_aprs_messages(self, who, q):
+        """GET api/aprs/messages: the messages and bulletins heard, oldest
+        first. Read only: Radio never sends or acknowledges one."""
+        a = self._aprs()
+        if a is not None:
+            self._send(200, a.table.messages())
+
     # api/adsb (docs/SERVER-API.md "ADS-B"): Radio's aircraft, on the same
     # map as its ships, shaped as api/ais is. NB has none and answers 404.
     def _adsb(self):
@@ -2526,6 +2610,11 @@ ROUTES = {
     ("POST", "/api/adsb/session"): ("control", _Handler.post_adsb_session),
     ("DELETE", "/api/adsb/session"): ("control", _Handler.delete_adsb_session),
     ("GET", "/api/adsb/aircraft"): ("view", _Handler.get_adsb_aircraft),
+    ("GET", "/api/aprs/session"): ("view", _Handler.get_aprs_session),
+    ("POST", "/api/aprs/session"): ("control", _Handler.post_aprs_session),
+    ("DELETE", "/api/aprs/session"): ("control", _Handler.delete_aprs_session),
+    ("GET", "/api/aprs/stations"): ("view", _Handler.get_aprs_stations),
+    ("GET", "/api/aprs/messages"): ("view", _Handler.get_aprs_messages),
     ("GET", "/api/map/info"): ("view", _Handler.get_map_info),
     ("GET", "/api/map/land"): ("view", _Handler.get_map_land),
     ("GET", "/ui/v1/app"): ("view", _Handler.get_ui_app),
@@ -2549,6 +2638,7 @@ PREFIX_ROUTES = {
     ("GET", "/api/decoders/sessions/"): ("view", _Handler.get_decoder_session),
     ("GET", "/api/ais/vessels/"): ("view", _Handler.get_ais_vessel),
     ("GET", "/api/adsb/aircraft/"): ("view", _Handler.get_adsb_one),
+    ("GET", "/api/aprs/stations/"): ("view", _Handler.get_aprs_station),
     ("GET", "/api/map/tiles/"): ("view", _Handler.get_map_tile),
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
     ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),
