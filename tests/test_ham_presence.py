@@ -323,6 +323,42 @@ class Goodbye(Base):
 
 
 @unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class Shutdown(unittest.TestCase):
+    def test_a_stream_closed_by_stop_logs_no_traceback(self):
+        # beta.18's post-install check failed on this: beta.17's watch logged
+        # an AttributeError from http.client when shutdown closed its stream
+        # under the reading thread. Here the read fails the same way, after
+        # the stop, every time.
+        w = presence.PresenceWatch("shack-radio", lambda *a, **k: None, lambda: None,
+                                   on_gone=lambda *a: None, on_arrive=lambda *a: None)
+        stop = threading.Event()
+        w.check_service = lambda: True
+
+        def follow(stop_ev):
+            stop_ev.set()
+            raise AttributeError("'NoneType' object has no attribute 'peek'")
+        w.follow = follow
+        with self.assertNoLogs("ohscore.server.presence", level="ERROR"):
+            w.run(stop)
+
+    def test_a_failure_while_running_is_still_logged(self):
+        w = presence.PresenceWatch("shack-radio", lambda *a, **k: None, lambda: None,
+                                   on_gone=lambda *a: None, on_arrive=lambda *a: None)
+        stop = threading.Event()
+        w.check_service = lambda: True
+        calls = []
+
+        def follow(stop_ev):
+            calls.append(1)
+            if len(calls) > 1:
+                stop_ev.set()
+                return
+            raise AttributeError("a real fault")
+        w.follow = follow
+        with self.assertLogs("ohscore.server.presence", level="ERROR"):
+            w.run(stop)
+
+
 class WithoutPresence(Base):
     def test_a_station_started_with_no_client_id_survives(self):
         self.following()

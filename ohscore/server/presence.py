@@ -281,7 +281,11 @@ class PresenceWatch:
             except OSError as e:
                 log.info("presence: the event stream ended (%s)", e)
             except Exception:  # noqa: BLE001  the watch must outlive one bad pass
-                log.exception("presence")
+                # stop() closes the stream under the reading thread, and
+                # http.client then fails with whatever it was holding (an
+                # AttributeError on beta.17's shutdown): not worth a traceback.
+                if not stop_ev.is_set():
+                    log.exception("presence")
             self.connected = False
             if self.clock() - began > BACKOFF_MAX_S:
                 delay = BACKOFF_FIRST_S          # it ran a while: a fresh failure, not a loop
