@@ -11,10 +11,17 @@ other in half the world), and a no-break space before the unit.
 The decimal separator comes from QLocale, as the contract asks of a Qt app,
 rather than from shack_i18n's own table: the app does not carry ohs-libs at
 run time, and QLocale is what the rest of the window already formats with.
+Where PyQt6 cannot be imported - the store container, which has no Qt at
+all - it comes from `_DECIMAL` below instead, for the language the server's
+gettext already speaks. Before that fallback a refusal that named a
+frequency (Radio's pinned-span 409) died formatting itself and reached the
+client as a 502 (beta.17 on ohs-box, 29/10/2026).
 Arithmetic is on integers of Hz, so rounding is exact (half away from zero)
 and no float ever shows a stray digit.
 """
 from __future__ import annotations
+
+import os
 
 UNITS = {"Hz": 1, "kHz": 1_000, "MHz": 1_000_000, "GHz": 1_000_000_000}
 _MAX_DECIMALS = {"Hz": 0, "kHz": 3, "MHz": 6, "GHz": 9}
@@ -31,8 +38,51 @@ class FormatError(ValueError):
         self.code = code
 
 
+# The decimal column of shack_i18n's CLDR table (ohs-libs
+# python/shack_i18n/src/shack_i18n/_cldr.py, checked there against ICU),
+# copied rather than imported because shack-i18n is a build tool here and
+# never ships. Only languages and regions whose separator is a comma, plus
+# the regions that differ from their language; everything else is ".".
+_COMMA_LANGUAGES = {"de", "fr", "es", "it", "nl", "nb", "nn", "no", "sv", "da",
+                    "fi", "pl", "pt", "ru", "uk", "cs"}
+_REGION_DECIMAL = {"de-CH": ".", "es-MX": "."}
+
+
+def _table_decimal_point(tag: str | None) -> str:
+    """The separator for a BCP 47 or POSIX tag (`de-CH`, `pt_BR.UTF-8`),
+    read the way shack_i18n reads one: exact region, then language, then
+    English's point."""
+    if not tag:
+        return "."
+    tag = tag.split(".", 1)[0].split("@", 1)[0].replace("_", "-")
+    parts = [p for p in tag.split("-") if p]
+    if not parts:
+        return "."
+    lang = parts[0].lower()
+    region = next((p.upper() for p in parts[1:] if len(p) == 2 and p.isalpha()), None)
+    if region and f"{lang}-{region}" in _REGION_DECIMAL:
+        return _REGION_DECIMAL[f"{lang}-{region}"]
+    return "," if lang in _COMMA_LANGUAGES else "."
+
+
+def _process_locale() -> str | None:
+    """The tag a process with no Qt formats numbers in: SHACK_LOCALE (the
+    override text.py's gettext honours too), else POSIX's order for
+    numbers, LC_ALL, LC_NUMERIC, LANG. A container sets none of them, and
+    is English."""
+    for var in ("SHACK_LOCALE", "LC_ALL", "LC_NUMERIC", "LANG"):
+        value = os.environ.get(var, "").strip()
+        if value:
+            return value
+    return None
+
+
 def _decimal_point(locale) -> str:
-    from PyQt6.QtCore import QLocale
+    try:
+        from PyQt6.QtCore import QLocale
+    except ImportError:
+        # QLocale objects only come from Qt, so here locale is a tag or None.
+        return _table_decimal_point(locale if locale else _process_locale())
     loc = locale if isinstance(locale, QLocale) else QLocale(locale) if locale else QLocale()
     return loc.decimalPoint()
 

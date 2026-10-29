@@ -185,6 +185,56 @@ class Frequencies(unittest.TestCase):
                 else:
                     self.assertEqual(fmt.frequency(c["hz"], c["unit"], c["decimals"], c["locale"]), c["text"])
 
+    def test_frequency_vectors_without_qt(self):
+        # The store container has no PyQt6; a refusal that names a frequency
+        # crashed formatting itself there (beta.17, a 502 for a 409). With
+        # Qt unimportable the same vectors must still hold, from the table.
+        from unittest import mock
+        from ohscore.i18n import fmt
+        cases = json.loads((REPO / "tests" / "data" / "i18n-format.json").read_text())["frequency"]
+        with mock.patch.dict(sys.modules, {"PyQt6": None, "PyQt6.QtCore": None}):
+            with self.assertRaises(ImportError):
+                from PyQt6.QtCore import QLocale  # noqa: F401  the block holds
+            for c in cases:
+                with self.subTest(c):
+                    if "error" in c:
+                        with self.assertRaises(fmt.FormatError) as cm:
+                            fmt.frequency(c["hz"], c["unit"], c["decimals"], c["locale"])
+                        self.assertEqual(cm.exception.code, c["error"])
+                    else:
+                        self.assertEqual(fmt.frequency(c["hz"], c["unit"], c["decimals"], c["locale"]), c["text"])
+
+    def test_without_qt_the_process_locale_picks_the_separator(self):
+        # No locale argument is how the server calls it (radio._mhz): the
+        # language comes from the environment, SHACK_LOCALE first, and a
+        # container with nothing set is English.
+        from unittest import mock
+        from ohscore.i18n import fmt
+        blocked = {"PyQt6": None, "PyQt6.QtCore": None}
+        clear = {v: "" for v in ("SHACK_LOCALE", "LC_ALL", "LC_NUMERIC", "LANG")}
+        for env, text in [({}, "438.8000\u00a0MHz"),
+                          ({"LANG": "de_DE.UTF-8"}, "438,8000\u00a0MHz"),
+                          ({"LANG": "de_DE.UTF-8", "LC_NUMERIC": "de_CH.UTF-8"}, "438.8000\u00a0MHz"),
+                          ({"LANG": "en_GB.UTF-8", "SHACK_LOCALE": "fr"}, "438,8000\u00a0MHz"),
+                          ({"LANG": "C.UTF-8"}, "438.8000\u00a0MHz")]:
+            with self.subTest(env), mock.patch.dict(sys.modules, blocked), \
+                    mock.patch.dict(os.environ, {**clear, **env}):
+                self.assertEqual(fmt.frequency(438_800_000, "MHz", 4), text)
+
+    def test_the_radio_server_formats_a_refusal_without_qt(self):
+        # The crash's own path, in a process where PyQt6 was never
+        # importable: the server module loads and _pin_check's _mhz formats.
+        code = ("import sys; sys.modules['PyQt6'] = None\n"
+                "import ohsradio.server, ohsradio.radio as r\n"
+                "print(r._mhz(438.8e6))\n"
+                "assert not [m for m in sys.modules if m.startswith('PyQt6') and sys.modules[m]]\n")
+        env = {k: v for k, v in os.environ.items() if k not in ("SHACK_LOCALE", "LC_ALL", "LC_NUMERIC")}
+        env["LANG"] = "C.UTF-8"
+        r = subprocess.run([sys.executable, "-c", code], cwd=REPO, env=env,
+                           capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), "438.8000\u00a0MHz")
+
 
 @unittest.skipUnless(HAVE_QT, "PyQt6 is not installed")
 class Windows(unittest.TestCase):
