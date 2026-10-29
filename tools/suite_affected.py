@@ -110,11 +110,6 @@ def affected(base: str, root: Path) -> tuple[list[str], list[str]]:
             chosen |= hits
         elif p.suffix in (".py", ".sh") or p.parts[0] in ("ohscore", "ohsnb", "ohsradio", "tools"):
             nothing.append(f)
-    # Any change can put a forbidden word into the published source, and
-    # nothing maps a file to that check by name: beta.17's release found
-    # three such lines that every scoped run had passed. So it always runs.
-    if chosen or nothing:
-        chosen.add("test_source_site")
     return sorted(chosen), nothing
 
 
@@ -129,6 +124,12 @@ def main(argv: list[str]) -> int:
         print(f"suite_affected: {argv[0]} is not a commit", file=sys.stderr)
         return 2
     mods, nothing = affected(argv[0], root)
+    # Any change can put a forbidden word into the published source, and
+    # nothing maps a file to that check by name: beta.17's release found
+    # three such lines that every scoped run had passed. So it always runs.
+    if (mods or nothing) and "test_source_site" not in mods \
+            and (root / "tests" / "test_source_site.py").exists():
+        mods.append("test_source_site")
     for m in mods:
         print(m)
     for f in nothing:
