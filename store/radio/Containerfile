@@ -98,6 +98,8 @@ RUN ldconfig && SoapySDRUtil --info | grep -q sdrPlaySupport
 # hash is checked against tools/vendor/requirements.lock before it is
 # unpacked into site-packages (no pip in the image; a wheel is a zip with
 # nothing to run at install).
+# shack-packet is Radio's alone (APRS receive, ohsradio/aprs.py), as is
+# shack-ui: NB has no APRS.
 #
 # shack-sdr (the decoder host, RTTY's and DAB's decoders, the codec loader,
 # the RTL-SDR and SDRplay sources) is the one with native code: the wheel for
@@ -117,13 +119,13 @@ COPY tools/vendor/ /tmp/vendor/
 RUN cd /tmp/vendor \
     && site="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
     && mkdir -p "$site" \
-    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec shack_spectrum shack_ui; do \
+    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec shack_spectrum shack_ui shack_packet; do \
          f="$(ls ${w}-*.whl)"; \
          want="$(sed -n "s/^$(echo $w | tr _ -)==.*--hash=sha256:\([0-9a-f]*\).*/\1/p" requirements.lock)"; \
          echo "$want  $f" | sha256sum -c - || exit 1; \
          python3 -m zipfile -e "$f" "$site"; \
        done \
-    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum, shack_ui; shack_bandplan.load()" \
+    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum, shack_ui, shack_packet.sdr; shack_bandplan.load()" \
     && arch="$(uname -m)" \
     && f="$(ls shack_sdr-*-manylinux_*_${arch}.whl)" \
     && want="$(sed -n "s/^shack-sdr==.*--hash=sha256:\([0-9a-f]*\).*_${arch}$/\1/p" shack-sdr.lock)" \
