@@ -27,7 +27,7 @@ msgstr ""
 msgid "A recording is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1163
+#: ohsradio/radio.py:1173
 msgid "A recording is playing: its gain was fixed when it was recorded."
 msgstr ""
 
@@ -39,7 +39,7 @@ msgstr ""
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1742
+#: ohsradio/radio.py:1754
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -236,6 +236,11 @@ msgstr ""
 msgid "DAB: block {block} ({n} of {of})"
 msgstr ""
 
+#: ohsradio/sonde.py:1121
+#, python-brace-format
+msgid "Decoding a radiosonde on {mhz} MHz"
+msgstr ""
+
 #: ohsradio/wxsat_decode.py:529
 #, python-brace-format
 msgid "Decoding failed: {error}"
@@ -264,12 +269,12 @@ msgstr ""
 msgid "Dredging or underwater ops"
 msgstr ""
 
-#: ohsradio/state.py:435
+#: ohsradio/state.py:456
 #, python-brace-format
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
 
-#: ohsradio/radio.py:713
+#: ohsradio/radio.py:722
 #, python-brace-format
 msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
 msgstr ""
@@ -402,6 +407,10 @@ msgstr ""
 msgid "Listening to APRS on 144.800 MHz"
 msgstr ""
 
+#: ohsradio/sonde.py:1118
+msgid "Looking for radiosondes on 400-406 MHz"
+msgstr ""
+
 #: ohsradio/adsb.py:109
 msgid "Medical emergency"
 msgstr ""
@@ -497,6 +506,7 @@ msgstr ""
 #: ohsradio/adsb.py:522
 #: ohsradio/ais.py:640
 #: ohsradio/aprs.py:651
+#: ohsradio/sonde.py:1125
 msgid "Not running"
 msgstr ""
 
@@ -529,7 +539,11 @@ msgstr ""
 msgid "Not while transmitting: a weather satellite pass takes the receiver to 137 MHz"
 msgstr ""
 
-#: ohsradio/radio.py:1414
+#: ohsradio/sonde.py:856
+msgid "Not while transmitting: radiosondes take the receiver to 400-406 MHz"
+msgstr ""
+
+#: ohsradio/radio.py:1426
 #, python-brace-format
 msgid "Notch filter not changed: {error}"
 msgstr ""
@@ -595,7 +609,7 @@ msgstr ""
 msgid "Radio failure"
 msgstr ""
 
-#: ohsradio/radio.py:1223
+#: ohsradio/radio.py:1233
 #, python-brace-format
 msgid "Radio is scanning {label} for its station list: it is yours again the moment you use it"
 msgstr ""
@@ -612,11 +626,24 @@ msgstr ""
 msgid "Radio was not running for this pass"
 msgstr ""
 
+#: ohsradio/sonde.py:857
+msgid "Radiosondes have the receiver: close the radiosonde map first"
+msgstr ""
+
+#: ohsradio/sonde.py:904
+msgid "Radiosondes need radiosonde_auto_rx's decoders, which this install does not have"
+msgstr ""
+
+#: ohsradio/sonde.py:911
+#, python-brace-format
+msgid "Radiosondes take the receiver to 400-406 MHz and stop {sessions}"
+msgstr ""
+
 #: ohsradio/plutofix.py:573
 msgid "Reachable"
 msgstr ""
 
-#: ohsradio/radio.py:1167
+#: ohsradio/radio.py:1177
 msgid "Receiver gain control is automatic: the radio's own AGC follows the station."
 msgstr ""
 
@@ -735,6 +762,15 @@ msgstr ""
 msgid "Someone is listening"
 msgstr ""
 
+#: ohsradio/sondehub.py:428
+msgid "SondeHub needs your callsign and locator on the Station page"
+msgstr ""
+
+#: ohsradio/sondehub.py:443
+#, python-brace-format
+msgid "SondeHub refused the upload ({status})"
+msgstr ""
+
 #: ohsradio/adsb.py:102
 msgid "Space vehicle"
 msgstr ""
@@ -755,6 +791,10 @@ msgstr ""
 msgid "Start the radio to see aircraft: ADS-B needs the receiver"
 msgstr ""
 
+#: ohsradio/sonde.py:907
+msgid "Start the radio to see radiosondes: they need the receiver"
+msgstr ""
+
 #: ohsradio/ais.py:489
 msgid "Start the radio to see ships: AIS needs the receiver"
 msgstr ""
@@ -771,6 +811,7 @@ msgstr ""
 #: ohsradio/adsb.py:520
 #: ohsradio/ais.py:638
 #: ohsradio/aprs.py:649
+#: ohsradio/sonde.py:1123
 msgid "Stopped"
 msgstr ""
 
@@ -782,6 +823,10 @@ msgstr ""
 msgid "Stopped: nobody had the aircraft map open"
 msgstr ""
 
+#: ohsradio/sonde.py:1122
+msgid "Stopped: nobody had the radiosonde map open"
+msgstr ""
+
 #: ohsradio/ais.py:637
 msgid "Stopped: nobody had the ship map open"
 msgstr ""
@@ -789,6 +834,7 @@ msgstr ""
 #: ohsradio/adsb.py:521
 #: ohsradio/ais.py:639
 #: ohsradio/aprs.py:650
+#: ohsradio/sonde.py:1124
 msgid "Stopped: the radio stopped"
 msgstr ""
 
@@ -800,6 +846,7 @@ msgstr ""
 #: ohsradio/adsb.py:522
 #: ohsradio/ais.py:640
 #: ohsradio/aprs.py:651
+#: ohsradio/sonde.py:1125
 msgid "Stopped: the receiver was taken back"
 msgstr ""
 
@@ -830,11 +877,11 @@ msgstr ""
 msgid "The CW skimmer stopped."
 msgstr ""
 
-#: ohsradio/radio.py:1165
+#: ohsradio/radio.py:1175
 msgid "The Hermes-Lite 2's receive gain is its LNA setting, which stays yours."
 msgstr ""
 
-#: ohsradio/radio.py:976
+#: ohsradio/radio.py:985
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
@@ -849,6 +896,7 @@ msgstr ""
 #: ohsradio/adsb.py:276
 #: ohsradio/ais.py:455
 #: ohsradio/aprs.py:455
+#: ohsradio/sonde.py:865
 msgid "The client must name itself: 1-64 letters, digits, '.', '_', ':' or '-'"
 msgstr ""
 
@@ -896,6 +944,14 @@ msgstr ""
 #: ohsradio/bandscan.py:350
 #, python-brace-format
 msgid "The receiver is in use: {text}"
+msgstr ""
+
+#: ohsradio/sonde.py:853
+msgid "The receiver is listening for radiosondes: close the radiosonde map, or stop it, to tune or change mode"
+msgstr ""
+
+#: ohsradio/sonde.py:855
+msgid "The receiver is listening for radiosondes: stop it to transmit"
 msgstr ""
 
 #: ohsradio/adsb.py:262
@@ -991,12 +1047,12 @@ msgstr ""
 msgid "The {device} does not receive the FM band"
 msgstr ""
 
-#: ohsradio/radio.py:674
+#: ohsradio/radio.py:683
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz ({radio} MHz through {converter}) is outside it"
 msgstr ""
 
-#: ohsradio/radio.py:677
+#: ohsradio/radio.py:686
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
@@ -1014,7 +1070,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1700
+#: ohsradio/radio.py:1712
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -1059,6 +1115,10 @@ msgstr ""
 msgid "Too many screens have the aircraft map open"
 msgstr ""
 
+#: ohsradio/sonde.py:870
+msgid "Too many screens have the radiosonde map open"
+msgstr ""
+
 #: ohsradio/ais.py:460
 msgid "Too many screens have the ship map open"
 msgstr ""
@@ -1091,7 +1151,7 @@ msgstr ""
 msgid "Tune by frequency"
 msgstr ""
 
-#: ohsradio/radio.py:932
+#: ohsradio/radio.py:941
 #, python-brace-format
 msgid "Tuning to {freq} stops {sessions}: the receiver stays on {lo} to {hi} while they run"
 msgstr ""
@@ -1134,7 +1194,7 @@ msgstr ""
 msgid "Waiting for the radio to restart…"
 msgstr ""
 
-#: ohsradio/radio.py:1262
+#: ohsradio/radio.py:1272
 #, python-brace-format
 msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""
@@ -1211,12 +1271,12 @@ msgstr ""
 msgid "in: overload seen at {mhz} MHz"
 msgstr ""
 
-#: ohsradio/radio.py:1072
-#: ohsradio/radio.py:1077
+#: ohsradio/radio.py:1082
+#: ohsradio/radio.py:1087
 msgid "in: set on"
 msgstr ""
 
-#: ohsradio/radio.py:1079
+#: ohsradio/radio.py:1089
 msgid "in: tuned below 60 MHz, clear of MW and LW broadcasting"
 msgstr ""
 
@@ -1265,7 +1325,7 @@ msgid "now {call}, {location}"
 msgstr ""
 
 #: ohsradio/notch.py:231
-#: ohsradio/radio.py:1085
+#: ohsradio/radio.py:1095
 msgid "out: ADS-B is listening at 1090 MHz"
 msgstr ""
 
@@ -1286,12 +1346,12 @@ msgstr ""
 msgid "out: no overload seen"
 msgstr ""
 
-#: ohsradio/radio.py:1072
-#: ohsradio/radio.py:1077
+#: ohsradio/radio.py:1082
+#: ohsradio/radio.py:1087
 msgid "out: set off"
 msgstr ""
 
-#: ohsradio/radio.py:1081
+#: ohsradio/radio.py:1091
 msgid "out: tuned above 60 MHz or within MW or LW broadcasting"
 msgstr ""
 
@@ -1337,7 +1397,7 @@ msgstr ""
 msgid "{error}. The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:974
+#: ohsradio/radio.py:983
 #, python-brace-format
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""
@@ -1362,12 +1422,12 @@ msgstr ""
 msgid "{field} must be text"
 msgstr ""
 
-#: ohsradio/radio.py:877
+#: ohsradio/radio.py:886
 #, python-brace-format
 msgid "{freq} does not fit in the {width} the receiver covers together with the dial ({dial}) and {sessions}"
 msgstr ""
 
-#: ohsradio/radio.py:874
+#: ohsradio/radio.py:883
 #, python-brace-format
 msgid "{freq} is too far from the dial ({dial}): the receiver covers {width} at once, so tune nearer to it first"
 msgstr ""

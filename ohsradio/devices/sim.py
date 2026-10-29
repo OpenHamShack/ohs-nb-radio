@@ -32,6 +32,8 @@ rig on: the stations fade in over a second or two).
 - **APRS**: fictional stations around Ayr on 144.800 MHz (simaprs.py):
   a digipeater, a home station, a Mic-E car, a walker, a weather station,
   an object and a message, real AFSK on FM, for the APRS map.
+- **A radiosonde** on 403.500 MHz (simsonde.py): its carrier for the scan
+  to find; its frames come from stand-ins for auto_rx's programs.
 - **Broadcast FM**: six fictional stations on Band II from shack_sdr's FM
   stereo and RDS test transmitter (simfm.py), so wide FM is heard in
   stereo with RDS, and the band scanner finds something, with no radio.
@@ -304,6 +306,8 @@ class HamSim(SimCore):
         self.aprs = None
         # A DMR repeater on 70 cm likewise (simdmr.py).
         self.dmr = None
+        # A radiosonde's carrier on 403.5 MHz (simsonde.py).
+        self.sonde = None
         if self.signals:
             from . import simdab
             if simdab.available():
@@ -319,6 +323,8 @@ class HamSim(SimCore):
             from . import simaprs
             if simaprs.available():
                 self.aprs = simaprs.AprsAir(t0=time.time())
+            from .simsonde import SondeAir
+            self.sonde = SondeAir()
         self._init_loop()
 
     # -- set-up -------------------------------------------------------------
@@ -611,7 +617,7 @@ class HamSim(SimCore):
             z = dab.take(self.n, len(y), self.fs, self.rx_if)
             if z is not None:
                 y += z
-        for air in (self.ais, self.adsb, self.aprs):
+        for air in (self.ais, self.adsb, self.aprs, self.sonde):
             if air is not None and air.in_view(self.rx_if, self.fs):
                 z = air.take(self.n, len(y), self.fs, self.rx_if)
                 if z is not None:

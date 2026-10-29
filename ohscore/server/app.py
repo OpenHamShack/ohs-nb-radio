@@ -93,6 +93,10 @@ PLATFORM_KEYS = frozenset({"audioBackend", "audioIn", "audioOut", "audioOut2", "
 # engine setting api/state would show every viewer (openAipKey is refused
 # above for that reason).
 OPENAIP_KEY_ENV = "OPENAIP_API_KEY"
+# Radio's map services (ohsradio/ais.py, adsb.py, aprs.py, sonde.py): each
+# holds the receiver only while a client holds its session, renewed or
+# vouched for by presence, and ends when the last client goes. NB has none.
+MAP_SERVICES = ("ais", "adsb", "aprs", "sonde")
 
 
 def _json_default(o):
@@ -267,9 +271,10 @@ class Server:
         self._gone_later: list[tuple[str, str]] = []
         self._gone_lock = threading.Lock()
         self.events_sockets = 0
-        # A client present in this app with "ais" (or "adsb", "aprs") in its
-        # holds is renewing that map's lease (7.2): it need not renew it apart.
-        for name in ("ais", "adsb", "aprs"):
+        # A client present in this app with "ais" (or "adsb", "aprs", "sonde")
+        # in its holds is renewing that map's lease (7.2): it need not renew
+        # it apart.
+        for name in MAP_SERVICES:
             svc = getattr(radio, name, None)
             if svc is not None:
                 svc.vouch = (lambda client, hold=name: self.presence is not None
@@ -430,7 +435,7 @@ class Server:
                 return
             closed = self.holds.end_streams(client)
             ended = self._end_holds(self.holds.leave(client))
-            for name in ("ais", "adsb", "aprs"):
+            for name in MAP_SERVICES:
                 svc = getattr(self.radio, name, None)
                 if svc is None:
                     continue
@@ -440,7 +445,7 @@ class Server:
                     continue
                 svc.leave(client)
                 with svc.lock:
-                    last = svc.state == "running" and not svc.clients
+                    last = svc.state != "idle" and not svc.clients
                 if last:
                     self._end_map(svc, "idle")
                     ended.append(name)
@@ -493,9 +498,9 @@ class Server:
                 return []
             ended = self._end_holds(self.holds.take_all())
             r = self.radio
-            for name in ("ais", "adsb", "aprs"):
+            for name in MAP_SERVICES:
                 svc = getattr(r, name, None)
-                if svc is not None and svc.state == "running":
+                if svc is not None and svc.state != "idle":
                     self._end_map(svc, "stopped")
                     ended.append(name)
             h = r.held
@@ -541,10 +546,10 @@ class Server:
             return "recording"
         if self.audio.listeners() or self.spectrum.clients or self.events_sockets:
             return "a client's stream"
-        for name in ("ais", "adsb", "aprs"):
+        for name in MAP_SERVICES:
             svc = getattr(r, name, None)
             t = getattr(svc, "restoring", None)
-            if svc is not None and (svc.state == "running" or (t is not None and t.is_alive())):
+            if svc is not None and (svc.state != "idle" or (t is not None and t.is_alive())):
                 return name
         scan = getattr(r, "bandscan", None)
         if scan is not None:
@@ -696,10 +701,10 @@ class Server:
                 **({"presence": {**self.presence.view(), "released": self.parked}}
                    if self.presence is not None else {}),
                 # Radio's map sessions (docs/SERVER-API.md "AIS", "ADS-B",
-                # "APRS") and its DMR ID list ("DMR") and what the dial is on
+                # "APRS", "Radiosondes") and its DMR ID list ("DMR") and what the dial is on
                 # ("The dial label"), as api/state has them; absent in an app
                 # with none (NB).
-                **{k: st[k] for k in ("ais", "adsb", "aprs", "dmrIds", "dialLabel") if k in st},
+                **{k: st[k] for k in (*MAP_SERVICES, "dmrIds", "dialLabel") if k in st},
                 "device": st.get("device"), "mode": st.get("mode"), "vfo": st.get("vfo"),
                 "txDial": st.get("txDial"), "simulator": bool(st.get("simWhy")),
                 "broker": self.broker.view() if self.broker is not None else None,
@@ -1830,6 +1835,81 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._send(200, v)
 
+    # api/sonde (docs/SERVER-API.md "Radiosondes"): Radio's radiosondes,
+    # shaped as api/ais is. Receive only. NB has none and answers 404.
+    def _sonde(self):
+        s = getattr(self.srv.radio, "sonde", None)
+        if s is None:
+            self._error(404, _("This app has no radiosondes."), "not_found")
+        return s
+
+    def get_sonde_session(self, who, q):
+        s = self._sonde()
+        if s is not None:
+            self._send(200, s.view())
+
+    def post_sonde_session(self, who, q):
+        """POST api/sonde/session?client=id (or {"client": id}, and
+        "dropSessions": true): this client has the radiosonde map open -
+        start, or keep running. Again at least every leaseS seconds."""
+        from ..decoders import Refused as DecoderRefused
+        s = self._sonde()
+        if s is None:
+            return
+        b = self._body()
+        client = q.get("client", [None])[0] or b.get("client")
+        if s.state == "idle" and self.srv.digi.remote is not None:
+            # Armed, the next over would key wherever the scan had taken the
+            # receiver; the operator disarms first, as for AIS.
+            self._error(409, _("Not while automatic transmit is armed: switch it off first"), "on_air")
+            return
+        try:
+            view = s.join(client, drop_sessions=b.get("dropSessions") is True
+                          or q.get("dropSessions", [""])[0] in ("1", "true"))
+        except DecoderRefused as e:
+            more = {"sessions": e.sessions} if e.sessions is not None else {}
+            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+            return
+        self._send(200, view)
+
+    def delete_sonde_session(self, who, q):
+        """DELETE api/sonde/session?client=id: this client closed the map.
+        ?all=1: stop now, whoever has the map open."""
+        s = self._sonde()
+        if s is None:
+            return
+        if q.get("all", [""])[0] in ("1", "true"):
+            s.end("stopped")
+            log.info("radiosondes stopped by %s", who.get("user", "?"))
+            self._send(200, s.view())
+            return
+        self._send(200, s.leave(q.get("client", [""])[0]))
+
+    def get_sonde_sondes(self, who, q):
+        """GET api/sonde/sondes: the state, SondeHub's, and every sonde."""
+        s = self._sonde()
+        if s is not None:
+            self._send(200, s.sondes())
+
+    def get_sonde_one(self, who, q):
+        s = self._sonde()
+        if s is None:
+            return
+        serial = unquote(self._session_id())
+        v = s.table.sonde(serial)
+        if v is None:
+            self._error(404, _("No radiosonde {serial} has been heard lately").format(serial=serial),
+                        "unknown_sonde")
+            return
+        self._send(200, v)
+
+    def get_sonde_launches(self, who, q):
+        """GET api/sonde/launches: upcoming launches near the station, from
+        SondeHub's site list; [] offline or with sondeOnline off."""
+        s = self._sonde()
+        if s is not None:
+            self._send(200, s.launches())
+
     # api/aprs (docs/SERVER-API.md "APRS"): Radio's APRS stations, shaped as
     # api/ais is. Receive only: there is no route that sends anything. NB
     # has none and answers 404.
@@ -2798,6 +2878,11 @@ ROUTES = {
     ("DELETE", "/api/aprs/session"): ("control", _Handler.delete_aprs_session),
     ("GET", "/api/aprs/stations"): ("view", _Handler.get_aprs_stations),
     ("GET", "/api/aprs/messages"): ("view", _Handler.get_aprs_messages),
+    ("GET", "/api/sonde/session"): ("view", _Handler.get_sonde_session),
+    ("POST", "/api/sonde/session"): ("control", _Handler.post_sonde_session),
+    ("DELETE", "/api/sonde/session"): ("control", _Handler.delete_sonde_session),
+    ("GET", "/api/sonde/sondes"): ("view", _Handler.get_sonde_sondes),
+    ("GET", "/api/sonde/launches"): ("view", _Handler.get_sonde_launches),
     ("GET", "/api/wxsat/passes"): ("view", _Handler.get_wxsat_passes),
     ("GET", "/api/wxsat/status"): ("view", _Handler.get_wxsat_status),
     ("GET", "/api/wxsat/images"): ("view", _Handler.get_wxsat_images),
@@ -2826,6 +2911,7 @@ PREFIX_ROUTES = {
     ("GET", "/api/ais/vessels/"): ("view", _Handler.get_ais_vessel),
     ("GET", "/api/adsb/aircraft/"): ("view", _Handler.get_adsb_one),
     ("GET", "/api/aprs/stations/"): ("view", _Handler.get_aprs_station),
+    ("GET", "/api/sonde/sondes/"): ("view", _Handler.get_sonde_one),
     ("GET", "/api/map/tiles/"): ("view", _Handler.get_map_tile),
     ("POST", "/api/wxsat/passes/"): ("control", _Handler.post_wxsat_record),
     ("GET", "/api/wxsat/images/"): ("view", _Handler.get_wxsat_image),

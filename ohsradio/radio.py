@@ -95,7 +95,7 @@ from .sequencer import Sequencer, SequencerError, make_output
 # server's default set, so a client gets them only when it asks.
 # stations: a band scan's list changed (bandscan.py), likewise only when asked.
 FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders", "stations", "ais", "adsb",
-              "aprs")
+              "aprs", "sonde")
 # How long after a re-centring the receive channel is taken to hold the
 # new centre's samples (Radio._rx_settled): a device read and the analysis
 # bank's overlap are a few tens of milliseconds at every supported rate;
@@ -322,6 +322,15 @@ class Radio(Engine):
         from .aprs import AprsService
         self.aprs = AprsService(self)
         self.st["aprs"] = self.aprs.view()
+        # Radiosondes on 400-406 MHz (sonde.py), likewise while a client
+        # has the radiosonde map open: scanned for, then one decoded at a
+        # time by radiosonde_auto_rx's programs. SondeHub (sondehub.py) only
+        # for the program an operator runs, as flight routes.
+        from .sonde import SondeService
+        self.sonde = SondeService(self)
+        self.st["sonde"] = self.sonde.view()
+        if self.persist:
+            self.sonde.hub.start()
         # Weather satellites (wxsat.py): Meteor-M passes predicted and
         # recorded by themselves. Their element sets come from Celestrak
         # only for the program an operator runs, as the map tiles do; a
@@ -1019,6 +1028,7 @@ class Radio(Engine):
         self.ais.tick()
         self.adsb.tick()
         self.aprs.tick()
+        self.sonde.tick()
         self.wxsat.tick()
         self.map_tiles.save()
         self._broadcast_tick(now)
@@ -1270,6 +1280,7 @@ class Radio(Engine):
             self.ais.end("radio_stopped")
             self.adsb.end("radio_stopped")
             self.aprs.end("radio_stopped")
+            self.sonde.end("radio_stopped")
             self.wxsat.radio_stopped()
         super().stop()
         self.map_tiles.save(force=True)
@@ -1348,14 +1359,15 @@ class Radio(Engine):
         return None
 
     def held_service(self) -> dict | None:
-        """AIS, ADS-B or APRS while its session holds the receiver
+        """AIS, ADS-B, APRS or radiosondes while its session holds the receiver
         (Engine.held_service): what an IQ or audio recording made then is
         named and described by (APRS's frequency is its channel's, 144.800,
         not the receiver's centre beside it)."""
         h = self.held
         by = h.get("by") if h is not None else None
-        if by in ("ais", "adsb", "aprs"):
-            return {"kind": by, "mode": {"ais": "AIS", "adsb": "ADS-B", "aprs": "APRS"}[by], "label": None,
+        if by in ("ais", "adsb", "aprs", "sonde"):
+            return {"kind": by, "mode": {"ais": "AIS", "adsb": "ADS-B", "aprs": "APRS", "sonde": "Radiosonde"}[by],
+                    "label": None,
                     "freqHz": h.get("freq", h["centre"])}
         return None
 

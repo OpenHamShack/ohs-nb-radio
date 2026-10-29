@@ -332,6 +332,24 @@ with REG.after("dmrIdLookup"):
             "the callsign, \"OpenHamShack-Radio\" and its version. Without internet, or for a callsign adsbdb "
             "does not know, the aircraft shows no route.")
 
+# --- radiosondes and SondeHub (ohsradio/sonde.py, sondehub.py) ---------------------
+# Both on by default, like the other online extras above (Brian: offline,
+# nothing changes). The upload is what radiosonde_auto_rx does by default
+# and asks every station to leave on; its help says exactly what goes out,
+# including that the station is placed only at its locator's centre.
+with REG.after("adsbRouteLookup"):
+    _k("sondeHubUpload", "bool", True, "setting",
+       help="Send the radiosondes Radio decodes to SondeHub (sondehub.org), the public map of radiosonde "
+            "flights, as radiosonde_auto_rx stations do. What goes out: each decoded frame, your callsign, and "
+            "the centre of your 6-character locator (never your exact position), every 15 seconds while a "
+            "sonde is being decoded, saying \"OpenHamShack-Radio\" and its version. Without internet nothing "
+            "is sent and the map works as before.")
+    _k("sondeOnline", "bool", True, "setting",
+       help="Show upcoming radiosonde launches from nearby sites, and predict where a sonde will burst and land "
+            "with SondeHub's predictor. What goes out: a request a day for SondeHub's list of launch sites, and "
+            "a sonde's position and climb once a minute while one is being decoded. Off, or offline, the "
+            "launch list is empty and Radio makes its own simple estimate.")
+
 # --- weather satellites (ohsradio/wxsat.py, wxsat_tle.py) ------------------------
 # Brian, 29/10/2026: Meteor-M LRPT passes recorded by themselves. Control
 # level: a pass only receives, and gives the receiver back as it was. The
@@ -419,6 +437,9 @@ with REG.after("txDial"):
         ("aprs", "dict", {}, "The APRS session (aprs.py): {state (idle, running), why, text, clients, startedAt, "
                              "endsInS, freqHz, centreHz, stations, rev, frames, packets, dropped, ...}; GET "
                              "api/aprs/session."),
+        ("sonde", "dict", {}, "The radiosonde session (sonde.py): {state (idle, scanning, tracking), why, text, "
+                              "clients, startedAt, endsInS, freqHz, tracking, candidates, sondes, rev, frames, "
+                              "dropped, scans, detections, ...}; GET api/sonde/session."),
         ("dmrIds", "dict", {}, "DMR callsigns and names (dmrids.py): {available, count, updatedUtc, source, "
                                "talkgroups}; available false offline until a list has been fetched, and with "
                                "dmrIdLookup off."),

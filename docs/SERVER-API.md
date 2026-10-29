@@ -83,6 +83,9 @@ the desktop apps.
 | `GET api/aprs/stations[?since=rev][&sinceS=seconds]`, `GET api/aprs/stations/{call}` | view | Radio only: the APRS stations heard in the last 24 hours, and one with its track and recent packets |
 | `GET api/aprs/messages` | view | Radio only: the APRS messages and bulletins heard (read only: nothing is ever sent) |
 | `GET api/events?kinds=…,aprs` | view | Radio only: each packet heard, each station as it changes, each message, the session; not in the default set |
+| `GET api/sonde/session`, `POST api/sonde/session?client=<id>`, `DELETE api/sonde/session?client=\|all=1` | view, control, control | Radio only: the radiosonde session a sonde map keeps alive (below, "Radiosondes"); receive only |
+| `GET api/sonde/sondes`, `GET api/sonde/sondes/{serial}`, `GET api/sonde/launches` | view | Radio only: the sondes decoded (kept a day, a week once landed), one with its track and profile, and upcoming launches nearby |
+| `GET api/events?kinds=…,sonde` | view | Radio only: each sonde as it changes, the session; not in the default set |
 | `GET api/map/info`, `GET api/map/land?bbox=`, `GET api/map/tiles/{z}/{x}/{y}.png` | view | Radio only: the map to draw ships on (below, "Map") |
 | `GET api/wxsat/passes[?hours=48]`, `GET api/wxsat/status`, `GET api/wxsat/images`, `GET api/wxsat/images/{id}/{product}.jpg[?w=400]`, `GET api/wxsat/composite?product=&hours=` | view | Radio only: weather-satellite passes, their plans, what is being recorded or decoded, and the pictures (below, "Weather satellites") |
 | `POST`/`DELETE api/wxsat/passes/{id}/record` | control | Radio only: force or skip one pass |
@@ -963,6 +966,7 @@ where it makes a hold:
 | listening to a session | `"client"` in `POST api/decoders/sessions/{id}/listen` |
 | the ship and aircraft maps | `"client"` in `POST api/ais/session` / `api/adsb/session`, as before; `"ais"` / `"adsb"` in its presence holds renews them without renewing the session |
 | the APRS station map | `"client"` in `POST api/aprs/session`; `"aprs"` in its presence holds renews it without renewing the session |
+| the radiosonde map | `?client=<id>` (or `"client"`) on `POST api/sonde/session`; `"sonde"` in its presence holds renews it without renewing the session |
 | receive audio, spectrum/1 and overlay/1, `api/events` | `?client=<id>` on `api/audio/rx`, `api/spectrum/v1`, `api/events` |
 
 All optional and backward compatible: a hold made without an id, or by a
@@ -2582,6 +2586,182 @@ on the shore (GM1SIM-7) and a weather station at Prestwick (GM2SIM-13).
 Each packet is real AFSK from shack_packet's own modulator on FM, decoded
 exactly as off the air; one a second, round them in turn, so the map fills
 within a quarter of a minute.
+## Radiosondes (Radio)
+
+Weather balloons' radiosondes on a map (29/10/2026). Radio scans 400-406
+MHz for a sonde's carrier, locks on to one and decodes it **only while a
+client has the radiosonde map open**, keeps a table of every sonde
+decoded, and serves it. Code `ohsradio/sonde.py` (the session, the scan,
+the table), `ohsradio/sondehub.py` (SondeHub); tests
+`tests/test_ham_sonde.py`. **Receive only.**
+
+**Decoding is radiosonde_auto_rx's** (projecthorus, GPL-3), pinned at
+v1.9.0 and built into the store image (`store/radio/Containerfile`):
+`dft_detect` names a candidate's kind, then `iq_dec | fsk_demod | <kind's
+demodulator> --softin --json` decodes it, each with exactly the options
+auto_rx v1.9.0 gives it by default. Radio's own part is cutting the
+channel from the receiver's IQ and the 400-406 MHz power scan that finds
+candidates (auto_rx's rtl_power step: 800 Hz bins averaged over seconds,
+10 dB over the median, rounded to the 10 kHz channel grid). Decoded:
+Vaisala RS41 (all variants), Graw DFM06/09/17, Meteomodem M10 and M20,
+Lockheed Martin LMS6-403, Intermet iMet-54, Meisei iMS-100 and RS-11G.
+Found and named by the scan but not decoded: RS92 (its GPS needs an
+ephemeris from the internet) and the kinds auto_rx decodes another way
+(iMet-1/4, MRZ, MTS01, WxR-301, C50). An install without the programs
+refuses `409 decoder_unavailable`.
+
+**The session** is AIS's (Brian, 29/10/2026), route for route: `POST
+api/sonde/session?client=<id>` (control; `{"client": "<id>"}` in the
+body works too, and `"dropSessions": true` or `?dropSessions=1`) when the
+map opens and again at least every `leaseS` seconds (30), `DELETE
+api/sonde/session?client=<id>` when it closes, `DELETE
+api/sonde/session?all=1` (control) to end it whoever has it open. It ends
+**at once** when the last client goes (`lingerS` 0), and when client
+presence says that client has gone (`"sonde"` in its holds renews the
+lease through presence); the receiver goes back exactly as it was: dial,
+mode, repeater offset and centre. `GET api/sonde/session` (view) is the
+session view.
+
+While it runs it **holds the receiver**: `rxOwner.by` is `"sonde"`, a
+tune or a key-up is refused `409 receiver_busy` ("The receiver is
+listening for radiosondes: close the radiosonde map, or stop it, to tune
+or change mode"), and AIS, ADS-B, APRS and DAB refuse one another and it
+with the holder's sentence. Scanning, the dial and the receiver's centre
+step across the band (at 2.4 MS/s three hops, 401, 403 and 405 MHz, and
+every other pass 60 kHz higher so the receiver's own DC spike hides
+nothing); each hop listens 5 s, then gives each candidate 5 s of
+`dft_detect`. Locked on, the dial reads the sonde's frequency and the
+receiver's centre sits 50 kHz above it. One sonde is decoded at a time;
+it is let go when nothing has decoded for 120 s (auto_rx's rx_timeout),
+when it has lain landed for 300 frames, or at once when it is encrypted
+(an RS41-SGM), the last two passed over for an hour so the scan finds the
+next.
+
+The session view (also `sonde` in `api/state` and `api/status`, and
+`session` items on the feed):
+
+```json
+{"state": "tracking", "why": null, "text": "Decoding a radiosonde on 403.500 MHz",
+ "clients": 1, "startedAt": "2026-10-29T06:31:03Z", "endsInS": null, "freqHz": 403500000.0,
+ "tracking": {"kind": "RS41", "freqHz": 403500000.0, "serial": "Z0000001"},
+ "candidates": [{"freqHz": 403500000.0, "snrDb": 31.2, "type": "RS41"}],
+ "leaseS": 30.0, "lingerS": 0.0, "sondes": 1, "rev": 6, "decoders": "radiosonde_auto_rx 1.9.0",
+ "frames": 5, "dropped": 0, "scans": 1, "detections": 1}
+```
+
+- `state`: `idle`, `scanning` or `tracking`; `why` (idle) `idle` (nobody
+  had the map open), `stopped`, `radio_stopped`, `lost`. `freqHz`: what
+  the dial is on - the hop's centre scanning, the sonde tracking.
+  `candidates`: the carriers the last pass found, strongest first, each
+  `type` the kind `dft_detect` named (`null` for none yet, or none).
+  `frames`: decoder lines taken this session; `dropped`: receiver blocks
+  the worker could not keep up with; `scans`: passes over the band.
+- **Refusals** (`{"error", "code"}`): `400 bad_client`; `409 span_pinned`
+  with `sessions`; `409 receiver_busy`; `409 on_air` (transmitting, or
+  automatic transmit armed); `409 decoder_unavailable`; `409
+  rate_too_low` (below 240 kS/s); `409 out_of_range` (a receiver that
+  does not reach 400 MHz); `429 too_many_clients` (32); `503
+  not_running`.
+
+**The sondes.** `GET api/sonde/sondes` (view), the TV client's agreed
+contract:
+
+```json
+{"state": "tracking", "freqHz": 403500000.0,
+ "sondehub": {"enabled": true, "lastUploadUtc": "2026-10-29T06:31:30Z", "error": null},
+ "sondes": [{"serial": "W1234567", "type": "RS41-SGP", "freqHz": 403500000.0,
+             "lat": 55.61, "lon": -4.21, "altM": 12345.6, "climbMs": 5.1, "headingDeg": 80.0,
+             "speedKmh": 45.0, "tempC": -40.5, "humidity": 30.2, "pressureHpa": 190.1, "batteryV": 2.7,
+             "frame": 4321, "lastHeard": "2026-10-29T06:31:29Z", "phase": "ascent",
+             "burst": {"lat": 55.69, "lon": -3.82, "altM": 26000, "predicted": true},
+             "landing": {"lat": 55.73, "lon": -3.61, "utc": "2026-10-29T08:12:40Z"},
+             "track": [{"t": "2026-10-29T06:20:01Z", "lat": 55.44, "lon": -4.63, "altM": 20.0}, "..."]}]}
+```
+
+- `state` as the session's: `scanning` or `tracking` while it runs,
+  `idle` when it does not (the table is still served).
+- One entry per sonde, **most recently heard first**: `serial` as
+  SondeHub spells it (an RS41's own, a DFM's digits, an M10/M20's after
+  its type), `type` the model as decoded (`RS41-SGP`, `DFM17`, `M20`,
+  `LMS6-403`, `iMet-54`, `iMS-100`...). Units: degrees, metres, m/s up
+  (`climbMs`), degrees true it is moving towards, km/h, Celsius, %, hPa,
+  volts. A value the sonde does not send is `null` (a DFM has no
+  humidity). `lastHeard` is when Radio heard it; `track[].t` the sonde's
+  own GPS time, a point every 5 s at most.
+- `phase`: `ascent` (also on the pad), `descent` once it falls faster
+  than 1.5 m/s for three frames from 100 m below its highest, `landed`
+  once it has lain still (under 1 m/s up or along) for ten frames after a
+  descent.
+- `burst`: during the ascent a prediction, `"predicted": true`; from the
+  descent on, the highest point it reached, `"predicted": false`. `null`
+  before anything is known. `landing`: during flight a prediction; once
+  `landed`, where it came down and when. Predictions come from SondeHub's
+  Tawhiri predictor (the one the SondeHub tracker draws), asked at most
+  once a minute while the sonde is decoded and online, with the nearest
+  launch site's usual burst altitude (else 26 km); otherwise from a
+  simple ballistic estimate (the present climb, a parachute's fall through
+  NASA's simple atmosphere, the present drift throughout); both say
+  `"predicted": true`. Only the sonde being decoded is predicted.
+- Only frames auto_rx would take are used: a GPS fix (not 0, 0, and four
+  satellites or more), below 50 km, a time within 3 hours of now, a
+  serial in its kind's form (a DFM's `xxxxxxxx` before its serial has
+  arrived is not a sonde). An encrypted RS41-SGM is listed with its
+  serial and `lat` `null`, never mapped or uploaded.
+- **Kept 24 hours** after last heard, **7 days once landed** (for
+  finding it), on the controller (`sonde/sondes.json`), across restarts.
+
+`GET api/sonde/sondes/{serial}` (view): one entry as above plus
+`profile`, the atmosphere it measured, a point each 50 m of height:
+`[{"altM", "tempC", "humidity", "pressureHpa", "windKmh", "windDirDeg"}]`
+(the wind is its drift: `windDirDeg` where the wind comes **from**).
+`404 unknown_sonde` for none heard in the kept time.
+
+`GET api/sonde/launches` (view): upcoming launches in the next 24 hours
+from SondeHub's launch sites within 400 km of the station's locator,
+soonest first: `[{"site": "03918", "name": "Castor Bay (United Kingdom)",
+"lat", "lon", "altM", "distanceKm", "bearingDeg", "utc", "types":
+["RS41"], "freqHz": 403400000, "burstAltM": 30300, "ascentMs": 4.8,
+"descentMs": 3}]` (site figures `null` where SondeHub has none; `types`
+names WMO code 41 as RS41 and gives any other code as `"WMO <code>"`). The
+site list is fetched in the background at most once a day and kept
+(`sonde/sites.json`), so it is served offline as last known; `[]` before
+it was ever fetched, and with `sondeOnline` off.
+
+Live, `GET api/events?kinds=sonde` (WebSocket, not in the default set):
+`{"kind": "sonde", "type": "sonde", "rev", "sonde": {...without track}}`
+on each frame and prediction; `{"type": "removed", "rev", "serial"}`
+when one ages out; `{"type": "session", "session": {...}}` as AIS's.
+
+**SondeHub.** Every frame decoded off the air is uploaded as auto_rx
+uploads it (its sondehub.py, v1.9.0): SondeHub's universal telemetry
+format, gzip-compressed JSON, `PUT https://api.v2.sondehub.org/sondes/telemetry`
+every 15 s, and the station to `/listeners` every 6 hours while it sends.
+`uploader_callsign` is the station profile's callsign; **`uploader_position`
+is only the centre of the station's 6-character locator** (Brian,
+29/10/2026: IO75RL is sent as `[55.4792, -4.5417, 0]`; an 8-character one
+is cut to 6), never the profile's own position. `software_name`
+`"OpenHamShack-Radio"`, User-Agent `OpenHamShack-Radio/<version>`.
+
+- `sondeHubUpload` (setting, on by default as auto_rx asks): off, nothing
+  is sent and nothing queued. `sondeOnline` (setting, on): the launch
+  list and Tawhiri; off, `api/sonde/launches` is `[]` and predictions are
+  Radio's own.
+- **Offline is not an error**: no route out, a timeout or a server error
+  drops that batch (frames minutes late are no use to SondeHub) and is
+  logged once; `sondehub.error` stays `null`. `error` is a sentence only
+  for what the operator can act on: SondeHub refusing the upload (a 4xx),
+  or no callsign or locator to send it under.
+- `lastUploadUtc`: the last batch SondeHub accepted.
+- The simulator's sondes are never uploaded.
+
+Simulator: Radio's simulator puts a fictional RS41's carrier on 403.500
+MHz (`ohsradio/devices/simsonde.py`), and with the simulated radio Radio
+uses stand-ins for auto_rx's programs that answer with that sonde's flight
+(serial `Z0000001`: launched west of Ayr at 11:15 and 23:15 UTC daily, a
+5 m/s climb to burst at 30 km, a parachute down near Peebles), so the map
+shows one in flight or landed at any hour. The scan, the channel, the
+pipes and the table are Radio's own throughout; only the decoding is
+stood in for.
 ## Weather satellites (Radio)
 
 Meteor-M LRPT passes, predicted and recorded by themselves (Brian,
