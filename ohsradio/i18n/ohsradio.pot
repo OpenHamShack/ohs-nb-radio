@@ -22,7 +22,7 @@ msgstr ""
 msgid "A recording is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1143
+#: ohsradio/radio.py:1150
 msgid "A recording is playing: its gain was fixed when it was recorded."
 msgstr ""
 
@@ -34,7 +34,7 @@ msgstr ""
 msgid "A station is playing"
 msgstr ""
 
-#: ohsradio/radio.py:1718
+#: ohsradio/radio.py:1728
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
@@ -75,6 +75,19 @@ msgstr ""
 
 #: ohsradio/ais.py:140
 msgid "AIS-SART active"
+msgstr ""
+
+#: ohsradio/aprs.py:447
+msgid "APRS has the receiver for the station map: stop APRS first"
+msgstr ""
+
+#: ohsradio/aprs.py:491
+msgid "APRS needs the shack_packet library, which this install does not have"
+msgstr ""
+
+#: ohsradio/aprs.py:498
+#, python-brace-format
+msgid "APRS takes the receiver to 144.800 MHz and stops {sessions}"
 msgstr ""
 
 #: ohsradio/ais.py:140
@@ -202,12 +215,12 @@ msgstr ""
 msgid "Dredging or underwater ops"
 msgstr ""
 
-#: ohsradio/state.py:403
+#: ohsradio/state.py:406
 #, python-brace-format
 msgid "Drive cannot exceed {percent:.0f} % on this band (its ceiling, Settings › Bands & power)"
 msgstr ""
 
-#: ohsradio/radio.py:697
+#: ohsradio/radio.py:703
 #, python-brace-format
 msgid "Drive lowered to {percent:.0f} %: this band's ceiling"
 msgstr ""
@@ -331,6 +344,10 @@ msgstr ""
 msgid "Listening to AIS on 161.975 and 162.025 MHz"
 msgstr ""
 
+#: ohsradio/aprs.py:647
+msgid "Listening to APRS on 144.800 MHz"
+msgstr ""
+
 #: ohsradio/adsb.py:109
 msgid "Medical emergency"
 msgstr ""
@@ -408,6 +425,7 @@ msgstr ""
 
 #: ohsradio/adsb.py:522
 #: ohsradio/ais.py:640
+#: ohsradio/aprs.py:651
 msgid "Not running"
 msgstr ""
 
@@ -432,7 +450,11 @@ msgstr ""
 msgid "Not while transmitting: AIS takes the receiver to 162 MHz"
 msgstr ""
 
-#: ohsradio/radio.py:1390
+#: ohsradio/aprs.py:446
+msgid "Not while transmitting: APRS takes the receiver to 144.800 MHz"
+msgstr ""
+
+#: ohsradio/radio.py:1400
 #, python-brace-format
 msgid "Notch filter not changed: {error}"
 msgstr ""
@@ -489,7 +511,7 @@ msgstr ""
 msgid "Radio failure"
 msgstr ""
 
-#: ohsradio/radio.py:1203
+#: ohsradio/radio.py:1210
 #, python-brace-format
 msgid "Radio is scanning {label} for its station list: it is yours again the moment you use it"
 msgstr ""
@@ -498,7 +520,7 @@ msgstr ""
 msgid "Reachable"
 msgstr ""
 
-#: ohsradio/radio.py:1147
+#: ohsradio/radio.py:1154
 msgid "Receiver gain control is automatic: the radio's own AGC follows the station."
 msgstr ""
 
@@ -592,6 +614,10 @@ msgstr ""
 msgid "Start the radio before scanning"
 msgstr ""
 
+#: ohsradio/aprs.py:494
+msgid "Start the radio to see APRS stations: APRS needs the receiver"
+msgstr ""
+
 #: ohsradio/adsb.py:327
 msgid "Start the radio to see aircraft: ADS-B needs the receiver"
 msgstr ""
@@ -611,7 +637,12 @@ msgstr ""
 
 #: ohsradio/adsb.py:520
 #: ohsradio/ais.py:638
+#: ohsradio/aprs.py:649
 msgid "Stopped"
+msgstr ""
+
+#: ohsradio/aprs.py:648
+msgid "Stopped: nobody had the APRS map open"
 msgstr ""
 
 #: ohsradio/adsb.py:519
@@ -624,6 +655,7 @@ msgstr ""
 
 #: ohsradio/adsb.py:521
 #: ohsradio/ais.py:639
+#: ohsradio/aprs.py:650
 msgid "Stopped: the radio stopped"
 msgstr ""
 
@@ -634,6 +666,7 @@ msgstr ""
 
 #: ohsradio/adsb.py:522
 #: ohsradio/ais.py:640
+#: ohsradio/aprs.py:651
 msgid "Stopped: the receiver was taken back"
 msgstr ""
 
@@ -659,16 +692,17 @@ msgstr ""
 msgid "The CW skimmer stopped."
 msgstr ""
 
-#: ohsradio/radio.py:1145
+#: ohsradio/radio.py:1152
 msgid "The Hermes-Lite 2's receive gain is its LNA setting, which stays yours."
 msgstr ""
 
-#: ohsradio/radio.py:958
+#: ohsradio/radio.py:964
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
 #: ohsradio/adsb.py:276
 #: ohsradio/ais.py:455
+#: ohsradio/aprs.py:455
 msgid "The client must name itself: 1-64 letters, digits, '.', '_', ':' or '-'"
 msgstr ""
 
@@ -725,6 +759,14 @@ msgstr ""
 msgid "The receiver is listening to AIS for the ship map: stop AIS to transmit"
 msgstr ""
 
+#: ohsradio/aprs.py:445
+msgid "The receiver is listening to APRS for the station map: stop APRS to transmit"
+msgstr ""
+
+#: ohsradio/aprs.py:443
+msgid "The receiver is listening to APRS on 144.800 MHz for the station map: close the map, or stop APRS, to tune or change mode"
+msgstr ""
+
 #: ohsradio/bandscan.py:513
 msgid "The receiver stopped delivering samples"
 msgstr ""
@@ -749,12 +791,12 @@ msgstr ""
 msgid "The {device} does not receive the FM band"
 msgstr ""
 
-#: ohsradio/radio.py:658
+#: ohsradio/radio.py:664
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz ({radio} MHz through {converter}) is outside it"
 msgstr ""
 
-#: ohsradio/radio.py:661
+#: ohsradio/radio.py:667
 #, python-brace-format
 msgid "The {device} receives {lo}-{hi} MHz; {mhz} MHz is outside it"
 msgstr ""
@@ -772,7 +814,7 @@ msgstr ""
 msgid "There is no CW segment in the band plan here."
 msgstr ""
 
-#: ohsradio/radio.py:1676
+#: ohsradio/radio.py:1686
 #, python-brace-format
 msgid "There is no band called {name}"
 msgstr ""
@@ -801,6 +843,10 @@ msgstr ""
 
 #: ohsradio/screens.py:71
 msgid "This needs a newer OpenHamShack app."
+msgstr ""
+
+#: ohsradio/aprs.py:460
+msgid "Too many screens have the APRS map open"
 msgstr ""
 
 #: ohsradio/adsb.py:281
@@ -839,7 +885,7 @@ msgstr ""
 msgid "Tune by frequency"
 msgstr ""
 
-#: ohsradio/radio.py:914
+#: ohsradio/radio.py:920
 #, python-brace-format
 msgid "Tuning to {freq} stops {sessions}: the receiver stays on {lo} to {hi} while they run"
 msgstr ""
@@ -882,7 +928,7 @@ msgstr ""
 msgid "Waiting for the radio to restart…"
 msgstr ""
 
-#: ohsradio/radio.py:1242
+#: ohsradio/radio.py:1249
 #, python-brace-format
 msgid "Wide FM needs the receiver to run at {least:g} kS/s or more, and the {device} runs at {rate:g} kS/s"
 msgstr ""
@@ -951,12 +997,12 @@ msgstr ""
 msgid "in: overload seen at {mhz} MHz"
 msgstr ""
 
-#: ohsradio/radio.py:1052
-#: ohsradio/radio.py:1057
+#: ohsradio/radio.py:1059
+#: ohsradio/radio.py:1064
 msgid "in: set on"
 msgstr ""
 
-#: ohsradio/radio.py:1059
+#: ohsradio/radio.py:1066
 msgid "in: tuned below 60 MHz, clear of MW and LW broadcasting"
 msgstr ""
 
@@ -997,7 +1043,7 @@ msgid "now {call}, {location}"
 msgstr ""
 
 #: ohsradio/notch.py:231
-#: ohsradio/radio.py:1065
+#: ohsradio/radio.py:1072
 msgid "out: ADS-B is listening at 1090 MHz"
 msgstr ""
 
@@ -1018,12 +1064,12 @@ msgstr ""
 msgid "out: no overload seen"
 msgstr ""
 
-#: ohsradio/radio.py:1052
-#: ohsradio/radio.py:1057
+#: ohsradio/radio.py:1059
+#: ohsradio/radio.py:1064
 msgid "out: set off"
 msgstr ""
 
-#: ohsradio/radio.py:1061
+#: ohsradio/radio.py:1068
 msgid "out: tuned above 60 MHz or within MW or LW broadcasting"
 msgstr ""
 
@@ -1069,7 +1115,7 @@ msgstr ""
 msgid "{error}. The radio was not restarted."
 msgstr ""
 
-#: ohsradio/radio.py:956
+#: ohsradio/radio.py:962
 #, python-brace-format
 msgid "{error}. Transmit will be refused until it is fixed."
 msgstr ""
@@ -1094,12 +1140,12 @@ msgstr ""
 msgid "{field} must be text"
 msgstr ""
 
-#: ohsradio/radio.py:859
+#: ohsradio/radio.py:865
 #, python-brace-format
 msgid "{freq} does not fit in the {width} the receiver covers together with the dial ({dial}) and {sessions}"
 msgstr ""
 
-#: ohsradio/radio.py:856
+#: ohsradio/radio.py:862
 #, python-brace-format
 msgid "{freq} is too far from the dial ({dial}): the receiver covers {width} at once, so tune nearer to it first"
 msgstr ""
