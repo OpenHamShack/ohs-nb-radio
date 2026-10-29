@@ -1,0 +1,12 @@
+# Meteor-M N2-3 and N2-4 element sets, bundled with Radio as the fallback
+# for weather-satellite passes when it has never reached Celestrak
+# (ohsradio/wxsat_tle.py). Refresh by replacing the six lines below with
+# Celestrak's current ones and updating the date:
+#   curl 'https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle'
+# fetched 2026-10-29T05:30:00Z celestrak.org GROUP=weather
+METEOR-M2 3
+1 57166U 23091A   26301.59639450 -.00000006  00000+0  16049-4 0  9993
+2 57166  98.5923 353.7327 0004774 132.4850 227.6734 14.24055162173505
+METEOR-M2 4
+1 59051U 24039A   26301.62161587 -.00000010  00000+0  15349-4 0  9993
+2 59051  98.7213 259.3532 0007678 137.0518 223.1260 14.22441373138238
