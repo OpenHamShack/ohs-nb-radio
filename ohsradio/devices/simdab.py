@@ -56,6 +56,7 @@ HALF_WIDTH = 768_000.0          # half the 1.536 MHz block
 _lock = threading.Lock()
 _base: np.ndarray | None = None
 _at_rate: dict[float, np.ndarray] = {}
+_mjd: int | None = None          # the day the cached loop's EPG was built for
 
 
 def available() -> bool:
@@ -64,10 +65,21 @@ def available() -> bool:
     return sdr.load() is not None
 
 
+def built_mjd() -> int | None:
+    """The MJD `loop()` baked into the cached ensemble's SPI schedule
+    (None before any `loop()` has built one). The schedule is for this one
+    calendar day, fixed at build time from the wall clock, so a caller
+    that will later ask "what is on now" against real wall-clock time
+    (ohscore.dabpics.DabPictures's default clock) needs to know which day
+    that is - a long test still running past midnight otherwise finds the
+    schedule a day behind (test_ham_dab_pictures.py OverTheApi, 29/10)."""
+    return _mjd
+
+
 def loop(fs: float) -> np.ndarray | None:
     """The ensemble's loop at `fs`, unit RMS, made on first use (blocks for
     a few seconds then; cached for the process). None without shack_sdr."""
-    global _base
+    global _base, _mjd
     fs = float(fs)
     with _lock:
         if fs in _at_rate:
@@ -90,6 +102,7 @@ def loop(fs: float) -> np.ndarray | None:
             per = int(round(FRAME_S * DAB_RATE))
             z = z[len(z) - LOOP_FRAMES * per:]          # the lead-in off: whole frames from a null symbol
             _base = (z / np.sqrt(np.mean(np.abs(z) ** 2))).astype(np.complex64)
+            _mjd = mjd
         n = len(_base)
         m_len = int(round(n * fs / DAB_RATE))
         if m_len == n:

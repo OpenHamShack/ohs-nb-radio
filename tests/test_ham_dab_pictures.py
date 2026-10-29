@@ -223,6 +223,23 @@ class OverTheApi(unittest.TestCase):
         self.radio = Radio(self.cfg, persist=False, data_dir=self.tmp.name, audio=self.audio,
                            device=ListeningSim(dict(self.cfg), 2_400_000.0, [simdab.DabEnsemble("11D", -30.0)]))
         self.srv = Server(self.radio, ham_server.info("9.9.9"), self.audio, secret=SECRET)
+        # Build (or, after a restart, just reuse the process-cached) loop
+        # now, synchronously, rather than letting a background thread do it
+        # whenever the device first needs the block: that way this test -
+        # not the wall clock at some unpredictable later moment - fixes
+        # which day the SPI schedule holds. simdab.loop() bakes "today"
+        # (UTC) into the showcase ensemble's EPG once per process; the
+        # programme guide is compared against DabPictures's own clock
+        # (real wall time by default), so a test still going at midnight
+        # found the schedule a day behind and "now" stuck at None (failed
+        # once, 29/10, 23:59-00:00). Pinning the picture store's clock to
+        # noon on the day the loop was built for removes the wall clock
+        # from the comparison entirely.
+        simdab.loop(2_400_000.0)
+        mjd = simdab.built_mjd()
+        if mjd is not None:
+            noon = (mjd - 40_587) * 86_400 + 12 * 3600
+            self.radio.dab_pictures.clock = lambda: noon
         httpd = self.srv.serve("127.0.0.1", 0)
         self.port = httpd.server_address[1]
         self.assertEqual(self.srv.start_radio(), "")
