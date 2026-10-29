@@ -33,11 +33,14 @@ import numpy as np
 WEST, NORTH, SX, SY = -24.5, 71.25, 0.0175, 0.0125
 
 
-def write_geotiff(path: Path, rgba16: np.ndarray, west: float, north: float, sx: float, sy: float) -> None:
+def write_geotiff(path: Path, rgba16: np.ndarray, west: float, north: float, sx: float, sy: float,
+                  nodata: str | None = None) -> None:
     """A GeoTIFF as SatDump's save_tiff writes one: little-endian,
     uncompressed, contiguous RGBA (extra sample: unassociated alpha) in
     strips, then ModelTiepoint (0, 0, 0, offset_x, offset_y, 0) and
-    ModelPixelScale (scalar_x, -scalar_y, 0) - geotiff_write.cpp."""
+    ModelPixelScale (scalar_x, -scalar_y, 0) - geotiff_write.cpp. Other
+    sample counts and `nodata` (GDAL_NODATA, which SatDump does not write)
+    are for the reader's tests of files without alpha."""
     h, w, c = rgba16.shape
     data = rgba16.astype("<u2").tobytes()
     rows = max(1, 8192 // (w * c * 2))
@@ -51,7 +54,11 @@ def write_geotiff(path: Path, rgba16: np.ndarray, west: float, north: float, sx:
             (274, 3, [1]), (277, 3, [c]), (278, 4, [rows]), (279, 4, [len(s) for s in strips]), (284, 3, [1]),
             (338, 3, [2]), (33550, 12, [sx, sy, 0.0]), (33922, 12, [0.0, 0.0, 0.0, west, north, 0.0]),
             (34735, 3, [1, 1, 0, 0])]
-    code = {3: "H", 4: "I", 12: "d"}
+    if c in (1, 3):
+        tags = [t for t in tags if t[0] != 338]
+    if nodata is not None:
+        tags.append((42113, 2, list(nodata.encode("ascii") + b"\0")))
+    code = {2: "B", 3: "H", 4: "I", 12: "d"}
     ifd_at = len(out)
     entries = b""
     tail_at = ifd_at + 2 + 12 * len(tags) + 4

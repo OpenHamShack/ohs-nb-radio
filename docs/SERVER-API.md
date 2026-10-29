@@ -87,7 +87,7 @@ the desktop apps.
 | `GET api/sonde/sondes`, `GET api/sonde/sondes/{serial}`, `GET api/sonde/launches` | view | Radio only: the sondes decoded (kept a day, a week once landed), one with its track and profile, and upcoming launches nearby |
 | `GET api/events?kinds=…,sonde` | view | Radio only: each sonde as it changes, the session; not in the default set |
 | `GET api/map/info`, `GET api/map/land?bbox=`, `GET api/map/tiles/{z}/{x}/{y}.png` | view | Radio only: the map to draw ships on (below, "Map") |
-| `GET api/wxsat/passes[?hours=48]`, `GET api/wxsat/status`, `GET api/wxsat/images`, `GET api/wxsat/images/{id}/{product}.jpg[?w=400]`, `GET api/wxsat/composite?product=&hours=` | view | Radio only: weather-satellite passes, their plans, what is being recorded or decoded, and the pictures (below, "Weather satellites") |
+| `GET api/wxsat/passes[?hours=48]`, `GET api/wxsat/status`, `GET api/wxsat/images`, `GET api/wxsat/images/{id}/{product}.{jpg,webp}[?w=400]`, `GET api/wxsat/composite?product=&hours=` | view | Radio only: weather-satellite passes, their plans, what is being recorded or decoded, and the pictures (below, "Weather satellites") |
 | `POST`/`DELETE api/wxsat/passes/{id}/record` | control | Radio only: force or skip one pass |
 | `GET api/local-frequencies?radiusKm=&category=` | view | Radio only: what there is to listen to near the station (below, "Local frequencies") |
 | `POST api/local-frequencies/mine`, `PUT`/`DELETE api/local-frequencies/mine/{id}` | control | Radio only: the operator's own list ("my frequencies") |
@@ -2883,7 +2883,7 @@ Every decoded pass's pictures, newest first; `[]` when there are none:
                {"kind": "ir", "name": "10.8um Thermal IR (Uncalibrated)", "url": ".../ir.jpg", "w": 1400, "h": 1820},
                {"kind": "msa", "name": "MSA", "url": ".../msa.jpg", "w": 1400, "h": 1820},
                {"kind": "ch1", "name": "Channel 1", "url": ".../ch1.jpg", "w": 1568, "h": 1820}],
-  "projected": {"url": "api/wxsat/images/meteor-m2-3-20261029T0919Z/rgb-projected.jpg", "w": 2048, "h": 1491,
+  "projected": {"url": "api/wxsat/images/meteor-m2-3-20261029T0919Z/rgb-projected.webp", "w": 2048, "h": 1491,
                 "bounds": {"n": 71.25, "s": 45.65, "e": 11.34, "w": -24.5}}}]
 ```
 
@@ -2902,22 +2902,31 @@ Every decoded pass's pictures, newest first; `[]` when there are none:
   projected. `bounds` are the picture's edges in degrees (north, south,
   east, west of its outer pixels, WGS-84): lay it over web-map tiles by
   these, reprojecting to the map's projection as for any image overlay.
-  Its pixels are square in degrees. Outside the satellite's swath it is
-  black, not transparent (JPEG has no transparency).
+  Its pixels are square in degrees. It is **WebP with alpha**: opaque
+  (255) inside the satellite's swath, transparent (0) outside, nothing in
+  between, so passes can be laid over one another and the map shows
+  through. Where the server's Pillow cannot write WebP it is PNG with the
+  same alpha instead (never JPEG); a pass decoded before 29/10/2026 keeps
+  its JPEG, black outside the swath. Use `url` as given: its extension
+  says which.
 - `url`s are relative to the app, like every path here.
 
-### GET api/wxsat/images/{id}/{product}.jpg[?w=400] (view)
+### GET api/wxsat/images/{id}/{product}.{ext}[?w=400] (view)
 
-One picture, `image/jpeg`: `{product}` is a `kind` from the list, or
-`rgb-projected` / `ir-projected` for the projections (only those the list
-or `composite` names exist). `?w=` up to 400 gives the 400 px-wide
+One picture: `{product}` is a `kind` from the list, `.jpg`, served
+`image/jpeg`; or `rgb-projected` / `ir-projected` for the projections
+(only those the list or `composite` names exist), `.webp` served
+`image/webp` - `.png`, `image/png`, on a server without WebP, and `.jpg`
+for a pass decoded before projections were WebP. The URL the list or
+`composite` gives is the one that exists. `?w=` up to 400 gives the 400 px-wide
 thumbnail (aspect kept); larger or absent the full picture.
 `404 no_image` for anything else, a path included.
 
 ### GET api/wxsat/composite?product=rgb&hours=24 (view)
 
 The projected pictures of one kind, for an animation or a mosaic over a
-map: `{"frames": [{"imageId", "aos", "url", "bounds"}...]}`, the passes
+map: `{"frames": [{"imageId", "aos", "url", "bounds"}...]}` (`url` the
+projection as in the list: WebP, transparent outside the swath), the passes
 whose AOS is within `hours` (1-168, default 24) **oldest first**.
 `product` is `rgb` (default) or `ir`; a pass with no projection of that
 kind is left out (by night there is no `rgb`). `400 bad_params` for
@@ -2945,9 +2954,13 @@ satdump meteor_m2-x_lrpt baseband <the .sigmf-data file> <folder> --samplerate <
 - **Projection**: SatDump's "auto" equirectangular for the `rgb` and
   `ir` composites, written as GeoTIFF; the bounds come from the file's
   ModelTiepoint and ModelPixelScale tags, then the picture is made a
-  JPEG with square pixels at most 2048 on its long side.
-- **Kept** in Radio's data folder (`wxsat/images/<imageId>/`), the JPEGs
-  and their thumbnails only - SatDump's own files are deleted. The
+  WebP (lossy, quality 80, alpha lossless) with square pixels at most
+  2048 on its long side. Its alpha is the GeoTIFF's alpha sample, which
+  SatDump writes; failing that a GDAL_NODATA value, failing that the
+  pixels black in every band, shrunk by 2 px so the swath's dark edge is
+  kept.
+- **Kept** in Radio's data folder (`wxsat/images/<imageId>/`), the JPEGs,
+  the projections and their thumbnails only - SatDump's own files are deleted. The
   pictures obey the recordings' disk rules: together at most a tenth of
   `RECORDINGS_LIMIT_GB`, the oldest pass's going first, and no pass is
   decoded while free space is below the recordings' floor (`failed`,

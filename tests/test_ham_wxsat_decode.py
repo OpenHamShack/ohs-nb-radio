@@ -1,7 +1,7 @@
 """Radio's weather-satellite pictures (ohsradio/wxsat_decode.py; SERVER-API
 "Weather satellites"): SatDump run after LOS on each recorded pass, its
-output turned into JPEGs, thumbnails and a projected picture with bounds,
-kept within the recordings' disk rules and served by api/wxsat.
+output turned into JPEGs, thumbnails and a projected picture with bounds
+(WebP, transparent outside the swath), kept within the recordings' disk rules and served by api/wxsat.
 
 SatDump is a fake here: a script that writes the tree SatDump 1.2.2 writes
 for `meteor_m2-x_lrpt baseband` - file for file, named as its source names
@@ -27,12 +27,13 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
 from ohscore.server.shack import SHACK_SECRET_HEADER
 from ohsradio import wxsat_decode
-from ohsradio.wxsat_decode import Decoder, read_geotiff
+from ohsradio.wxsat_decode import Decoder, read_geotiff, webp_supported
 from satdump_fake import NORTH, SX, SY, WEST, write_geotiff
 
 TESTS = Path(__file__).resolve().parent
@@ -93,6 +94,18 @@ class Decoding(unittest.TestCase):
     def decode(self, **kw):
         return self.dec.decode(a_job(self.dir, **kw))
 
+    def assert_swath(self, im, w, h):
+        """The fake's projection painted a block a quarter to three
+        quarters down and an eighth in from each side, alpha 0 around it:
+        opaque inside, clear outside, nothing in between."""
+        self.assertEqual((im.mode, im.size), ("RGBA", (w, h)))
+        a = np.asarray(im)
+        self.assertEqual(int(a[h // 2, w // 2, 3]), 255)
+        self.assertGreater(int(a[h // 2, w // 2, 0]), 200)
+        for y, x in ((h // 8, w // 2), (h // 2, w // 16), (h - 1, w - 1), (0, 0)):
+            self.assertEqual(int(a[y, x, 3]), 0, (y, x))
+        self.assertEqual(set(np.unique(a[:, :, 3]).tolist()), {0, 255})
+
     def test_a_day_pass_becomes_jpegs_thumbnails_and_a_projection_with_bounds(self):
         plan, why, image_id = self.decode()
         self.assertEqual((plan, why, image_id), ("done", None, "meteor-m2-3-20261029T0919Z"))
@@ -119,20 +132,21 @@ class Decoding(unittest.TestCase):
         # The projection: bounds from the GeoTIFF, the picture in square degrees.
         pj = img["projected"]
         self.assertEqual(set(pj), {"url", "w", "h", "bounds"})
-        self.assertEqual(pj["url"], f"api/wxsat/images/{image_id}/rgb-projected.jpg")
+        self.assertEqual(pj["url"], f"api/wxsat/images/{image_id}/rgb-projected.webp")
         b = pj["bounds"]
         self.assertEqual(b, {"n": NORTH, "s": round(NORTH - 256 * SY * 8, 5), "e": round(WEST + 256 * SX * 8, 5),
                              "w": WEST})
         self.assertEqual(max(pj["w"], pj["h"]), 2048)
         self.assertAlmostEqual(pj["w"] / pj["h"], (b["e"] - b["w"]) / (b["n"] - b["s"]), places=2)
-        # The painted block lands where the GeoTIFF put it: a quarter down, an eighth in.
-        with Image.open(self.dec.images.folder / image_id / "rgb-projected.jpg") as im:
-            a = np.asarray(im)
-        self.assertGreater(a[pj["h"] // 2, pj["w"] // 2, 0], 200)
-        self.assertLess(a[pj["h"] // 8, pj["w"] // 2, 0], 40)          # black outside the swath
-        # SatDump's own folder is gone; only the JPEGs and meta.json are kept.
+        # The painted block lands where the GeoTIFF put it, and the rest is clear.
+        with Image.open(self.dec.images.folder / image_id / "rgb-projected.webp") as im:
+            self.assertEqual(im.format, "WEBP")
+            self.assert_swath(im, pj["w"], pj["h"])
+        with Image.open(self.dec.images.folder / image_id / "rgb-projected.thumb.webp") as im:
+            self.assertEqual((im.format, im.mode, im.width), ("WEBP", "RGBA", 400))
+        # SatDump's own folder is gone; only the pictures and meta.json are kept.
         self.assertFalse((self.dir / "wxsat" / "work" / image_id).exists())
-        self.assertTrue(all(p.suffix in (".jpg", ".json") for p in (self.dec.images.folder / image_id).iterdir()))
+        self.assertEqual({p.suffix for p in (self.dec.images.folder / image_id).iterdir()}, {".jpg", ".webp", ".json"})
 
     def test_satdump_runs_offline_on_the_passes_own_element_set_at_the_lowest_priority(self):
         os.environ["https_proxy"] = "http://proxy.invalid:3128"
@@ -165,7 +179,38 @@ class Decoding(unittest.TestCase):
         [img] = self.dec.images.listing()
         self.assertEqual([p["kind"] for p in img["products"]],
                          ["ir", "3-9-um-shortwave-ir-uncalibrated", "ch4", "ch5"])
-        self.assertTrue(img["projected"]["url"].endswith("/ir-projected.jpg"))
+        self.assertTrue(img["projected"]["url"].endswith("/ir-projected.webp"))
+
+    def test_without_webp_in_pillow_the_projection_is_png_with_alpha_never_jpeg(self):
+        with mock.patch.object(wxsat_decode, "webp_supported", return_value=False), \
+                mock.patch.object(wxsat_decode, "_overlay_said", False), \
+                self.assertLogs("ohsradio.wxsat", "WARNING") as said:
+            _plan, _why, image_id = self.decode()
+        self.assertIn("written as PNG", "\n".join(said.output))
+        [img] = self.dec.images.listing()
+        pj = img["projected"]
+        self.assertEqual(pj["url"], f"api/wxsat/images/{image_id}/rgb-projected.png")
+        self.assertEqual(self.dec.images.composite("ir", "")[0]["url"], f"api/wxsat/images/{image_id}/ir-projected.png")
+        with Image.open(io.BytesIO(self.dec.images.file(image_id, "rgb-projected", False, "png"))) as im:
+            self.assertEqual(im.format, "PNG")
+            self.assert_swath(im, pj["w"], pj["h"])
+        self.assertIsNone(self.dec.images.file(image_id, "rgb-projected", False, "webp"))
+
+    def test_a_projection_made_before_webp_is_still_the_jpeg_it_was(self):
+        _plan, _why, image_id = self.decode()
+        d = self.dec.images.folder / image_id
+        meta = json.loads((d / "meta.json").read_text())
+        for kind, p in meta["projected"].items():          # as meta.json was before "ext"
+            del p["ext"]
+            for thumb in ("", ".thumb"):
+                with Image.open(d / f"{kind}-projected{thumb}.webp") as im:
+                    im.convert("RGB").save(d / f"{kind}-projected{thumb}.jpg", "JPEG")
+                (d / f"{kind}-projected{thumb}.webp").unlink()
+        (d / "meta.json").write_text(json.dumps(meta))
+        [img] = self.dec.images.listing()
+        self.assertEqual(img["projected"]["url"], f"api/wxsat/images/{image_id}/rgb-projected.jpg")
+        self.assertEqual(self.dec.images.composite("rgb", "")[0]["url"], img["projected"]["url"])
+        self.assertEqual(self.dec.images.file(image_id, "rgb-projected", False, "jpg")[:2], b"\xff\xd8")
 
     def test_no_lock_is_failed_with_a_plain_reason(self):
         set_mode(self.fake, "nolock")
@@ -234,6 +279,10 @@ class Decoding(unittest.TestCase):
         for iid, product in ((image_id, "../secret"), ("..", "secret"), (image_id, "meta"), (image_id, "nonesuch"),
                              (image_id, "rgb.thumb")):
             self.assertIsNone(self.dec.images.file(iid, product, False), (iid, product))
+        # Only a projection is anything but JPEG, and only as one of the three.
+        self.assertIsNotNone(self.dec.images.file(image_id, "rgb-projected", False, "webp"))
+        self.assertIsNone(self.dec.images.file(image_id, "rgb", False, "webp"))
+        self.assertIsNone(self.dec.images.file(image_id, "rgb-projected", False, "json"))
 
 
 class GeoTiff(unittest.TestCase):
@@ -245,9 +294,52 @@ class GeoTiff(unittest.TestCase):
             a[..., 3] = 0xffff
             write_geotiff(p, a, -10.0, 60.0, 0.5, 0.25)
             img, b = read_geotiff(p)
-            self.assertEqual(img.shape, (10, 20, 3))
-            self.assertEqual(int(img[0, 0, 0]), 255)
+            self.assertEqual(img.shape, (10, 20, 4))
+            self.assertEqual((int(img[0, 0, 0]), int(img[0, 0, 3])), (255, 255))
             self.assertEqual(b, {"n": 60.0, "s": 57.5, "e": 0.0, "w": -10.0})
+
+    def geotiff(self, a, **kw):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        p = Path(d.name) / "x.tif"
+        write_geotiff(p, a, -10.0, 60.0, 0.5, 0.25, **kw)
+        return read_geotiff(p)[0][:, :, 3]
+
+    def test_the_alpha_sample_is_the_swath_whatever_the_colour(self):
+        a = np.zeros((20, 20, 4), np.uint16)
+        a[5:15, 5:15, 3] = 0xffff                  # black but inside: opaque
+        a[0:5, :, :3] = 0x8000                     # grey but outside: clear
+        a[15:, :, 3] = 0x7000                      # SatDump's blended edge: under half is out
+        al = self.geotiff(a)
+        self.assertEqual((int(al[10, 10]), int(al[2, 10]), int(al[17, 10])), (255, 0, 0))
+
+    def test_without_alpha_the_nodata_value_is_outside(self):
+        a = np.full((20, 20, 3), 7, np.uint16)
+        a[5:15, 5:15] = (0, 0, 0)                  # black is a picture's here: nodata says what is not
+        al = self.geotiff(a, nodata="7")
+        self.assertEqual((int(al[10, 10]), int(al[2, 10]), int(al[5, 5])), (255, 0, 255))
+
+    def test_with_neither_black_in_every_band_is_outside_shrunk_off_the_edge(self):
+        a = np.zeros((30, 30, 3), np.uint16)
+        a[10:20, 10:20] = (0x4000, 0x8000, 0)      # one band 0 is still a picture
+        al = self.geotiff(a)
+        self.assertEqual(int(al[15, 15]), 255)
+        # Black within EDGE_PX of the swath stays opaque (the projection
+        # darkens its edge); beyond that it is clear.
+        self.assertEqual([int(v) for v in al[15, 5:12]], [0, 0, 0, 255, 255, 255, 255])
+        self.assertEqual(int(al[0, 0]), 0)
+
+    @unittest.skipIf(Image is None or not webp_supported(), "no WebP in this Pillow")
+    def test_the_webp_keeps_its_alpha_exact(self):
+        rgba = np.zeros((64, 96, 4), np.uint8)
+        rgba[:, :, :3] = np.random.default_rng(3).integers(0, 255, (64, 96, 3))
+        rgba[16:48, 20:70, 3] = 255
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "x.webp"
+            wxsat_decode._save_overlay(rgba, p, 96, 64)
+            with Image.open(p) as im:
+                self.assertEqual(im.format, "WEBP")
+                np.testing.assert_array_equal(np.asarray(im)[:, :, 3], rgba[:, :, 3])
 
 
 # ---------------------------------------------------------------- on the server, from a recorded pass
@@ -332,8 +424,20 @@ class OnTheServer(unittest.TestCase):
         s, thumb, _c = self.req("GET", f"/{img['products'][0]['url']}?w=400", raw=True)
         with Image.open(io.BytesIO(thumb)) as im:
             self.assertEqual((s, im.width), (200, 400))
-        s, body, _c = self.req("GET", f"/{img['projected']['url']}", raw=True)
-        self.assertEqual(s, 200)
+        # The projection, served as WebP and clear outside the swath (the
+        # fake's painted block: a quarter to three quarters down, an eighth
+        # in from each side).
+        pj = img["projected"]
+        self.assertTrue(pj["url"].endswith("/rgb-projected.webp"))
+        s, body, ctype = self.req("GET", f"/{pj['url']}", raw=True)
+        self.assertEqual((s, ctype), (200, "image/webp"))
+        with Image.open(io.BytesIO(body)) as im:
+            a = np.asarray(im)
+            self.assertEqual((im.format, im.mode, im.size), ("WEBP", "RGBA", (pj["w"], pj["h"])))
+        h, w = a.shape[:2]
+        self.assertEqual((int(a[h // 2, w // 2, 3]), int(a[h // 8, w // 2, 3]), int(a[h // 2, w // 16, 3])),
+                         (255, 0, 0))
+        self.assertEqual(self.req("GET", f"/{pj['url'][:-5]}.jpg", raw=True)[0], 404)
         self.assertEqual(self.req("GET", f"/api/wxsat/images/{M23}/nonesuch.jpg", raw=True)[0], 404)
         self.assertEqual(self.req("GET", f"/api/wxsat/images/{M23}/..%2Fmeta.jpg", raw=True)[0], 404)
 
@@ -341,8 +445,12 @@ class OnTheServer(unittest.TestCase):
         self.assertEqual(s, 200)
         self.assertEqual(comp, {"frames": [{"imageId": M23, "aos": "2026-10-29T09:19:21Z",
                                             "url": img["projected"]["url"], "bounds": img["projected"]["bounds"]}]})
-        self.assertEqual(self.req("GET", "/api/wxsat/composite?product=ir&hours=24")[1]["frames"][0]["url"],
-                         f"api/wxsat/images/{M23}/ir-projected.jpg")
+        ir = self.req("GET", "/api/wxsat/composite?product=ir&hours=24")[1]["frames"][0]["url"]
+        self.assertEqual(ir, f"api/wxsat/images/{M23}/ir-projected.webp")
+        s, body, ctype = self.req("GET", f"/{ir}?w=400", raw=True)
+        with Image.open(io.BytesIO(body)) as im:
+            self.assertEqual((s, ctype, im.mode, im.width), (200, "image/webp", "RGBA", 400))
+            self.assertEqual(int(np.asarray(im)[0, 0, 3]), 0)
         self.clock.t = utc("2026-10-29T11:00:00Z")                      # more than an hour after its AOS
         self.assertEqual(self.req("GET", "/api/wxsat/composite?product=rgb&hours=1")[1], {"frames": []})
         self.assertEqual(self.req("GET", "/api/wxsat/composite?product=msa")[0], 400)

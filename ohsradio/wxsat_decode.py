@@ -5,7 +5,7 @@ recorded (wxsat.py) after LOS, and the pictures are kept and served
     dec = Decoder(folder, binary=None)   # made by WxSat
     dec.submit(job)                      # a pass recorded: decode it, later
     dec.images.listing()                 # GET api/wxsat/images
-    dec.images.file(id, product, thumb)  # GET api/wxsat/images/<id>/<product>.jpg
+    dec.images.file(id, product, thumb, ext)  # GET api/wxsat/images/<id>/<product>.<ext>
     dec.images.composite(kind, since)    # GET api/wxsat/composite
 
 **SatDump, never a decoder of our own** (Brian's rule): its CLI, GPL-3.0,
@@ -79,22 +79,38 @@ projection into the file as GeoTIFF ModelTiepoint (the top-left corner's
 longitude and latitude) and ModelPixelScale (degrees a pixel) tags
 (geotiff_write.cpp), which is where the bounds here come from - read
 from the file, never assumed. The 2048 x 2048 is not square in degrees;
-the JPEG is resampled to square degrees (at most 2048 px on its long side)
-so a client may also show it as it is. Outside the swath is black: JPEG
-has no transparency, and the agreed format is JPEG plus bounds.
+the picture is resampled to square degrees (at most 2048 px on its long
+side) so a client may also show it as it is.
+
+**The projection is WebP with alpha**, transparent outside the swath
+(29/10/2026; until then a JPEG, black outside, which a map showing
+several passes at once had to draw over its neighbours). Lossy at
+OVERLAY_QUALITY with the alpha plane lossless, so the swath's edge stays
+exactly where SatDump put it.
+Which pixels are outside comes from the GeoTIFF itself (swath_alpha):
+its alpha sample, which SatDump's projection writes, else a GDAL_NODATA
+value, else - a file with neither - the pixels black in every band,
+shrunk by EDGE_PX so a dark pixel on the swath's edge is not cut out.
+A Pillow built without WebP writes PNG with alpha instead, and says so in
+the log once; never JPEG, which would lose the transparency the clients
+now rely on. The format is in meta.json ("ext") and so in the URL; a
+projection made before this, with no "ext", is the JPEG it always was
+and is still served. The product pictures and their thumbnails stay
+JPEG: they are shown on their own, never over a map.
 
 **A pass with no usable lock is failed with a plain reason**, not an
 error: nothing decoded at all (`.cadu` empty: no signal the decoder could
 lock to), or frames decoded but too few image lines for a picture
 (MIN_LINES). SatDump itself failing is failed with its last log line.
 
-**Kept**: data/wxsat/images/<imageId>/ - the JPEGs, a 400 px-wide
-thumbnail of each, and meta.json; SatDump's own folder is deleted when it
-is done. The pictures obey the recordings' disk rules (the limit wxsat.py's
-recordings obey): together they may take at most IMAGES_SHARE of the
-recordings' limit, the oldest pass's going first, and nothing is decoded
-while free space is below the recordings' floor. The recording itself
-stays a recording, listed and pruned as any other.
+**Kept**: data/wxsat/images/<imageId>/ - the JPEGs, the projections
+(WebP), a 400 px-wide thumbnail of each, and meta.json; SatDump's own
+folder is deleted when it is done. The pictures obey the recordings'
+disk rules (the limit wxsat.py's recordings obey): together they may
+take at most IMAGES_SHARE of the recordings' limit, the oldest pass's
+going first, and nothing is decoded while free space is below the
+recordings' floor. The recording itself stays a recording, listed and
+pruned as any other.
 """
 from __future__ import annotations
 
@@ -125,6 +141,10 @@ IMAGES_SHARE = 0.1                 # of the recordings' limit
 IMAGES_DEFAULT_LIMIT = 1 << 30     # with no recordings to share with (the desktop, a test)
 WORK_ROOM = 600 << 20              # SatDump's working files for one pass: soft symbols, PNGs
 JPEG_QUALITY = 88
+OVERLAY_QUALITY = 80               # the projection's colour; its alpha is always lossless
+EDGE_PX = 2                        # the black-pixel mask shrunk by this much (module docstring)
+# What a picture is served as, by the extension its URL ends in.
+CONTENT_TYPES = {"jpg": "image/jpeg", "webp": "image/webp", "png": "image/png"}
 RGB_NAME = "AVHRR 221 False Color"
 IR_NAME = "10.8µm Thermal IR (Uncalibrated)"
 PROJECTED_KINDS = ("rgb", "ir")
@@ -210,11 +230,36 @@ def read_png(path: Path) -> np.ndarray:
 _TIFF_TYPES = {1: "B", 2: "s", 3: "H", 4: "I", 6: "b", 8: "h", 9: "i", 11: "f", 12: "d", 16: "Q"}
 
 
+def swath_alpha(a: np.ndarray, nodata: float | None) -> np.ndarray:
+    """H x W uint8, 255 inside the satellite's swath and 0 outside, from a
+    GeoTIFF's raw H x W x samples array (module docstring, "The projection
+    is WebP with alpha"). Its alpha sample when it has one (2 or 4
+    samples: SatDump's projection always writes RGBA), cut at half way so
+    the mask is two-valued however SatDump blended its edge; else its
+    GDAL_NODATA value in every band; else black in every band - which
+    real pictures have inside the swath too, at its very edge where the
+    projection's interpolation darkens it, so that mask is shrunk by
+    EDGE_PX (a 3 x 3 minimum, EDGE_PX times) before it is used."""
+    spp = a.shape[2]
+    if spp in (2, 4):
+        top = 0xffff if a.dtype.itemsize == 2 else 0xff
+        return np.where(a[:, :, -1] >= (top + 1) // 2, 255, 0).astype(np.uint8)
+    if nodata is not None:
+        return np.where((a == nodata).all(axis=2), 0, 255).astype(np.uint8)
+    from PIL import ImageFilter
+    Image = _pil()
+    outside = Image.fromarray(np.where((a == 0).all(axis=2), 255, 0).astype(np.uint8), "L")
+    for _i in range(EDGE_PX):
+        outside = outside.filter(ImageFilter.MinFilter(3))
+    return (255 - np.asarray(outside)).astype(np.uint8)
+
+
 def read_geotiff(path: Path) -> tuple[np.ndarray, dict]:
-    """(picture as H x W x 3 uint8, {"n","s","e","w"}) from the GeoTIFF
-    SatDump writes for a projection (tiffio.cpp save_tiff,
-    geotiff_write.cpp): uncompressed, contiguous samples in strips, 8 or 16
-    bits, ModelTiepoint (33922) and ModelPixelScale (33550) in degrees.
+    """(picture as H x W x 4 uint8 RGBA, alpha from swath_alpha, and
+    {"n","s","e","w"}) from the GeoTIFF SatDump writes for a projection
+    (tiffio.cpp save_tiff, geotiff_write.cpp): uncompressed, contiguous
+    samples in strips, 8 or 16 bits, ModelTiepoint (33922) and
+    ModelPixelScale (33550) in degrees, perhaps GDAL_NODATA (42113).
     Read here rather than by Pillow, which takes 16-bit RGBA only in some
     versions; raises ValueError for anything else."""
     raw = Path(path).read_bytes()
@@ -231,7 +276,7 @@ def read_geotiff(path: Path) -> tuple[np.ndarray, dict]:
             continue
         size = struct.calcsize(code) * count
         data = val if size <= 4 else raw[struct.unpack(e + "I", val)[0]:][:size]
-        tags[tag] = raw[0:0] if code == "s" else struct.unpack(e + code * count, data[:size])
+        tags[tag] = (data[:size].rstrip(b"\0"),) if code == "s" else struct.unpack(e + code * count, data[:size])
     w, h = tags[256][0], tags[257][0]
     bits = tags.get(258, (8,))[0]
     spp = tags.get(277, (1,))[0]
@@ -249,7 +294,15 @@ def read_geotiff(path: Path) -> tuple[np.ndarray, dict]:
     sx, sy = tags[33550][:2]
     west, north = x - i * sx, y + j * sy
     bounds = {"n": north, "s": north - h * sy, "e": west + w * sx, "w": west}
-    return _as_rgb8(a.astype(np.uint16) if bits == 16 else a), bounds
+    nodata = None
+    if 42113 in tags:
+        try:
+            nodata = float(tags[42113][0].decode("ascii").strip())
+        except (UnicodeDecodeError, ValueError):
+            nodata = None
+    alpha = swath_alpha(a, nodata)
+    rgb = _as_rgb8(a.astype(np.uint16) if bits == 16 else a)
+    return np.dstack([rgb, alpha]), bounds
 
 
 def _save_jpeg(a: np.ndarray, path: Path, width: int | None = None, height: int | None = None) -> tuple[int, int]:
@@ -261,6 +314,50 @@ def _save_jpeg(a: np.ndarray, path: Path, width: int | None = None, height: int 
         im = im.resize((width, height), Image.LANCZOS)
     tmp = path.with_suffix(".tmp")
     im.save(tmp, "JPEG", quality=JPEG_QUALITY, optimize=True)
+    os.replace(tmp, path)
+    return im.size
+
+
+_overlay_said = False
+
+
+def webp_supported() -> bool:
+    try:
+        from PIL import features
+        return bool(features.check("webp"))
+    except Exception:  # noqa: BLE001 - a Pillow too old to say has none
+        return False
+
+
+def overlay_ext() -> str:
+    """"webp", or "png" where this Pillow cannot write WebP (said in the
+    log once): never JPEG, which has no transparency."""
+    global _overlay_said
+    if webp_supported():
+        return "webp"
+    if not _overlay_said:
+        _overlay_said = True
+        log.warning("weather satellites: this Pillow has no WebP support: projections are written as PNG")
+    return "png"
+
+
+def _save_overlay(rgba: np.ndarray, path: Path, width: int, height: int) -> tuple[int, int]:
+    """The projection as `path` (.webp or .png, overlay_ext()) at
+    width x height. Resampled as RGBA, which Pillow does premultiplied,
+    so the swath's edge takes no black from outside; the alpha is then
+    made two-valued again, as swath_alpha gave it."""
+    Image = _pil()
+    im = Image.fromarray(rgba, "RGBA")
+    if (width, height) != im.size:
+        im = im.resize((width, height), Image.LANCZOS)
+        r, g, b, a = im.split()
+        im = Image.merge("RGBA", (r, g, b, a.point(lambda v: 255 if v >= 128 else 0)))
+    tmp = path.with_suffix(".tmp")
+    if path.suffix == ".webp":
+        # alpha_quality 100: the alpha plane lossless, whatever the colour's quality.
+        im.save(tmp, "WEBP", quality=OVERLAY_QUALITY, alpha_quality=100, method=4)
+    else:
+        im.save(tmp, "PNG", optimize=True)
     os.replace(tmp, path)
     return im.size
 
@@ -319,7 +416,7 @@ def harvest(out: Path) -> dict:
 # ------------------------------------------------------------------ the pictures kept
 class Images:
     """data/wxsat/images: one folder per decoded pass, named by its
-    imageId, with meta.json beside the JPEGs."""
+    imageId, with meta.json beside the pictures."""
 
     def __init__(self, folder: Path):
         self.folder = Path(folder)
@@ -354,9 +451,14 @@ class Images:
         main = next((pj[k] for k in PROJECTED_KINDS if k in pj), None)
         return {"id": m["id"], "passId": m["passId"], "sat": m["sat"], "aos": m["aos"], "maxElDeg": m["maxElDeg"],
                 "products": prod,
-                "projected": None if main is None else {"url": f"{base}/{main['kind']}-projected.jpg",
+                "projected": None if main is None else {"url": Images.projected_url(m["id"], main),
                                                         "w": main["w"], "h": main["h"],
                                                         "bounds": main["bounds"]}}
+
+    @staticmethod
+    def projected_url(image_id: str, p: dict) -> str:
+        # No "ext": a pass decoded before projections were WebP, still a JPEG.
+        return f"api/wxsat/images/{image_id}/{p['kind']}-projected.{p.get('ext', 'jpg')}"
 
     def composite(self, kind: str, since_iso: str) -> list[dict]:
         """GET api/wxsat/composite: the projected `kind` of every pass with
@@ -366,19 +468,21 @@ class Images:
             p = (m.get("projected") or {}).get(kind)
             if p is None or str(m.get("aos", "")) < since_iso:
                 continue
-            out.append({"imageId": m["id"], "aos": m["aos"], "url": f"api/wxsat/images/{m['id']}/{kind}-projected.jpg",
+            out.append({"imageId": m["id"], "aos": m["aos"], "url": Images.projected_url(m["id"], p),
                         "bounds": p["bounds"]})
         return out
 
-    def file(self, image_id: str, product: str, thumb: bool) -> bytes | None:
-        """One JPEG, or None for anything not in the folder (a path, a dot
-        or an unknown product included)."""
+    def file(self, image_id: str, product: str, thumb: bool, ext: str = "jpg") -> bytes | None:
+        """One picture, or None for anything not in the folder (a path, a
+        dot or an unknown product included). Products are JPEG only; a
+        projection may be any of CONTENT_TYPES (the old ones JPEG)."""
         if not _ID_OK.match(image_id) or ".." in image_id:
             return None
-        kind = product[:-len("-projected")] if product.endswith("-projected") else product
-        if not _KIND_OK.match(kind):
+        projected = product.endswith("-projected")
+        kind = product[:-len("-projected")] if projected else product
+        if not _KIND_OK.match(kind) or ext not in CONTENT_TYPES or (ext != "jpg" and not projected):
             return None
-        name = f"{product}.thumb.jpg" if thumb else f"{product}.jpg"
+        name = f"{product}.thumb.{ext}" if thumb else f"{product}.{ext}"
         try:
             return (self.folder / image_id / name).read_bytes()
         except OSError:
@@ -413,8 +517,8 @@ class Images:
         return gone
 
     def save(self, image_id: str, job: dict, found: dict) -> dict:
-        """Make the JPEGs and thumbnails of `found` (harvest()) into the
-        pass's folder, written whole and renamed into place."""
+        """Make the JPEGs, projections and thumbnails of `found` (harvest())
+        into the pass's folder, written whole and renamed into place."""
         final = self.folder / image_id
         tmp = self.folder / f".{image_id}.part"
         shutil.rmtree(tmp, ignore_errors=True)
@@ -430,6 +534,7 @@ class Images:
             _save_jpeg(a, tmp / f"{kind}.thumb.jpg", min(THUMB_W, w))
             products.append({"kind": kind, "name": name, "w": w, "h": h})
         projected = {}
+        ext = overlay_ext()
         for kind, path in found["projected"].items():
             try:
                 a, bounds = read_geotiff(path)
@@ -443,9 +548,10 @@ class Images:
                 continue
             scale = PROJ_MAX / max(dlon, dlat)
             pw, ph = max(1, round(dlon * scale)), max(1, round(dlat * scale))
-            w, h = _save_jpeg(a, tmp / f"{kind}-projected.jpg", pw, ph)
-            _save_jpeg(a, tmp / f"{kind}-projected.thumb.jpg", min(THUMB_W, w), max(1, round(h * min(THUMB_W, w) / w)))
-            projected[kind] = {"kind": kind, "w": w, "h": h,
+            w, h = _save_overlay(a, tmp / f"{kind}-projected.{ext}", pw, ph)
+            _save_overlay(a, tmp / f"{kind}-projected.thumb.{ext}", min(THUMB_W, w),
+                          max(1, round(h * min(THUMB_W, w) / w)))
+            projected[kind] = {"kind": kind, "ext": ext, "w": w, "h": h,
                                "bounds": {k: round(float(v), 5) for k, v in bounds.items()}}
         meta = {"id": image_id, "passId": job["passId"], "sat": job["sat"], "aos": job["aos"],
                 "maxElDeg": job["maxElDeg"], "products": products, "projected": projected,

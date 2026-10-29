@@ -12,7 +12,7 @@ LOS, with SatDump, in wxsat_decode.py.
     ws.skip(pass_id)                     # DELETE api/wxsat/passes/<id>/record
     ws.images_view()                     # GET api/wxsat/images (wxsat_decode.py)
     ws.composite_view(kind, hours)       # GET api/wxsat/composite
-    ws.image_file(id, product, thumb)    # GET api/wxsat/images/<id>/<product>.jpg
+    ws.image_file(id, product, thumb, ext)  # GET api/wxsat/images/<id>/<product>.<ext>
 
 **The satellites** (SATELLITES): Meteor-M N2-3 on 137.100 MHz and N2-4 on
 137.900 MHz, LRPT, as WMO OSCAR lists them on 29/10/2026 (N2-4 moved
@@ -145,6 +145,7 @@ class WxSat:
     is Unix time (a test's fake clock)."""
     THUMB_W = wxsat_decode.THUMB_W
     PROJECTED_KINDS = wxsat_decode.PROJECTED_KINDS
+    CONTENT_TYPES = wxsat_decode.CONTENT_TYPES
 
     def __init__(self, radio, clock=time.time, fetch=None, folder: Path | None = None):
         self.radio = radio
@@ -605,8 +606,8 @@ class WxSat:
         since = _iso(self.clock() - hours * 3600.0)
         return {"frames": self.decoder.images.composite(kind, since)}
 
-    def image_file(self, image_id: str, product: str, thumb: bool) -> bytes | None:
-        return self.decoder.images.file(image_id, product, thumb)
+    def image_file(self, image_id: str, product: str, thumb: bool, ext: str = "jpg") -> bytes | None:
+        return self.decoder.images.file(image_id, product, thumb, ext)
 
     def radio_stopped(self) -> None:
         """The radio is stopping: a pass being recorded ends here, with the
