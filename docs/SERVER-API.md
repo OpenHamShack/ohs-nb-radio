@@ -84,7 +84,7 @@ the desktop apps.
 | `GET api/aprs/messages` | view | Radio only: the APRS messages and bulletins heard (read only: nothing is ever sent) |
 | `GET api/events?kinds=…,aprs` | view | Radio only: each packet heard, each station as it changes, each message, the session; not in the default set |
 | `GET api/map/info`, `GET api/map/land?bbox=`, `GET api/map/tiles/{z}/{x}/{y}.png` | view | Radio only: the map to draw ships on (below, "Map") |
-| `GET api/wxsat/passes[?hours=48]`, `GET api/wxsat/status`, `GET api/wxsat/images` | view | Radio only: weather-satellite passes, their plans and what is being recorded (below, "Weather satellites") |
+| `GET api/wxsat/passes[?hours=48]`, `GET api/wxsat/status`, `GET api/wxsat/images`, `GET api/wxsat/images/{id}/{product}.jpg[?w=400]`, `GET api/wxsat/composite?product=&hours=` | view | Radio only: weather-satellite passes, their plans, what is being recorded or decoded, and the pictures (below, "Weather satellites") |
 | `POST`/`DELETE api/wxsat/passes/{id}/record` | control | Radio only: force or skip one pass |
 | `GET api/local-frequencies?radiusKm=&category=` | view | Radio only: what there is to listen to near the station (below, "Local frequencies") |
 | `POST api/local-frequencies/mine`, `PUT`/`DELETE api/local-frequencies/mine/{id}` | control | Radio only: the operator's own list ("my frequencies") |
@@ -2585,13 +2585,12 @@ within a quarter of a minute.
 ## Weather satellites (Radio)
 
 Meteor-M LRPT passes, predicted and recorded by themselves (Brian,
-29/10/2026). This is the first half of the feature: prediction, a plan for
-each pass, and an IQ recording of each pass recorded. Decoding the
-pictures comes later; until then `api/wxsat/images` is always `[]` and
-nothing sets the `decoding` plan. Code `ohsradio/wxsat.py` (passes, plans,
-recording), `wxsat_orbit.py` (SGP4, the vendored `sgp4` wheel),
-`wxsat_tle.py` (element sets); tests `tests/test_ham_wxsat.py`. Receive
-only: nothing here keys.
+29/10/2026): prediction, a plan for each pass, an IQ recording of each pass
+recorded, and after LOS its pictures, decoded by SatDump. Code
+`ohsradio/wxsat.py` (passes, plans, recording), `wxsat_decode.py` (SatDump
+and the pictures), `wxsat_orbit.py` (SGP4, the vendored `sgp4` wheel),
+`wxsat_tle.py` (element sets); tests `tests/test_ham_wxsat.py`,
+`tests/test_ham_wxsat_decode.py`. Receive only: nothing here keys.
 
 | Satellite | id (settings) | Frequency | Mode |
 |---|---|---|---|
@@ -2639,10 +2638,19 @@ The passes in the sky at any time from an hour ago to `hours` ahead (1-72;
     never preempts: transmitting, the transmit lease or automatic transmit,
     an IQ or audio recording, a recording playing, the band scan,
     background decoder sessions, the CW skimmer, another pass.
-  - `recording`, then `done` or `failed` (`why` says what went wrong).
+  - `recording`, then `decoding`, then `done` or `failed` (`why` says
+    what went wrong). `decoding` covers waiting its turn too: passes are
+    decoded one at a time. A recording that failed is never decoded.
+    `failed` after `decoding` is the pass's result, not a fault: "No
+    signal from the satellite could be locked to during the pass" (nothing
+    decoded at all), "The signal was locked too briefly to make a
+    picture", SatDump's own error, a decode stopped after an hour, or no
+    disk room ("Pictures", below). Where SatDump is not installed (the
+    desktop) a recorded pass stays `done` with no `imageId`.
   - `missed` - it was to be recorded and Radio was not running then.
-  - `decoding` - reserved for the decoder.
-- `imageId` is null until the decoder exists.
+- `imageId` is set when the pass's pictures are made (`done` after
+  `decoding`), and is the pass's `id`; null before, and for a pass that
+  has none.
 - `tle`: where the element sets come from and how old they are (below).
 
 ### GET api/wxsat/status (view)
@@ -2655,10 +2663,12 @@ The passes in the sky at any time from an hour ago to `hours` ahead (1-72;
 
 `state`: `idle` (nothing to record), `waiting` (the next pass to record:
 its id, where the satellite is now, `etaS` to its AOS), `recording` (the
-pass, the satellite's position now, `etaS` to LOS); `decoding` is the
-decoder's. `snrDb`, `lockPct` and `lines` are the decoder's and null for
-now. `text` says it in a sentence (also why there are no passes: no
-locator, or no `sgp4`).
+pass, the satellite's position now, `etaS` to LOS), `decoding` (no pass
+recording, and SatDump is decoding one: its `passId`, `sat`, `freqHz`;
+`az`, `el` and `etaS` null). A recording wins over a decode. `snrDb`,
+`lockPct` and `lines` stay null: SatDump's CLI reports them only in its
+log as it goes, and a pass's result is its pictures. `text` says it in a
+sentence (also why there are no passes: no locator, or no `sgp4`).
 
 ### POST api/wxsat/passes/{id}/record (control)
 
@@ -2684,7 +2694,86 @@ un-skips it.
 
 ### GET api/wxsat/images (view)
 
-`[]`, always, until the decoder exists.
+Every decoded pass's pictures, newest first; `[]` when there are none:
+
+```json
+[{"id": "meteor-m2-3-20261029T0919Z", "passId": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3",
+  "aos": "2026-10-29T09:19:21Z", "maxElDeg": 41.9,
+  "products": [{"kind": "rgb", "name": "AVHRR 221 False Color", "url": "api/wxsat/images/meteor-m2-3-20261029T0919Z/rgb.jpg", "w": 1400, "h": 1820},
+               {"kind": "ir", "name": "10.8um Thermal IR (Uncalibrated)", "url": ".../ir.jpg", "w": 1400, "h": 1820},
+               {"kind": "msa", "name": "MSA", "url": ".../msa.jpg", "w": 1400, "h": 1820},
+               {"kind": "ch1", "name": "Channel 1", "url": ".../ch1.jpg", "w": 1568, "h": 1820}],
+  "projected": {"url": "api/wxsat/images/meteor-m2-3-20261029T0919Z/rgb-projected.jpg", "w": 2048, "h": 1491,
+                "bounds": {"n": 71.25, "s": 45.65, "e": 11.34, "w": -24.5}}}]
+```
+
+- `products` are SatDump's MSU-MR pictures, each named by its `kind`:
+  `rgb` the classic daylight colour picture ("AVHRR 221 False Color",
+  channels 2, 2, 1), `ir` the thermal infrared ("10.8um Thermal IR
+  (Uncalibrated)", day and night), every other composite its name in
+  lower case with `-` between words (`msa`, `mcir`, `natural-color`,
+  `3-9-um-shortwave-ir-uncalibrated`...), and each channel heard `ch1` to
+  `ch6`. Which there are depends on the channels the satellite sent (by
+  night no `rgb`); show what the list has, `rgb` and `ir` first. `name`
+  is SatDump's. Where SatDump made one corrected for the Earth's curve,
+  that is the one kept.
+- `projected` is the pass on an equirectangular (plate carrée) grid,
+  `rgb`'s where there is one, else `ir`'s; null when neither could be
+  projected. `bounds` are the picture's edges in degrees (north, south,
+  east, west of its outer pixels, WGS-84): lay it over web-map tiles by
+  these, reprojecting to the map's projection as for any image overlay.
+  Its pixels are square in degrees. Outside the satellite's swath it is
+  black, not transparent (JPEG has no transparency).
+- `url`s are relative to the app, like every path here.
+
+### GET api/wxsat/images/{id}/{product}.jpg[?w=400] (view)
+
+One picture, `image/jpeg`: `{product}` is a `kind` from the list, or
+`rgb-projected` / `ir-projected` for the projections (only those the list
+or `composite` names exist). `?w=` up to 400 gives the 400 px-wide
+thumbnail (aspect kept); larger or absent the full picture.
+`404 no_image` for anything else, a path included.
+
+### GET api/wxsat/composite?product=rgb&hours=24 (view)
+
+The projected pictures of one kind, for an animation or a mosaic over a
+map: `{"frames": [{"imageId", "aos", "url", "bounds"}...]}`, the passes
+whose AOS is within `hours` (1-168, default 24) **oldest first**.
+`product` is `rgb` (default) or `ir`; a pass with no projection of that
+kind is left out (by night there is no `rgb`). `400 bad_params` for
+anything else.
+
+### Pictures
+
+After LOS a pass recorded whole is decoded by **SatDump** (GPL-3.0; the
+store image carries Debian 13's 1.2.2, its command line only), one pass at
+a time at the lowest CPU priority:
+
+```
+satdump meteor_m2-x_lrpt baseband <the .sigmf-data file> <folder> --samplerate <its rate>
+        --baseband_format cs16 --tle_override <the pass's element set>
+```
+
+- **Offline**: SatDump fetches element sets from Celestrak whenever its
+  own list is empty, whatever its update setting says; `--tle_override`
+  is what stops that, so every run is given the element set the pass was
+  predicted from (the recording's `openhamshack:wxsat` `tle`: the
+  operator's, Celestrak's through Radio's own daily fetch, or the
+  bundle's - "Element sets" above). With `wxsatOnlineTle` off nothing
+  leaves the station. Its settings also turn off its log file and its
+  own update, and it runs with its working folder as its home.
+- **Projection**: SatDump's "auto" equirectangular for the `rgb` and
+  `ir` composites, written as GeoTIFF; the bounds come from the file's
+  ModelTiepoint and ModelPixelScale tags, then the picture is made a
+  JPEG with square pixels at most 2048 on its long side.
+- **Kept** in Radio's data folder (`wxsat/images/<imageId>/`), the JPEGs
+  and their thumbnails only - SatDump's own files are deleted. The
+  pictures obey the recordings' disk rules: together at most a tenth of
+  `RECORDINGS_LIMIT_GB`, the oldest pass's going first, and no pass is
+  decoded while free space is below the recordings' floor (`failed`,
+  "Not enough free disk space to decode the pass"). The recording stays a
+  recording, listed and pruned with the others; a pass whose recording
+  was pruned before its turn is `failed`, saying so.
 
 ### Recording
 
