@@ -286,6 +286,9 @@ class TheSession(unittest.TestCase):
         self.assertEqual(r.aprs.state, "running")              # phone-2 still looks
         r.aprs.leave("phone-2")
         self.assertTrue(wait(lambda: r.aprs.state == "idle", 10, radio=r))
+        # state()'s "aprs" is the view the tick publishes, a moment behind
+        # the service itself: wait for it rather than bet on the tick.
+        self.assertTrue(wait(lambda: r.state()["aprs"]["state"] == "idle", 10, radio=r))
         st = r.state()
         self.assertEqual((st["rxOwner"], st["vfo"], st["mode"], st["rptOffsetHz"]), ({}, HOME, "fm", 600_000.0))
         self.assertEqual((st["aprs"]["state"], st["aprs"]["why"]), ("idle", "idle"))
