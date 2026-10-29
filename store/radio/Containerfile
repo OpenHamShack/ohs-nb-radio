@@ -50,6 +50,43 @@ RUN set -e; cd /src \
     && install -m 0644 SoapySDRPlay3-soapy-sdrplay3-*/LICENSE.txt /out/usr/share/doc/sdrplay-api/SoapySDRPlay3-LICENSE.txt
 # <<< sdrplay-in-image
 
+# SatDump's command line, for the weather-satellite pictures
+# (ohsradio/wxsat_decode.py; Brian, 29/10/2026: use the library, write no
+# decoder of our own). Debian 13 packages it (satdump 1.2.2, GPL-3.0), but
+# as one package with its GUI and every SDR it can drive: installed, it
+# pulls in GLFW, OpenGL, UHD, LimeSuite, bladeRF, HackRF, Airspy and
+# PortAudio, hundreds of MB for a program that only ever reads a file
+# here. So this stage downloads Debian's two packages without installing
+# them and keeps only what `satdump meteor_m2-x_lrpt baseband ...` loads:
+# the CLI, its core library, the Meteor plugin, the C++ composites plugin
+# (MCIR and MSA) and the SIMD ones where the architecture has them, the
+# Meteor pipeline, the stock settings and the few resources the MSU-MR
+# products read (projection settings, LUTs, scripted composites, one font,
+# one map). The image below installs the libraries those need. Upstream
+# 1.2 only: the output tree wxsat_decode.py reads and its tests' fake
+# SatDump reproduces are 1.2's, so another major version fails the build
+# here rather than every pass in the field.
+FROM docker.io/library/debian:13-slim AS satdump
+RUN set -e; apt-get update; cd /tmp; apt-get download satdump satdump-data \
+    && dpkg-deb -f satdump_*.deb Version | grep -q '^1\.2\.' \
+    && mkdir x && for d in satdump_*.deb satdump-data_*.deb; do dpkg-deb -x "$d" x; done \
+    && L="usr/lib/$(uname -m)-linux-gnu" && R=usr/share/satdump/resources \
+    && mkdir -p /out/usr/bin "/out/$L/satdump/plugins" /out/usr/share/satdump/pipelines \
+         /out/$R/maps /out/$R/fonts /out/$R/projections_settings /out/usr/share/doc/satdump \
+    && cp x/usr/bin/satdump /out/usr/bin/ \
+    && cp "x/$L/libsatdump_core.so" "/out/$L/" \
+    && for p in meteor cpp_compos simd_avx2 simd_sse41; do \
+         f="x/$L/satdump/plugins/lib${p}_support.so"; [ -e "$f" ] || f="x/$L/satdump/plugins/lib${p}.so"; \
+         if [ -e "$f" ]; then cp "$f" "/out/$L/satdump/plugins/"; \
+         elif [ "$p" = meteor ] || [ "$p" = cpp_compos ]; then echo "no $p plugin"; exit 1; fi; \
+       done \
+    && cp x/usr/share/satdump/satdump_cfg.json /out/usr/share/satdump/ \
+    && cp x/usr/share/satdump/pipelines/Meteor-M.json /out/usr/share/satdump/pipelines/ \
+    && cp -r x/$R/lut x/$R/scripted_compos /out/$R/ \
+    && cp x/$R/projections_settings/meteor_* /out/$R/projections_settings/ \
+    && cp x/$R/fonts/font.ttf /out/$R/fonts/ && cp x/$R/maps/nasa_hd.jpg /out/$R/maps/ \
+    && cp x/usr/share/doc/satdump/copyright /out/usr/share/doc/satdump/
+
 FROM docker.io/library/debian:13-slim
 
 # libopenblas0-pthread: Debian's numpy links the reference BLAS unless an
@@ -89,6 +126,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libcodec2-1.2 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+# SatDump's CLI from the stage above, and what it links: the libraries
+# ldd names for satdump, libsatdump_core and its plugins, no more.
+# python3-pil turns its PNGs and GeoTIFFs into the JPEGs and thumbnails
+# api/wxsat/images serves (wxsat_decode.py). `satdump version` proves it
+# loads: a missing library fails the build, not a pass.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libjemalloc2 libvolk3.2 libnng1 libarmadillo14 libpng16-16t64 libfftw3-single3 \
+        libzstd1 libcurl4t64 libtiff6 libgomp1 python3-pil \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=satdump /out/ /
+RUN cd /tmp && HOME=/tmp satdump version 2>&1 | grep -q 'This is SatDump v1\.2\.' && rm -rf /tmp/.config
 # >>> sdrplay-in-image
 COPY --from=sdrplay /out/ /
 RUN ldconfig && SoapySDRUtil --info | grep -q sdrPlaySupport
