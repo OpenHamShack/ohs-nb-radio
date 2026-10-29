@@ -29,6 +29,9 @@ rig on: the stations fade in over a second or two).
   161.975 and 162.025 MHz (simais.py), so the ship map fills with no radio.
 - **ADS-B**: six fictional aircraft around Prestwick on 1090 MHz
   (simadsb.py), for the aircraft map.
+- **APRS**: fictional stations around Ayr on 144.800 MHz (simaprs.py):
+  a digipeater, a home station, a Mic-E car, a walker, a weather station,
+  an object and a message, real AFSK on FM, for the APRS map.
 - **Broadcast FM**: six fictional stations on Band II from shack_sdr's FM
   stereo and RDS test transmitter (simfm.py), so wide FM is heard in
   stereo with RDS, and the band scanner finds something, with no radio.
@@ -297,6 +300,8 @@ class HamSim(SimCore):
         self.ais = None
         # Aircraft around Prestwick on 1090 MHz (simadsb.py).
         self.adsb = None
+        # APRS stations around Ayr on 144.800 MHz (simaprs.py).
+        self.aprs = None
         # A DMR repeater on 70 cm likewise (simdmr.py).
         self.dmr = None
         if self.signals:
@@ -311,6 +316,9 @@ class HamSim(SimCore):
                 self.adsb = AdsbAir(t0=time.time())
                 from .simdmr import DmrBand
                 self.dmr = DmrBand()
+            from . import simaprs
+            if simaprs.available():
+                self.aprs = simaprs.AprsAir(t0=time.time())
         self._init_loop()
 
     # -- set-up -------------------------------------------------------------
@@ -603,7 +611,7 @@ class HamSim(SimCore):
             z = dab.take(self.n, len(y), self.fs, self.rx_if)
             if z is not None:
                 y += z
-        for air in (self.ais, self.adsb):
+        for air in (self.ais, self.adsb, self.aprs):
             if air is not None and air.in_view(self.rx_if, self.fs):
                 z = air.take(self.n, len(y), self.fs, self.rx_if)
                 if z is not None:

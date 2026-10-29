@@ -94,7 +94,8 @@ from .sequencer import Sequencer, SequencerError, make_output
 # the decoder sessions' results (ohscore/decoders.py). Never in the
 # server's default set, so a client gets them only when it asks.
 # stations: a band scan's list changed (bandscan.py), likewise only when asked.
-FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders", "stations", "ais", "adsb")
+FEED_KINDS = ("wide", "zoom", "events", "meter", "state", "toast", "cwskim", "cwspot", "decoders", "stations", "ais", "adsb",
+              "aprs")
 # How long after a re-centring the receive channel is taken to hold the
 # new centre's samples (Radio._rx_settled): a device read and the analysis
 # bank's overlap are a few tens of milliseconds at every supported rate;
@@ -316,6 +317,11 @@ class Radio(Engine):
         self.adsb.table.route_lookup = self.flightroutes.lookup
         if self.persist:
             self.flightroutes.start()
+        # APRS stations on 144.800 MHz (aprs.py), receive only, likewise
+        # while a client has the station map open; the table keeps a day.
+        from .aprs import AprsService
+        self.aprs = AprsService(self)
+        self.st["aprs"] = self.aprs.view()
         self.restart_lock = threading.Lock()
         self.restarting = False
         self.map_tiles = mapdata.TileCache(Path(self.data_dir) / "maptiles",
@@ -1000,6 +1006,7 @@ class Radio(Engine):
         self.bandscan.tick()
         self.ais.tick()
         self.adsb.tick()
+        self.aprs.tick()
         self.map_tiles.save()
         self._broadcast_tick(now)
         self._notch_tick(now)
@@ -1249,6 +1256,7 @@ class Radio(Engine):
             # Not for restart_at's own reopen, which a session asked for.
             self.ais.end("radio_stopped")
             self.adsb.end("radio_stopped")
+            self.aprs.end("radio_stopped")
         super().stop()
         self.map_tiles.save(force=True)
         self.pin = None
@@ -1326,13 +1334,15 @@ class Radio(Engine):
         return None
 
     def held_service(self) -> dict | None:
-        """AIS or ADS-B while its session holds the receiver
+        """AIS, ADS-B or APRS while its session holds the receiver
         (Engine.held_service): what an IQ or audio recording made then is
-        named and described by."""
+        named and described by (APRS's frequency is its channel's, 144.800,
+        not the receiver's centre beside it)."""
         h = self.held
         by = h.get("by") if h is not None else None
-        if by in ("ais", "adsb"):
-            return {"kind": by, "mode": {"ais": "AIS", "adsb": "ADS-B"}[by], "label": None, "freqHz": h["centre"]}
+        if by in ("ais", "adsb", "aprs"):
+            return {"kind": by, "mode": {"ais": "AIS", "adsb": "ADS-B", "aprs": "APRS"}[by], "label": None,
+                    "freqHz": h.get("freq", h["centre"])}
         return None
 
     # ------------------------------------------------------------------ receive

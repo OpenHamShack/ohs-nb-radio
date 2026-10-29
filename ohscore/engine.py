@@ -2005,8 +2005,13 @@ class Engine(metaclass=_EngineType):
     # With `dial=False` it moves only the receiver's centre and leaves the
     # dial where the operator put it: what the transmit guard judges, what
     # a client shows and what a key-up returns to stay theirs throughout.
+    # With `tune` it puts the dial somewhere other than the centre (Radio's
+    # APRS: the dial on 144.800 MHz in FM, the receiver's centre 25 kHz
+    # away so its DC spike is off the channel); `freqHz` in rxOwner is then
+    # the dial's, the frequency the holder is about.
     def hold_receiver(self, sid: str, by: str, centre: float, label: str, min_rate: float, *,
-                      yields=None, feed=None, keep: tuple = (), dial: bool = True, texts: dict | None = None) -> None:
+                      yields=None, feed=None, keep: tuple = (), dial: bool = True, texts: dict | None = None,
+                      tune: dict | None = None) -> None:
         """Give the receiver to session `sid` (a `by` decoder on `label`,
         centred on `centre` Hz, needing `min_rate` S/s). Raises
         decoders.Refused with the code and sentence when it cannot.
@@ -2015,7 +2020,11 @@ class Engine(metaclass=_EngineType):
         defaults): "tune" and "transmit", what a refused set() or key-up
         says while it holds; "on_air", why it cannot start while
         transmitting; "busy", what someone else wanting the receiver is
-        told while it has it."""
+        told while it has it.
+
+        `tune` (with `dial`): the settings the hold puts the dial to, in
+        place of {"vfo": centre}; every one is put back from `prior` when
+        it ends, so each must be in HOLD_PRIOR or `keep`."""
         # One that gives way gives way to this one, before the lock: giving
         # way puts settings back through set().
         self.preempt_receiver(by)
@@ -2025,10 +2034,11 @@ class Engine(metaclass=_EngineType):
                 raise Refused(*why)
             prior = {k: self.st[k] for k in self.HOLD_PRIOR + tuple(keep) if k in self.st}
             self.held = {"session": sid, "by": by, "block": label, "centre": float(centre), "prior": prior,
-                         "yields": yields, "feed": feed, "dial": dial, "texts": dict(texts or {})}
+                         "yields": yields, "feed": feed, "dial": dial, "texts": dict(texts or {}),
+                         "freq": float((tune or {}).get("vfo", centre))}
         try:
             if dial:
-                self._set_holding(vfo=float(centre))
+                self._set_holding(**(tune or {"vfo": float(centre)}))
         except ValueError as e:
             with self.lock:
                 self.held = None
@@ -2081,7 +2091,7 @@ class Engine(metaclass=_EngineType):
             h = self.held
             if h is None or h["session"] != sid:
                 return False
-            h["centre"] = float(centre)
+            h["centre"] = h["freq"] = float(centre)
             if label is not None:
                 h["block"] = label
         if h.get("dial", True):
@@ -2126,8 +2136,8 @@ class Engine(metaclass=_EngineType):
         h = self.held
         if h is None:
             return {}
-        return {"by": h["by"], "session": h["session"], "block": h["block"], "freqHz": h["centre"],
-                "prior": dict(h["prior"]), "text": self._held_why(h, "tune")}
+        return {"by": h["by"], "session": h["session"], "block": h["block"],
+                "freqHz": h.get("freq", h["centre"]), "prior": dict(h["prior"]), "text": self._held_why(h, "tune")}
 
     def _held_why(self, h: dict, doing: str) -> str:
         """The sentence for what a held receiver refuses: `doing` "tune" (a

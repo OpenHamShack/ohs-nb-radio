@@ -387,6 +387,9 @@ with REG.after("txDial"):
         ("adsb", "dict", {}, "The ADS-B session (adsb.py): {state (idle, running), why, text, clients, startedAt, "
                              "endsInS, centreHz, rateHz, aircraft, rev, messages, df17, aircraftSeen, ...}; GET "
                              "api/adsb/session."),
+        ("aprs", "dict", {}, "The APRS session (aprs.py): {state (idle, running), why, text, clients, startedAt, "
+                             "endsInS, freqHz, centreHz, stations, rev, frames, packets, dropped, ...}; GET "
+                             "api/aprs/session."),
         ("dmrIds", "dict", {}, "DMR callsigns and names (dmrids.py): {available, count, updatedUtc, source, "
                                "talkgroups}; available false offline until a list has been fetched, and with "
                                "dmrIdLookup off."),
