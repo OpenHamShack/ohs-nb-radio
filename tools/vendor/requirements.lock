@@ -71,6 +71,16 @@
 # anything that transmits. Only Radio's store image carries it, as with
 # shack-ui; no desktop form has a server for a client to open the map.
 # GPL-3.0-or-later, as this repo. Needs numpy, which every form has.
+# sgp4 2.27 (Brandon Rhodes, MIT; pypi.org/project/sgp4), the one
+# third-party wheel here: the SGP4 orbit propagator behind Radio's weather
+# satellite passes (ohsradio/wxsat.py). PyPI ships it as per-platform wheels
+# with a C++ accelerator, which would need a line per platform as shack-sdr
+# has; built instead from PyPI's sdist (sha256 of sgp4-2.27.tar.gz:
+# 06d37247c6985739b707b8b39b6b83e06e8af783b2531e31965501ba983985f9) with PYTHON_SGP4_COMPILE=never and SOURCE_DATE_EPOCH=
+# 1761696000, which gives the library's own pure-Python propagator in one
+# py3-none-any wheel, the shape every other pure wheel here has. Two
+# satellites over 48 hours is a few thousand propagations, so the
+# accelerator would buy nothing a person could notice.
 shack-rec==0.1.0 --hash=sha256:fb8807781161f72b5768c685ca805d6eb14b983a6ec468b6744cf6f65ad8ec82
 shack-cw==0.1.0 --hash=sha256:458f3fa9f3f83dfda0031dbce453f40f89d95ae21a2716c7e005db04f52a877f
 shack-bandplan==0.1.0 --hash=sha256:591a1cb85f3ecd64af5d5c5f198d9aa47696436c9ee72fa66b106c16c75cc44d
@@ -80,3 +90,4 @@ shack-i18n==0.1.0 --hash=sha256:856e39f6ab83ffc8290975d791091678aa44c332f96ecec2
 shack-spectrum==0.2.0 --hash=sha256:c7730cabfc50926bc8a1699ec998c7031170d22278dd482f2d568ad0def51cc6
 shack-ui==0.2.0 --hash=sha256:7f0db349eb4c9219630c18216fe4bf43b6c555f3d0e315eb6ca35b8a9eaeadd0
 shack-packet==0.2.0 --hash=sha256:40587efeae61f99a42fe35d164292c8e5ddc25776a84e96dc23b62a2cbf41f33
+sgp4==2.27 --hash=sha256:707bdf204e709a3ae67c4e4cc1d991a0d3dbd075b9e0c766d8b4d5f66094f24a

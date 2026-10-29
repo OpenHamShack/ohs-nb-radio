@@ -97,7 +97,8 @@ RUN ldconfig && SoapySDRUtil --info | grep -q sdrPlaySupport
 # The shared OpenHamShack libraries, exactly the pinned wheels: each one's
 # hash is checked against tools/vendor/requirements.lock before it is
 # unpacked into site-packages (no pip in the image; a wheel is a zip with
-# nothing to run at install).
+# nothing to run at install). sgp4 is the one that is not ohs-libs': PyPI's
+# orbit propagator as a pure-Python wheel, for the weather-satellite passes.
 # shack-packet is Radio's alone (APRS receive, ohsradio/aprs.py), as is
 # shack-ui: NB has no APRS.
 #
@@ -119,13 +120,13 @@ COPY tools/vendor/ /tmp/vendor/
 RUN cd /tmp/vendor \
     && site="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
     && mkdir -p "$site" \
-    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec shack_spectrum shack_ui shack_packet; do \
+    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec shack_spectrum shack_ui shack_packet sgp4; do \
          f="$(ls ${w}-*.whl)"; \
          want="$(sed -n "s/^$(echo $w | tr _ -)==.*--hash=sha256:\([0-9a-f]*\).*/\1/p" requirements.lock)"; \
          echo "$want  $f" | sha256sum -c - || exit 1; \
          python3 -m zipfile -e "$f" "$site"; \
        done \
-    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum, shack_ui, shack_packet.sdr; shack_bandplan.load()" \
+    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum, shack_ui, shack_packet.sdr, sgp4.api; shack_bandplan.load()" \
     && arch="$(uname -m)" \
     && f="$(ls shack_sdr-*-manylinux_*_${arch}.whl)" \
     && want="$(sed -n "s/^shack-sdr==.*--hash=sha256:\([0-9a-f]*\).*_${arch}$/\1/p" shack-sdr.lock)" \

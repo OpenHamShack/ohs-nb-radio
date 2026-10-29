@@ -192,3 +192,9 @@ def sdr():
 
 def packet():
     return load("shack_packet")
+
+
+def sgp4():
+    """sgp4 (not an ohs-libs wheel: PyPI's, pure Python; requirements.lock
+    says how it was built), for Radio's weather-satellite passes."""
+    return load("sgp4")
