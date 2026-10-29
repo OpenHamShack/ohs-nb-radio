@@ -9,7 +9,7 @@ apiVersion: dock360/v1
 # shared libraries beside this file and signs the package with the image in it.
 id: shack-radio
 name: Radio
-version: 0.1.22-beta.19
+version: 0.1.22-beta.20
 summary: The amateur bands, 160 m to 6 cm - SSB, CW, AM, FM and the digital modes with a Pluto or a Hermes-Lite 2, or listening with an SDRplay.
 description: >
   OpenHamShack Radio on the controller: a bandscope and waterfall with the
