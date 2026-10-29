@@ -306,6 +306,16 @@ class Radio(Engine):
         from .adsb import AdsbService
         self.adsb = AdsbService(self)
         self.st["adsb"] = self.adsb.view()
+        # Flight routes for its aircraft (flightroutes.py), looked up by
+        # callsign in the background on the same terms as RadioDNS's logos
+        # and DMR's IDs: only for the program an operator runs, and offline
+        # (or with the setting off) every aircraft's route is null.
+        from .flightroutes import FlightRoutes
+        self.flightroutes = FlightRoutes(Path(self.data_dir) / "flightroutes",
+                                         lambda: bool(self.st.get("adsbRouteLookup", True)))
+        self.adsb.table.route_lookup = self.flightroutes.lookup
+        if self.persist:
+            self.flightroutes.start()
         self.restart_lock = threading.Lock()
         self.restarting = False
         self.map_tiles = mapdata.TileCache(Path(self.data_dir) / "maptiles",

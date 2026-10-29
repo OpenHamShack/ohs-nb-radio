@@ -128,6 +128,10 @@ class AircraftTable:
         self.rev = 0
         self.removed: deque = deque(maxlen=REMOVED_KEPT)    # (rev, icao)
         self.station: tuple[float, float] | None = None
+        # Set by Radio to flightroutes.FlightRoutes.lookup (flightroutes.py):
+        # given a callsign, the route it flies, or None - never a fetch on
+        # this thread. None here (a test's bare table) means no routes shown.
+        self.route_lookup = None
 
     def set_station(self, locator: str) -> None:
         pos = locator_position(locator or "")
@@ -202,6 +206,8 @@ class AircraftTable:
             removed = [] if full else [k for r, k in self.removed if r > since]
             rev = self.rev
         items.sort(key=lambda v: (v.get("distanceKm") is None, v.get("distanceKm") or 0.0, v["icao"]))
+        for v in items:
+            v["route"] = self.route_lookup(v.get("callsign")) if self.route_lookup else None
         return {"rev": rev, "full": full, "aircraft": items, "removed": removed}
 
     def aircraft(self, icao: str) -> dict | None:
@@ -212,6 +218,7 @@ class AircraftTable:
             out = dict(v)
             out["track"] = [{"t": _iso(p[0]), "lat": p[1], "lon": p[2], "altBaro": p[3], "groundSpeed": p[4],
                              "track": p[5]} for p in self.tracks.get(icao, ())]
+        out["route"] = self.route_lookup(out.get("callsign")) if self.route_lookup else None
         return out
 
     def __len__(self) -> int:

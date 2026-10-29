@@ -321,6 +321,17 @@ with REG.after("mapTileCacheMb"):
             "requests a week saying only \"OpenHamShack-Radio\" and its version. A talker alias the caller's "
             "radio sends always wins; without internet the decoder shows the bare IDs.")
 
+# --- flight routes for ADS-B's aircraft (ohsradio/flightroutes.py) ---------------
+# On by default, like the other online extras above. Off means no traffic at
+# all and no routes shown, even ones already cached (flightroutes.py).
+with REG.after("dmrIdLookup"):
+    _k("adsbRouteLookup", "bool", True, "setting",
+       help="Show where each aircraft on the ADS-B map is flying from and to. Radio asks adsbdb.com, a free "
+            "public lookup, for each new callsign it hears, once, in the background, and keeps the answer on "
+            "this computer. What goes out: one web request per new callsign (at most one a second), saying only "
+            "the callsign, \"OpenHamShack-Radio\" and its version. Without internet, or for a callsign adsbdb "
+            "does not know, the aircraft shows no route.")
+
 # --- status (read-only) -------------------------------------------------------
 _o("rxDial", help="Frequency the receiver is demodulating (vfo + RIT, or the repeater input in reverse).")
 _o("txDial", help="Frequency our transmission is meant to land on (with split, repeater shift and XIT).")

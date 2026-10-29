@@ -2353,7 +2353,9 @@ invented appears.
                "adsbVersion": 2, "distanceKm": 12.47, "bearingDeg": 92.5,
                "lastHeard": "2026-10-28T09:21:04Z", "lastHeardTs": 1793178064.4,
                "firstHeard": "2026-10-28T09:20:35Z", "messages": 37, "rssiDb": -35.8,
-               "rev": 410}]}
+               "rev": 410,
+               "route": {"from": "GLA", "to": "LGW", "fromName": "Glasgow", "toName": "London Gatwick",
+                         "fromIcao": "EGPF", "toIcao": "EGKK", "source": "adsbdb"}}]}
 ```
 
 - One entry per ICAO address (six hex digits; a `~` first for an
@@ -2379,6 +2381,21 @@ invented appears.
 - An aircraft not heard for `adsbKeepMinutes` (a setting, 1-60, default
   5) is dropped. **The table is not kept over a restart**, unlike the
   vessels': aircraft move on in minutes.
+- **Flight routes.** `route`: `{"from", "to", "fromName", "toName",
+  "fromIcao", "toIcao", "source": "adsbdb"}`, or `null` while the route is
+  unknown, not yet looked up, or the lookup failed. Code
+  `ohsradio/flightroutes.py`; hooked into the table through
+  `AircraftTable.route_lookup` (set by `Radio`), never fetched on a
+  request thread. Radio asks adsbdb.com (free, no key) for each new
+  callsign it hears, once, in a background thread at most once a second,
+  and keeps the answer on disk for 7 days (an unknown callsign, 1 day; a
+  failure, retried after 10 minutes); a callsign shaped like a
+  registration (a hyphen, or a US N-number) is never asked, since adsbdb
+  has no such entry. The `adsbRouteLookup` setting (`api/set`, Settings ›
+  ADS-B; default `true`) turns the lookups off: offline, or with it off,
+  every aircraft's `route` is `null`, as before this feature. What goes
+  out: one GET per new callsign, saying only the callsign and
+  "OpenHamShack-Radio" with its version.
 
 **Keeping up** exactly as AIS: `GET api/adsb/aircraft?since=<rev>` answers
 what changed after it (`aircraft`) and what was dropped (`removed`, ICAO
