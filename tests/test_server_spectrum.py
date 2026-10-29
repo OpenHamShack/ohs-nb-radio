@@ -243,6 +243,14 @@ class RadioSpectrum(unittest.TestCase):
         self.assertGreaterEqual(len(ts), 40)
 
     def test_a_stalled_client_gets_the_newest_row_and_a_gap(self):
+        # A tiny server-side send buffer, set only here: on a loopback
+        # socket the kernel autotunes SO_SNDBUF up to wmem_max (often a
+        # few MB), which happily absorbs 400 x 4 kB rows without the
+        # writer thread ever blocking - so under a quiet host this test
+        # passed by accident and failed under load, when the host's
+        # wmem_max or scheduling left less headroom. Pinning it small
+        # makes the stall - and so the gap - certain either way.
+        self.srv.test_sndbuf = 4096
         c = self.client(rcvbuf=4096, read=False)
         c.subscribe(cols=2048, depth=16)
         big = np.concatenate([self.db, self.db])

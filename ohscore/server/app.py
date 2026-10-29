@@ -38,6 +38,7 @@ import json
 import logging
 import os
 import re
+import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -192,6 +193,12 @@ class Server:
         self.info = info
         self.audio = audio
         self.secret = os.environ.get(shack.PROXY_SECRET_ENV, "") if secret is None else secret
+        # Only a test sets this (directly, after construction): a tiny send
+        # buffer on a spectrum socket so a client that stops reading stalls
+        # the server's write at once, rather than at however many rows the
+        # host's autotuned kernel buffer happens to absorb on the day
+        # (test_a_stalled_client_gets_the_newest_row_and_a_gap).
+        self.test_sndbuf: int | None = None
         self.broker = broker
         self.clock = clock
         self.lock = threading.RLock()
@@ -2272,6 +2279,8 @@ class _Handler(BaseHTTPRequestHandler):
         if not ws.handshake(self):
             return
         sock = ws.Socket(self.rfile, self.wfile)
+        if self.srv.test_sndbuf is not None:
+            self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.srv.test_sndbuf)
         shared = self.srv.spectrum
         if not shared.join():
             # The ninth client (§2.4): told why, as a text frame on the
