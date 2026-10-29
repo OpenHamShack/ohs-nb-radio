@@ -332,6 +332,35 @@ with REG.after("dmrIdLookup"):
             "the callsign, \"OpenHamShack-Radio\" and its version. Without internet, or for a callsign adsbdb "
             "does not know, the aircraft shows no route.")
 
+# --- weather satellites (ohsradio/wxsat.py, wxsat_tle.py) ------------------------
+# Brian, 29/10/2026: Meteor-M LRPT passes recorded by themselves. Control
+# level: a pass only receives, and gives the receiver back as it was. The
+# satellites are one comma-separated value because a setting reaches a
+# store container one variable per line; so is the pasted TLE ("|" between
+# lines), which wxsat_tle.parse reads either way.
+with REG.after("adsbRouteLookup"):
+    _k("wxsatAuto", "bool", True, "setting",
+       help="Record weather satellite passes (Meteor-M LRPT on 137 MHz) by themselves, as IQ, while the receiver "
+            "is free. It never takes the radio from someone using it, a recording, a scan or transmit; the dial "
+            "goes back where it was after each pass.")
+    _k("wxsatMinElevDeg", "int", 15, "setting", lo=0, hi=90, unit="°",
+       help="Record only passes that rise at least this high: a pass lower than this is mostly below the trees "
+            "and roofs.")
+    _k("wxsatSatellites", "str", "meteor-m2-3,meteor-m2-4", "setting",
+       help="Which weather satellites to record, comma-separated: meteor-m2-3 (137.1 MHz), meteor-m2-4 (137.9 MHz).")
+    _k("wxsatAntenna", "str", "", "setting",
+       help="The receiver input to record passes on, by its name or your label for it (Settings › Radio's "
+            "antenna table). Empty: the input whose label says 2 m (\"2 m\", \"VHF\", \"dual band\", a Diamond "
+            "X-series model), else whichever input is in use.")
+    _k("wxsatOnlineTle", "bool", True, "setting",
+       help="Fetch the satellites' current orbits from Celestrak once a day in the background and keep them on "
+            "this computer. What goes out: one web request a day to celestrak.org saying only "
+            "\"OpenHamShack-Radio\" and its version. Off, or offline, Radio uses the last ones fetched, or the "
+            "ones it came with.")
+    _k("wxsatTle", "str", "", "setting",
+       help="Your own orbital elements (two-line element sets, lines separated by \"|\"), used before Celestrak's "
+            "for the satellites they name. Empty: Celestrak's, or the ones Radio came with.")
+
 # --- status (read-only) -------------------------------------------------------
 _o("rxDial", help="Frequency the receiver is demodulating (vfo + RIT, or the repeater input in reverse).")
 _o("txDial", help="Frequency our transmission is meant to land on (with split, repeater shift and XIT).")

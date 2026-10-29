@@ -322,6 +322,15 @@ class Radio(Engine):
         from .aprs import AprsService
         self.aprs = AprsService(self)
         self.st["aprs"] = self.aprs.view()
+        # Weather satellites (wxsat.py): Meteor-M passes predicted and
+        # recorded by themselves. Their element sets come from Celestrak
+        # only for the program an operator runs, as the map tiles do; a
+        # test's radio uses the bundled ones and has no way out.
+        from . import wxsat_tle
+        from .wxsat import WxSat
+        self.wxsat = WxSat(self, fetch=wxsat_tle.default_fetch if self.persist else None)
+        if self.persist:
+            self.wxsat.tle.start()
         self.restart_lock = threading.Lock()
         self.restarting = False
         self.map_tiles = mapdata.TileCache(Path(self.data_dir) / "maptiles",
@@ -725,6 +734,8 @@ class Radio(Engine):
             self._status(dmrIds=self.dmr_ids.view())
             if s.get("dmrIdLookup"):
                 self.dmr_ids.nudge()
+        if "wxsatOnlineTle" in changed and s.get("wxsatOnlineTle"):
+            self.wxsat.tle.nudge()
 
     def _maybe_recentre(self):
         held = self.held
@@ -1007,6 +1018,7 @@ class Radio(Engine):
         self.ais.tick()
         self.adsb.tick()
         self.aprs.tick()
+        self.wxsat.tick()
         self.map_tiles.save()
         self._broadcast_tick(now)
         self._notch_tick(now)
@@ -1257,6 +1269,7 @@ class Radio(Engine):
             self.ais.end("radio_stopped")
             self.adsb.end("radio_stopped")
             self.aprs.end("radio_stopped")
+            self.wxsat.radio_stopped()
         super().stop()
         self.map_tiles.save(force=True)
         self.pin = None
