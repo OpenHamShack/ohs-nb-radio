@@ -114,7 +114,7 @@ class Prediction(unittest.TestCase):
         self.assertAlmostEqual(v["station"]["lon"], -4.542, places=2)
         p = by_id(v)
         hi = p[M23]
-        self.assertEqual((hi["sat"], hi["freqHz"], hi["mode"]), ("Meteor-M N2-3", 137_100_000, "LRPT"))
+        self.assertEqual((hi["sat"], hi["freqHz"], hi["mode"]), ("Meteor-M N2-3", 137_900_000, "LRPT"))
         self.assertEqual((hi["aos"], hi["los"]), ("2026-10-29T09:19:21Z", "2026-10-29T09:34:20Z"))
         self.assertAlmostEqual(hi["maxElDeg"], 41.9, delta=0.2)
         self.assertEqual((hi["plan"], hi["why"], hi["imageId"]), ("record", None, None))
@@ -128,7 +128,7 @@ class Prediction(unittest.TestCase):
         low = p[M24_LOW]
         self.assertEqual(low["plan"], "skip-low")
         self.assertIn("15°", low["why"])
-        self.assertEqual((p[M24]["plan"], p[M24]["freqHz"]), ("record", 137_900_000))
+        self.assertEqual((p[M24]["plan"], p[M24]["freqHz"]), ("record", 137_100_000))
         self.assertEqual(self.radio.wxsat.status_view()["state"], "waiting")
 
         # The minimum is the setting's: at 2° the low pass is recorded too.
@@ -265,7 +265,7 @@ class Carrier:
     """A steady carrier `offset` Hz above Meteor-M N2-3's frequency."""
 
     def __init__(self, offset: float = 5_000.0, level: float = 0.05):
-        self.hz, self.level = 137_100_000.0 + offset, level
+        self.hz, self.level = 137_900_000.0 + offset, level
 
     def iq(self, t, rx_if):
         return (self.level * np.exp(2j * np.pi * (self.hz - rx_if) * t)).astype(np.complex64)
@@ -365,10 +365,10 @@ class OnTheServer(unittest.TestCase):
         self.into_the_pass()
         self.assertEqual(self.plan()["plan"], "recording")
         own = self.owner()
-        self.assertEqual((own["by"], own["freqHz"]), ("wxsat", 137_100_000.0))
+        self.assertEqual((own["by"], own["freqHz"]), ("wxsat", 137_900_000.0))
         self.assertEqual(self.radio.state()["soapyAntenna"], "Antenna A")      # the Diamond X7000
         st = self.req("GET", "/api/wxsat/status", level="view")[1]
-        self.assertEqual((st["state"], st["passId"], st["freqHz"]), ("recording", M23, 137_100_000))
+        self.assertEqual((st["state"], st["passId"], st["freqHz"]), ("recording", M23, 137_900_000))
         self.assertGreater(st["el"], 0.0)
         # Tuning is refused with the pass's sentence while it records.
         s, e = self.req("POST", "/api/set", {"vfo": 145_400_000.0})
@@ -391,11 +391,11 @@ class OnTheServer(unittest.TestCase):
         meta = json.loads(sigmf.paths(data)[1].read_text())
         g = meta["global"]
         self.assertEqual((g["core:datatype"], g["core:sample_rate"]), ("ci16_le", 800_000.0))
-        self.assertEqual(meta["captures"][0]["core:frequency"], 137_100_000.0)
+        self.assertEqual(meta["captures"][0]["core:frequency"], 137_900_000.0)
         self.assertEqual(g["openhamshack:service"]["label"], "Meteor-M N2-3")
         wx = g["openhamshack:wxsat"]
         self.assertEqual((wx["passId"], wx["decimation"], wx["deviceRate"]), (M23, 3, 2_400_000.0))
-        self.assertIn("137.100MHz-Meteor-M-N2-3-LRPT", data.name)
+        self.assertIn("137.900MHz-Meteor-M-N2-3-LRPT", data.name)
         self.assertEqual(data.parent, self.radio.recordings_dir())
         # The carrier 5 kHz above the satellite's frequency is 5 kHz above
         # 0 Hz in the file: shifted and decimated, not mirrored or moved.

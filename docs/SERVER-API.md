@@ -2820,8 +2820,8 @@ timeline), `wxsat_orbit.py` (SGP4, the vendored `sgp4` wheel),
 
 | Satellite | id (settings) | Frequency | Mode |
 |---|---|---|---|
-| Meteor-M N2-3 (NORAD 57166) | `meteor-m2-3` | 137.100 MHz | LRPT |
-| Meteor-M N2-4 (NORAD 59051) | `meteor-m2-4` | 137.900 MHz | LRPT |
+| Meteor-M N2-3 (NORAD 57166) | `meteor-m2-3` | 137.900 MHz | LRPT |
+| Meteor-M N2-4 (NORAD 59051) | `meteor-m2-4` | 137.100 MHz | LRPT |
 
 (WMO OSCAR, 29/10/2026. N2-4 moved between the two while it was
 commissioned in 2024; a move is one line in `wxsat.SATELLITES`.)
@@ -2842,7 +2842,7 @@ became of them - `done`, `failed`, `missed`, `skip-...` - each with its
 {"station": {"lat": 55.47917, "lon": -4.54167},
  "tle": {"source": "celestrak", "fetchedUtc": "2026-10-29T05:30:00Z", "ageDays": 0.68, "stale": false},
  "minElevDeg": 15,
- "passes": [{"id": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137100000, "mode": "LRPT",
+ "passes": [{"id": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137900000, "mode": "LRPT",
              "aos": "2026-10-29T09:19:21Z", "tca": "2026-10-29T09:26:53Z", "los": "2026-10-29T09:34:20Z",
              "maxElDeg": 41.9, "aosAzDeg": 19.0, "losAzDeg": 175.5,
              "track": [{"t": "2026-10-29T09:19:21Z", "az": 19.0, "el": 0.0}, "...every 10 s, LOS last..."],
@@ -2895,7 +2895,7 @@ became of them - `done`, `failed`, `missed`, `skip-...` - each with its
 ### GET api/wxsat/status (view)
 
 ```json
-{"state": "recording", "passId": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137100000,
+{"state": "recording", "passId": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137900000,
  "az": 104.2, "el": 38.7, "snrDb": 6.4, "lockPct": null, "lines": null, "etaS": 412,
  "text": "Recording Meteor-M N2-3 until 09:34 UTC"}
 ```
@@ -2918,7 +2918,7 @@ sentence (also why there are no passes: no locator, or no `sgp4`).
 How strongly the pass was heard, second by second:
 
 ```json
-{"passId": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137100000,
+{"passId": "meteor-m2-3-20261029T0919Z", "sat": "Meteor-M N2-3", "freqHz": 137900000,
  "noiseFloorDb": -94.3,
  "samples": [{"t": "2026-10-29T09:19:21.5Z", "az": 19.0, "el": 0.0, "snrDb": 0.2},
              {"t": "2026-10-29T09:19:22.5Z", "az": 19.0, "el": 0.1, "snrDb": 0.4}, "...one a second to LOS..."]}
@@ -3073,7 +3073,7 @@ satdump meteor_m2-x_lrpt baseband <the .sigmf-data file> <folder> --samplerate <
 
 A pass **holds the receiver** as AIS does: from AOS to LOS `rxOwner` is
 `{"by": "wxsat", "session": "wxsat", "block": "Meteor-M N2-3", "freqHz":
-137100000, ...}`, the dial is on the satellite's nominal frequency, nothing
+137900000, ...}`, the dial is on the satellite's nominal frequency, nothing
 at the dial is demodulated, and a tune or key-up is refused `409
 receiver_busy` with "The receiver is recording a Meteor-M N2-3 pass: skip
 the pass to tune or change mode". It changes the antenna to the pass's

@@ -404,7 +404,7 @@ class OnTheServer(unittest.TestCase):
         self.assertTrue(wait(lambda: self.radio.wxsat.decoder.current is not None))
         st = self.req("GET", "/api/wxsat/status")[1]
         self.assertEqual((st["state"], st["passId"], st["sat"], st["freqHz"]),
-                         ("decoding", M23, "Meteor-M N2-3", 137_100_000))
+                         ("decoding", M23, "Meteor-M N2-3", 137_900_000))
         self.assertTrue(wait(lambda: self.plan()["plan"] != "decoding"))
         p = self.plan()
         self.assertEqual((p["plan"], p["why"], p["imageId"]), ("done", None, M23))

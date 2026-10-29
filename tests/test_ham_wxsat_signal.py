@@ -39,7 +39,7 @@ from test_ham_wxsat import AFTER, BEFORE, IN_PASS, M23, TLE, Carrier, ThreeInput
 from test_server import SECRET
 
 FS = 800_000.0
-NOMINAL = 137_100_000.0
+NOMINAL = 137_900_000.0
 AOS, LOS = utc("2026-10-29T09:19:21Z"), utc("2026-10-29T09:34:20Z")
 LAT, LON = locator_position("IO75RL")
 M23_TLE = TLE.splitlines()[:3]
@@ -167,7 +167,7 @@ class Timeline(unittest.TestCase):
     def test_a_pass_second_by_second_where_the_satellite_was(self):
         data = write_pass(self.dir / "rec", PIECES)
         tl = wxsat_signal.timeline({"passId": M23, "data": data, "lat": LAT, "lon": LON})
-        self.assertEqual((tl["passId"], tl["sat"], tl["freqHz"]), (M23, "Meteor-M N2-3", 137_100_000))
+        self.assertEqual((tl["passId"], tl["sat"], tl["freqHz"]), (M23, "Meteor-M N2-3", 137_900_000))
         s = tl["samples"]
         self.assertEqual(len(s), 16)                      # two seconds in each of eight captures
         self.assertEqual(set(s[0]), {"t", "az", "el", "snrDb"})
@@ -342,7 +342,7 @@ class Live(unittest.TestCase):
         w.tick()
         self.assertTrue(wait(lambda: wxsat_signal.has(w.signal_dir, M23) and w.signal.idle(), 60.0))
         s, tl = self.req(f"/api/wxsat/passes/{M23}/signal")
-        self.assertEqual((s, tl["passId"], tl["freqHz"]), (200, M23, 137_100_000))
+        self.assertEqual((s, tl["passId"], tl["freqHz"]), (200, M23, 137_900_000))
         self.assertTrue(tl["samples"])
         s, v = self.req("/api/wxsat/passes?hours=2&past=2")
         self.assertEqual(by_id(v)[M23]["signal"], f"api/wxsat/passes/{M23}/signal")

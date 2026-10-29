@@ -17,10 +17,12 @@ pass was heard, live and as a timeline kept after it, in wxsat_signal.py.
     ws.composite_view(kind, hours)       # GET api/wxsat/composite
     ws.image_file(id, product, thumb, ext)  # GET api/wxsat/images/<id>/<product>.<ext>
 
-**The satellites** (SATELLITES): Meteor-M N2-3 on 137.100 MHz and N2-4 on
-137.900 MHz, LRPT, as WMO OSCAR lists them on 29/10/2026 (N2-4 moved
-between the two while it was commissioned in 2024; a satellite that moves
-again is a one-line change here). Which are wanted is the
+**The satellites** (SATELLITES): Meteor-M N2-3 on 137.900 MHz and N2-4 on
+137.100 MHz, LRPT. The table first had them the other way round, as WMO
+OSCAR listed them; ohs-box heard N2-3's LRPT plateau on 137.900 at its
+10:59 UTC pass on 29/10/2026 with nothing on 137.100, so the air won
+(they have swapped before, while N2-4 was commissioned in 2024; a
+satellite that moves again is a one-line change here). Which are wanted is the
 `wxsatSatellites` setting, a comma-separated list of their ids. Element
 sets come from wxsat_tle.py, positions from wxsat_orbit.py, the station
 from the `locator` setting (the station profile's), as AIS measures from.
@@ -117,8 +119,8 @@ log = logging.getLogger("ohsradio.wxsat")
 
 SID = "wxsat"                      # the hold's session id (rxOwner.session)
 SATELLITES = (
-    {"id": "meteor-m2-3", "name": "Meteor-M N2-3", "norad": 57166, "freqHz": 137_100_000, "mode": "LRPT"},
-    {"id": "meteor-m2-4", "name": "Meteor-M N2-4", "norad": 59051, "freqHz": 137_900_000, "mode": "LRPT"},
+    {"id": "meteor-m2-3", "name": "Meteor-M N2-3", "norad": 57166, "freqHz": 137_900_000, "mode": "LRPT"},
+    {"id": "meteor-m2-4", "name": "Meteor-M N2-4", "norad": 59051, "freqHz": 137_100_000, "mode": "LRPT"},
 )
 BY_ID = {s["id"]: s for s in SATELLITES}
 MAX_RATE = 1_000_000.0
