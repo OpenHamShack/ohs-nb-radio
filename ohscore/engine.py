@@ -2083,19 +2083,22 @@ class Engine(metaclass=_EngineType):
                 self.held["session"] = sid
         self._status(rxOwner=self._owner_view())
 
-    def move_hold(self, sid: str, centre: float, label: str | None = None) -> bool:
+    def move_hold(self, sid: str, centre: float, label: str | None = None, vfo: float | None = None) -> bool:
         """The holder `sid` retunes the receiver it holds (a band scan's
-        next hop): the dial and the receiver's centre to `centre`. False,
-        and nothing moved, when `sid` no longer holds it."""
+        next hop): the dial and the receiver's centre to `centre`, or the
+        dial to `vfo` beside it (Radio's radiosondes: the dial on the
+        sonde, the receiver's DC spike clear of it, as APRS holds it).
+        False, and nothing moved, when `sid` no longer holds it."""
         with self.lock:
             h = self.held
             if h is None or h["session"] != sid:
                 return False
-            h["centre"] = h["freq"] = float(centre)
+            h["centre"] = float(centre)
+            h["freq"] = float(centre if vfo is None else vfo)
             if label is not None:
                 h["block"] = label
         if h.get("dial", True):
-            self._set_holding(vfo=float(centre))
+            self._set_holding(vfo=h["freq"])
         self._status(rxOwner=self._owner_view())
         self._held_retune()
         return True
