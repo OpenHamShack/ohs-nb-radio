@@ -281,6 +281,9 @@ class Server:
         if wx is not None:
             wx.probes.append(self._wxsat_busy)
             wx.end_client_holds = self.end_client_holds
+            rec = getattr(self.recordings, "rec", None)
+            if rec is not None:
+                wx.room = lambda: rec.prepare("iq")["max_bytes"]
 
     def _scan_busy(self) -> str:
         """The band scan's reasons to wait that only the server knows."""

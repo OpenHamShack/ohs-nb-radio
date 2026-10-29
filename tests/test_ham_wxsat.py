@@ -399,6 +399,27 @@ class OnTheServer(unittest.TestCase):
         f = np.fft.fftfreq(len(x), 1 / 800_000.0)
         self.assertAlmostEqual(float(f[int(np.argmax(np.abs(np.fft.fft(x))))]), 5_000.0, delta=50.0)
 
+    def test_a_pass_obeys_the_recordings_disk_limit(self):
+        # Room for one second of it: cut short, and said so, the dial back.
+        self.radio.wxsat.room = lambda: 800_000 * 4
+        self.into_the_pass()
+        self.assertTrue(wait(lambda: (self.radio.wxsat.tick() or True) and self.plan()["plan"] == "failed"))
+        self.assertIn("disk limit", self.plan()["why"])
+        self.assertEqual((self.owner(), self.radio.state()["vfo"]), ({}, HOME))
+
+        # No room at all: failed at AOS, the receiver never taken.
+        from ohscore import shacklibs
+
+        def full():
+            raise shacklibs.rec().Refused(507, "low_disk", "Not enough free space")
+        self.radio.wxsat.room = full
+        self.clock.t = utc("2026-10-29T13:05:00Z")
+        self.radio.wxsat.tick()
+        p = self.plan(M24)
+        self.assertEqual(p["plan"], "failed")
+        self.assertIn("Not enough free space", p["why"])
+        self.assertEqual(self.owner(), {})
+
     def test_skipping_a_pass_while_it_records_gives_the_receiver_back(self):
         self.into_the_pass()
         self.assertEqual(self.owner().get("by"), "wxsat")

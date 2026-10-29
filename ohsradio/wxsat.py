@@ -151,6 +151,11 @@ class WxSat:
         # Set by the server: ends every client-scoped hold (DAB, AIS, ADS-B,
         # a listen) the way a client's leaving does. None: nothing can.
         self.end_client_holds = None
+        # Set by the server: the bytes a recording may take now under the
+        # recordings' disk limit and free-space floor (shack_rec's prepare,
+        # which makes room by pruning the oldest first), raising with the
+        # sentence when there is none. None: only the pass's length limits it.
+        self.room = None
         self.marks: dict[str, dict] = self._load_marks()
         self._cache: dict | None = None
         self.error: str | None = None
@@ -294,7 +299,7 @@ class WxSat:
         return {"id": p["id"], "sat": sat["name"], "freqHz": sat["freqHz"], "mode": sat["mode"],
                 "aos": _iso(p["aos"]), "tca": _iso(p["tca"]), "los": _iso(p["los"]),
                 "maxElDeg": round(p["maxEl"], 1), "aosAzDeg": round(p["aosAz"], 1), "losAzDeg": round(p["losAz"], 1),
-                "track": [{"t": _iso(t), "az": round(az, 1), "el": round(el, 1)}
+                "track": [{"t": _iso(t), "az": round(az, 1), "el": round(el, 1) + 0.0}     # never "-0.0" at AOS
                           for t, az, el in wxsat_orbit.track(p["orbit"], *self.station(), p["aos"], p["los"],
                                                               TRACK_STEP_S)],
                 "plan": plan, "why": why, "imageId": m.get("imageId")}
@@ -439,7 +444,10 @@ class WxSat:
                 elif held is None or held.get("session") != SID:
                     self._finish("failed", _("The receiver was taken back during the pass"))
                 elif job["rec"].closing:
-                    self._finish("failed", job["rec"].error or _("The recording stopped early"))
+                    rec = job["rec"]
+                    self._finish("failed", rec.error or (_("The recordings' disk limit stopped it before LOS")
+                                                         if rec.reason == "time limit" else
+                                                         _("The recording stopped early")))
                 elif now >= job["pass"]["los"]:
                     self._finish("done", None)
                 return
@@ -494,6 +502,19 @@ class WxSat:
         dec = max(1, math.ceil(fs / MAX_RATE - 1e-9))
         out_fs = fs / dec
         now_real = time.time()
+        limit_s = max(60.0, p["los"] - self.clock() + 60.0)
+        if self.room is not None:
+            # The same disk rules as every recording here: a pass is 12-15
+            # minutes, about 3 GB at 800 kS/s, and must never be what fills
+            # the disk. What does not fit is cut short, and says so at LOS.
+            try:
+                limit_s = min(limit_s, float(self.room()) / sigmf.bytes_per_second(out_fs))
+            except Exception as e:  # noqa: BLE001 - shack_rec's Refused (no room) and anything else alike
+                r.release_receiver(SID)
+                m.update(plan="failed", why=_("Could not record: {error}").format(error=getattr(e, "text", None) or e))
+                self._save_marks()
+                log.warning("weather satellites: %s not recorded: %s", p["id"], e)
+                return
         station = {"kind": "wxsat", "mode": sat["mode"], "label": sat["name"], "freqHz": freq,
                    "satellite": sat["name"], "norad": sat["norad"], "passId": p["id"]}
         try:
@@ -505,7 +526,7 @@ class WxSat:
                 "tleSource": p["tle"]["source"], "deviceRate": fs, "decimation": dec,
                 "antenna": r.st.get("soapyAntenna") or None, "forced": forced}
             base = sigmf.new_base(r.recordings_dir(), r.CONFIG.app.name, now_real, freq, sat["mode"], station)
-            rec = sigmf.Recorder(base, out_fs, meta, limit_s=max(60.0, p["los"] - self.clock() + 60.0)).start()
+            rec = sigmf.Recorder(base, out_fs, meta, limit_s=max(1.0, limit_s)).start()
         except (OSError, ValueError) as e:
             r.release_receiver(SID)
             m.update(plan="failed", why=_("Could not record: {error}").format(error=e))

@@ -10,7 +10,7 @@ msgstr ""
 msgid "'{command}' failed on the radio (exit {status}: {output}). The radio was not restarted."
 msgstr ""
 
-#: ohsradio/wxsat.py:355
+#: ohsradio/wxsat.py:360
 msgid "A DAB station is playing"
 msgstr ""
 
@@ -23,7 +23,7 @@ msgid "A decoder is running"
 msgstr ""
 
 #: ohsradio/bandscan.py:354
-#: ohsradio/wxsat.py:340
+#: ohsradio/wxsat.py:345
 msgid "A recording is playing"
 msgstr ""
 
@@ -43,11 +43,11 @@ msgstr ""
 msgid "A toneburst is an FM thing: switch to FM first"
 msgstr ""
 
-#: ohsradio/wxsat.py:465
+#: ohsradio/wxsat.py:473
 msgid "A weather satellite pass was recorded by hand"
 msgstr ""
 
-#: ohsradio/wxsat.py:577
+#: ohsradio/wxsat.py:598
 #, python-brace-format
 msgid "A {sat} pass has the receiver: skip it first"
 msgstr ""
@@ -117,11 +117,11 @@ msgid "Aircraft down"
 msgstr ""
 
 #: ohsradio/bandscan.py:352
-#: ohsradio/wxsat.py:338
+#: ohsradio/wxsat.py:343
 msgid "An IQ recording is being made"
 msgstr ""
 
-#: ohsradio/wxsat.py:324
+#: ohsradio/wxsat.py:329
 msgid "Another weather satellite pass is being recorded"
 msgstr ""
 
@@ -133,11 +133,11 @@ msgstr ""
 msgid "At anchor"
 msgstr ""
 
-#: ohsradio/wxsat.py:281
+#: ohsradio/wxsat.py:286
 msgid "Automatic recording of weather satellites is off"
 msgstr ""
 
-#: ohsradio/wxsat.py:350
+#: ohsradio/wxsat.py:355
 #, python-brace-format
 msgid "Background decoders hold the receiver: {sessions}"
 msgstr ""
@@ -214,7 +214,8 @@ msgstr ""
 msgid "Constrained by her draught"
 msgstr ""
 
-#: ohsradio/wxsat.py:511
+#: ohsradio/wxsat.py:532
+#: ohsradio/wxsat.py:514
 #, python-brace-format
 msgid "Could not record: {error}"
 msgstr ""
@@ -349,7 +350,7 @@ msgstr ""
 msgid "High-speed craft"
 msgstr ""
 
-#: ohsradio/wxsat.py:284
+#: ohsradio/wxsat.py:289
 #, python-brace-format
 msgid "It rises only to {el:.0f}°, below the {low}° minimum"
 msgstr ""
@@ -428,7 +429,7 @@ msgstr ""
 msgid "Nearest ships"
 msgstr ""
 
-#: ohsradio/wxsat.py:608
+#: ohsradio/wxsat.py:629
 #, python-brace-format
 msgid "Next: {sat} at {aos} UTC"
 msgstr ""
@@ -445,7 +446,7 @@ msgstr ""
 msgid "No openAIP API key is set"
 msgstr ""
 
-#: ohsradio/wxsat.py:584
+#: ohsradio/wxsat.py:605
 msgid "No pass is planned"
 msgstr ""
 
@@ -501,7 +502,7 @@ msgstr ""
 msgid "Not while transmitting: APRS takes the receiver to 144.800 MHz"
 msgstr ""
 
-#: ohsradio/wxsat.py:576
+#: ohsradio/wxsat.py:597
 msgid "Not while transmitting: a weather satellite pass takes the receiver to 137 MHz"
 msgstr ""
 
@@ -510,7 +511,7 @@ msgstr ""
 msgid "Notch filter not changed: {error}"
 msgstr ""
 
-#: ohsradio/wxsat.py:542
+#: ohsradio/wxsat.py:563
 msgid "Nothing was received"
 msgstr ""
 
@@ -540,7 +541,7 @@ msgstr ""
 msgid "Passenger"
 msgstr ""
 
-#: ohsradio/wxsat.py:597
+#: ohsradio/wxsat.py:618
 #, python-brace-format
 msgid "Passes cannot be predicted: {error}"
 msgstr ""
@@ -576,11 +577,11 @@ msgstr ""
 msgid "Radio is scanning {label} for its station list: it is yours again the moment you use it"
 msgstr ""
 
-#: ohsradio/wxsat.py:327
+#: ohsradio/wxsat.py:332
 msgid "Radio is transmitting"
 msgstr ""
 
-#: ohsradio/wxsat.py:287
+#: ohsradio/wxsat.py:292
 msgid "Radio was not running for this pass"
 msgstr ""
 
@@ -592,7 +593,7 @@ msgstr ""
 msgid "Receiver gain control is automatic: the radio's own AGC follows the station."
 msgstr ""
 
-#: ohsradio/wxsat.py:593
+#: ohsradio/wxsat.py:614
 #, python-brace-format
 msgid "Recording {sat} until {los} UTC"
 msgstr ""
@@ -657,7 +658,7 @@ msgstr ""
 msgid "Set the station's locator to list what is near it; only the channel tables and your own frequencies are listed without it."
 msgstr ""
 
-#: ohsradio/wxsat.py:600
+#: ohsradio/wxsat.py:621
 msgid "Set the station's locator to predict passes"
 msgstr ""
 
@@ -671,8 +672,8 @@ msgstr ""
 msgid "Signal"
 msgstr ""
 
-#: ohsradio/wxsat.py:274
-#: ohsradio/wxsat.py:403
+#: ohsradio/wxsat.py:279
+#: ohsradio/wxsat.py:408
 msgid "Skipped by hand"
 msgstr ""
 
@@ -756,7 +757,7 @@ msgstr ""
 msgid "Tanker"
 msgstr ""
 
-#: ohsradio/wxsat.py:372
+#: ohsradio/wxsat.py:377
 msgid "That pass is over"
 msgstr ""
 
@@ -766,7 +767,7 @@ msgid "The CW segment, {lo:.3f}-{hi:.3f} MHz, is outside what the receiver cover
 msgstr ""
 
 #: ohsradio/bandscan.py:358
-#: ohsradio/wxsat.py:353
+#: ohsradio/wxsat.py:358
 msgid "The CW skimmer is running"
 msgstr ""
 
@@ -787,11 +788,11 @@ msgstr ""
 msgid "The PTT sequencer's output could not be opened (Settings)"
 msgstr ""
 
-#: ohsradio/wxsat.py:357
+#: ohsradio/wxsat.py:362
 msgid "The aircraft map (ADS-B) is open"
 msgstr ""
 
-#: ohsradio/wxsat.py:345
+#: ohsradio/wxsat.py:350
 msgid "The band scan has the receiver"
 msgstr ""
 
@@ -828,8 +829,8 @@ msgstr ""
 msgid "The radio restarted, but its firmware does not report which chip it runs as, so the change could not be confirmed. Try 2 m once the radio is running again."
 msgstr ""
 
-#: ohsradio/wxsat.py:527
-#: ohsradio/wxsat.py:438
+#: ohsradio/wxsat.py:548
+#: ohsradio/wxsat.py:443
 msgid "The radio stopped during the pass"
 msgstr ""
 
@@ -838,7 +839,7 @@ msgstr ""
 msgid "The radio was used in the last {minutes:g} minutes"
 msgstr ""
 
-#: ohsradio/wxsat.py:387
+#: ohsradio/wxsat.py:392
 msgid "The receiver could not be taken"
 msgstr ""
 
@@ -871,12 +872,12 @@ msgstr ""
 msgid "The receiver is listening to APRS on 144.800 MHz for the station map: close the map, or stop APRS, to tune or change mode"
 msgstr ""
 
-#: ohsradio/wxsat.py:575
+#: ohsradio/wxsat.py:596
 #, python-brace-format
 msgid "The receiver is recording a {sat} pass: skip the pass to transmit"
 msgstr ""
 
-#: ohsradio/wxsat.py:573
+#: ohsradio/wxsat.py:594
 #, python-brace-format
 msgid "The receiver is recording a {sat} pass: skip the pass to tune or change mode"
 msgstr ""
@@ -885,12 +886,16 @@ msgstr ""
 msgid "The receiver stopped delivering samples"
 msgstr ""
 
-#: ohsradio/wxsat.py:440
+#: ohsradio/wxsat.py:445
 msgid "The receiver was taken back during the pass"
 msgstr ""
 
-#: ohsradio/wxsat.py:442
+#: ohsradio/wxsat.py:450
 msgid "The recording stopped early"
+msgstr ""
+
+#: ohsradio/wxsat.py:448
+msgid "The recordings' disk limit stopped it before LOS"
 msgstr ""
 
 #: ohsradio/plutofix.py:534
@@ -903,7 +908,7 @@ msgstr ""
 msgid "The settings were written, but the radio did not restart within {secs:.0f} s and still runs as {chip}. Unplug it and plug it back in, wait half a minute, then use Help › Check radio…."
 msgstr ""
 
-#: ohsradio/wxsat.py:356
+#: ohsradio/wxsat.py:361
 msgid "The ship map (AIS) is open"
 msgstr ""
 
@@ -949,8 +954,8 @@ msgstr ""
 msgid "There is no data folder to keep a copy in"
 msgstr ""
 
-#: ohsradio/wxsat.py:370
-#: ohsradio/wxsat.py:401
+#: ohsradio/wxsat.py:375
+#: ohsradio/wxsat.py:406
 #, python-brace-format
 msgid "There is no pass {id}"
 msgstr ""
@@ -1312,7 +1317,7 @@ msgstr ""
 msgid "{rate:g} MS/s, FIR as needed"
 msgstr ""
 
-#: ohsradio/wxsat.py:278
+#: ohsradio/wxsat.py:283
 #, python-brace-format
 msgid "{sat} is switched off in the weather satellite settings"
 msgstr ""
@@ -1342,7 +1347,7 @@ msgstr ""
 msgid "{uri}: {error}"
 msgstr ""
 
-#: ohsradio/wxsat.py:347
+#: ohsradio/wxsat.py:352
 #, python-brace-format
 msgid "{what} has the receiver"
 msgstr ""
