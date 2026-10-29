@@ -138,7 +138,7 @@ QUEUE_BLOCKS = 64
 KEEP_S = 24 * 3600.0
 LANDED_KEEP_S = 7 * 24 * 3600.0
 TRACK_POINTS = 3000
-TRACK_MIN_S = 5.0
+TRACK_MIN_S = 10.0         # a flight is ~900 points: every sonde's track is in each api/sonde/sondes
 PROFILE_POINTS = 1500
 PROFILE_STEP_M = 50.0
 DESCENT_MS = 1.5          # falling faster than this...
@@ -949,6 +949,11 @@ class SondeService:
             self.clients.clear()
             self.linger_until = None
             self.tracking, self.freq = None, None
+            run = self._run
+        if run is not None:
+            # A worker waiting on dft_detect's answer, or writing to a
+            # decoder, is let go at once: its programs are killed under it.
+            run.kill()
         if worker is not None and worker is not threading.current_thread():
             worker.join(5.0)
         self.table.save(force=True)
@@ -1002,6 +1007,7 @@ class SondeService:
     def tick(self, now_mono: float | None = None) -> None:
         now = time.monotonic() if now_mono is None else now_mono
         r = self.radio
+        ending = None
         with self.lock:
             if self.state != "idle":
                 for c, until in list(self.clients.items()):
@@ -1011,11 +1017,15 @@ class SondeService:
                     self.linger_until = now + LINGER_S
                 lost = r.held is None or r.held.get("session") != SID
                 if not r.running:
-                    self.end("radio_stopped")
+                    ending = "radio_stopped"
                 elif lost:
-                    self.end("lost")
+                    ending = "lost"
                 elif self.linger_until is not None and now >= self.linger_until:
-                    self.end("idle")
+                    ending = "idle"
+        if ending is not None:
+            # Outside the lock: end() waits for the worker, which takes the
+            # lock to say it has locked on or let go.
+            self.end(ending)
         while self.lines:
             try:
                 kind, freq, line = self.lines.popleft()
@@ -1153,6 +1163,7 @@ class _Run:
         self.detect: dict | None = None
         self.track: dict | None = None
         self.fs = None
+        self.window = None
 
     # The receiver's blocks -------------------------------------------------
     def step(self, raw: np.ndarray, fs: float, centre: float) -> None:
@@ -1173,6 +1184,13 @@ class _Run:
     def close(self) -> None:
         self._stop_detect()
         self._stop_track()
+
+    def kill(self) -> None:
+        """The programs killed from another thread (SondeService.end); the
+        worker then finds its pipes closed and stops."""
+        for job in (self.detect, self.track):
+            if job is not None:
+                job["chain"].kill()
 
     # The scan ----------------------------------------------------------------
     def _next_hop(self) -> None:
@@ -1201,13 +1219,16 @@ class _Run:
             return
         if self.todo:
             self._start_detect()
-            self._detecting(raw)
+            if self.detect is not None:
+                self._detecting(raw)
             return
         n = int(round(self.fs / BIN_HZ))
+        if self.window is None or len(self.window) != n:
+            self.window = np.hanning(n).astype(np.float32)
         # Every fourth stretch of n samples: the average needs seconds of
         # air, not every sample of them.
         for a in range(0, len(raw) - n + 1, 4 * n):
-            seg = raw[a:a + n] * np.hanning(n).astype(np.float32)
+            seg = raw[a:a + n] * self.window
             p = np.abs(np.fft.fftshift(np.fft.fft(seg))) ** 2
             self.psd = p if self.psd is None else self.psd + p
             self.psd_n += 1
@@ -1294,6 +1315,10 @@ class _Run:
         self.track["reader"] = reader
         reader.start()
         with svc.lock:
+            if svc.state == "idle":
+                # Ended while dft_detect answered: nothing to lock on for.
+                self._stop_track()
+                return
             svc.tracking = {"kind": kind, "freqHz": freq, "serial": None}
             svc.state = "tracking"
             svc.freq = freq

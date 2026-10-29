@@ -236,7 +236,7 @@ msgstr ""
 msgid "DAB: block {block} ({n} of {of})"
 msgstr ""
 
-#: ohsradio/sonde.py:1121
+#: ohsradio/sonde.py:1131
 #, python-brace-format
 msgid "Decoding a radiosonde on {mhz} MHz"
 msgstr ""
@@ -407,7 +407,7 @@ msgstr ""
 msgid "Listening to APRS on 144.800 MHz"
 msgstr ""
 
-#: ohsradio/sonde.py:1118
+#: ohsradio/sonde.py:1128
 msgid "Looking for radiosondes on 400-406 MHz"
 msgstr ""
 
@@ -506,7 +506,7 @@ msgstr ""
 #: ohsradio/adsb.py:522
 #: ohsradio/ais.py:640
 #: ohsradio/aprs.py:651
-#: ohsradio/sonde.py:1125
+#: ohsradio/sonde.py:1135
 msgid "Not running"
 msgstr ""
 
@@ -811,7 +811,7 @@ msgstr ""
 #: ohsradio/adsb.py:520
 #: ohsradio/ais.py:638
 #: ohsradio/aprs.py:649
-#: ohsradio/sonde.py:1123
+#: ohsradio/sonde.py:1133
 msgid "Stopped"
 msgstr ""
 
@@ -823,7 +823,7 @@ msgstr ""
 msgid "Stopped: nobody had the aircraft map open"
 msgstr ""
 
-#: ohsradio/sonde.py:1122
+#: ohsradio/sonde.py:1132
 msgid "Stopped: nobody had the radiosonde map open"
 msgstr ""
 
@@ -834,7 +834,7 @@ msgstr ""
 #: ohsradio/adsb.py:521
 #: ohsradio/ais.py:639
 #: ohsradio/aprs.py:650
-#: ohsradio/sonde.py:1124
+#: ohsradio/sonde.py:1134
 msgid "Stopped: the radio stopped"
 msgstr ""
 
@@ -846,7 +846,7 @@ msgstr ""
 #: ohsradio/adsb.py:522
 #: ohsradio/ais.py:640
 #: ohsradio/aprs.py:651
-#: ohsradio/sonde.py:1125
+#: ohsradio/sonde.py:1135
 msgid "Stopped: the receiver was taken back"
 msgstr ""
 

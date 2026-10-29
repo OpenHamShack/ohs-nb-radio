@@ -2687,7 +2687,7 @@ contract:
   (`climbMs`), degrees true it is moving towards, km/h, Celsius, %, hPa,
   volts. A value the sonde does not send is `null` (a DFM has no
   humidity). `lastHeard` is when Radio heard it; `track[].t` the sonde's
-  own GPS time, a point every 5 s at most.
+  own GPS time, a point every 10 s at most.
 - `phase`: `ascent` (also on the pad), `descent` once it falls faster
   than 1.5 m/s for three frames from 100 m below its highest, `landed`
   once it has lain still (under 1 m/s up or along) for ten frames after a
