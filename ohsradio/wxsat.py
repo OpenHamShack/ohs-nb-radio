@@ -632,8 +632,12 @@ class WxSat:
         m = self._mark_for(job["pass"])
         m.update(plan=plan, why=why, file=rec.data_path.name, seconds=round(rec.seconds, 1))
         if plan == "done" and self.decoder.available():
-            m["plan"] = "decoding"
-            self.decoder.submit(self._decode_job(job["pass"]["id"], m, rec.data_path))
+            try:
+                self.decoder.submit(self._decode_job(job["pass"]["id"], m, rec.data_path))
+                m["plan"] = "decoding"
+            except (OSError, ValueError, KeyError) as e:
+                log.warning("weather satellites: %s cannot be decoded: %s", job["pass"]["id"], e)
+                m.update(plan="failed", why=_("The recording's metadata could not be read: {error}").format(error=e))
         self._save_marks()
         log.info("weather satellites: %s %s (%s): %.0f s in %s", job["pass"]["id"], plan, why or "-", rec.seconds,
                  rec.data_path.name)

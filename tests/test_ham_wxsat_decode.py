@@ -30,6 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ohscore.server.shack import SHACK_SECRET_HEADER
 from ohsradio import wxsat_decode
 from ohsradio.wxsat_decode import Decoder, read_geotiff
 from satdump_fake import NORTH, SX, SY, WEST, write_geotiff
@@ -259,13 +260,12 @@ class OnTheServer(unittest.TestCase):
     """A pass recorded on Radio's real server, then decoded by the fake."""
 
     def setUp(self):
-        from ohscore.server import shack
         from ohscore.server.app import Server
         from ohscore.server.audio import StreamAudio
         from ohsradio import server as ham_server
         from ohsradio.radio import Radio
         from test_server import SECRET
-        self.shack, self.SECRET = shack, SECRET
+        self.SECRET = SECRET
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
@@ -286,7 +286,7 @@ class OnTheServer(unittest.TestCase):
 
     def req(self, method, path, level="view", raw=False):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
-        c.request(method, path, None, {self.shack.SHACK_SECRET_HEADER: self.SECRET, "X-OpenHamShack-User": "brian",
+        c.request(method, path, None, {SHACK_SECRET_HEADER: self.SECRET, "X-OpenHamShack-User": "brian",
                                        "X-OpenHamShack-Level": level, "X-OpenHamShack-Device": "dev_TEST",
                                        "X-OpenHamShack-Auth": "device"})
         r = c.getresponse()

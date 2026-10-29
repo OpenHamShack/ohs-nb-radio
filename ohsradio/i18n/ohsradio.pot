@@ -47,7 +47,7 @@ msgstr ""
 msgid "A weather satellite pass was recorded by hand"
 msgstr ""
 
-#: ohsradio/wxsat.py:669
+#: ohsradio/wxsat.py:673
 #, python-brace-format
 msgid "A {sat} pass has the receiver: skip it first"
 msgstr ""
@@ -241,7 +241,7 @@ msgstr ""
 msgid "Decoding failed: {error}"
 msgstr ""
 
-#: ohsradio/wxsat.py:695
+#: ohsradio/wxsat.py:699
 #, python-brace-format
 msgid "Decoding the {sat} pass of {aos} UTC"
 msgstr ""
@@ -444,7 +444,7 @@ msgstr ""
 msgid "Nearest ships"
 msgstr ""
 
-#: ohsradio/wxsat.py:710
+#: ohsradio/wxsat.py:714
 #, python-brace-format
 msgid "Next: {sat} at {aos} UTC"
 msgstr ""
@@ -461,7 +461,7 @@ msgstr ""
 msgid "No openAIP API key is set"
 msgstr ""
 
-#: ohsradio/wxsat.py:679
+#: ohsradio/wxsat.py:683
 msgid "No pass is planned"
 msgstr ""
 
@@ -525,7 +525,7 @@ msgstr ""
 msgid "Not while transmitting: APRS takes the receiver to 144.800 MHz"
 msgstr ""
 
-#: ohsradio/wxsat.py:668
+#: ohsradio/wxsat.py:672
 msgid "Not while transmitting: a weather satellite pass takes the receiver to 137 MHz"
 msgstr ""
 
@@ -564,7 +564,7 @@ msgstr ""
 msgid "Passenger"
 msgstr ""
 
-#: ohsradio/wxsat.py:699
+#: ohsradio/wxsat.py:703
 #, python-brace-format
 msgid "Passes cannot be predicted: {error}"
 msgstr ""
@@ -620,7 +620,7 @@ msgstr ""
 msgid "Receiver gain control is automatic: the radio's own AGC follows the station."
 msgstr ""
 
-#: ohsradio/wxsat.py:688
+#: ohsradio/wxsat.py:692
 #, python-brace-format
 msgid "Recording {sat} until {los} UTC"
 msgstr ""
@@ -708,7 +708,7 @@ msgstr ""
 msgid "Set the station's locator to list what is near it; only the channel tables and your own frequencies are listed without it."
 msgstr ""
 
-#: ohsradio/wxsat.py:702
+#: ohsradio/wxsat.py:706
 msgid "Set the station's locator to predict passes"
 msgstr ""
 
@@ -922,12 +922,12 @@ msgstr ""
 msgid "The receiver is listening to APRS on 144.800 MHz for the station map: close the map, or stop APRS, to tune or change mode"
 msgstr ""
 
-#: ohsradio/wxsat.py:667
+#: ohsradio/wxsat.py:671
 #, python-brace-format
 msgid "The receiver is recording a {sat} pass: skip the pass to transmit"
 msgstr ""
 
-#: ohsradio/wxsat.py:665
+#: ohsradio/wxsat.py:669
 #, python-brace-format
 msgid "The receiver is recording a {sat} pass: skip the pass to tune or change mode"
 msgstr ""
@@ -947,6 +947,11 @@ msgstr ""
 #: ohsradio/wxsat.py:582
 #: ohsradio/wxsat_decode.py:555
 msgid "The recording was deleted before it could be decoded"
+msgstr ""
+
+#: ohsradio/wxsat.py:640
+#, python-brace-format
+msgid "The recording's metadata could not be read: {error}"
 msgstr ""
 
 #: ohsradio/wxsat.py:462
