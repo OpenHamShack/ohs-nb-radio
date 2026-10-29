@@ -21,7 +21,7 @@ from ohscore.state import Registry, add_shared_keys
 
 from ohsradio.i18n import _
 
-from . import bands, notch, plans, power, xvtr
+from . import bands, bcastgain, notch, plans, power, xvtr
 
 # JS8 joined 10/10/2026, receive only, once ohsdigi decoded it everywhere
 # (ohscore/modes/js8.py): before, it needed JS8Call's js8, which the Radio
@@ -378,6 +378,34 @@ with REG.after("adsbRouteLookup"):
     _k("wxsatTle", "str", "", "setting",
        help="Your own orbital elements (two-line element sets, lines separated by \"|\"), used before Celestrak's "
             "for the satellites they name. Empty: Celestrak's, or the ones Radio came with.")
+
+# --- each job's receiver gain (ohsradio/bcastgain.py job_gain_settings) ------------
+# Brian, 29/10/2026: the operator's rxGain is for their own listening; a job
+# that holds the receiver sets its own for as long as it holds it, and the
+# operator's comes back after. "auto" (AGC) for the weak-signal services;
+# DAB's broadcast policy for DAB. One plain value each, so a store setting
+# can carry it.
+with REG.after("wxsatTle"):
+    _k("dabGain", "str", bcastgain.BROADCAST, "setting", validate=bcastgain.job_gain_validator(True),
+       help="Receiver gain while a DAB station plays: \"broadcast\" for Radio's own, which starts low and moves "
+            "with the station's errors; \"auto\" for the receiver's AGC; or a gain in the same units as "
+            "Receiver gain, which Radio still lowers on overload. Your own gain is back when it stops.")
+    _k("aisGain", "str", bcastgain.AUTO, "setting", validate=bcastgain.job_gain_validator(),
+       help="Receiver gain while AIS has the receiver: \"auto\" for the receiver's own AGC, or a gain in the "
+            "same units as Receiver gain, held. Your own gain is back when it ends.")
+    _k("adsbGain", "str", bcastgain.AUTO, "setting", validate=bcastgain.job_gain_validator(),
+       help="Receiver gain while ADS-B has the receiver: \"auto\" for the receiver's own AGC, or a gain in the "
+            "same units as Receiver gain, held. Your own gain is back when it ends.")
+    _k("aprsGain", "str", bcastgain.AUTO, "setting", validate=bcastgain.job_gain_validator(),
+       help="Receiver gain while APRS has the receiver: \"auto\" for the receiver's own AGC, or a gain in the "
+            "same units as Receiver gain, held. Your own gain is back when it ends.")
+    _k("sondeGain", "str", bcastgain.AUTO, "setting", validate=bcastgain.job_gain_validator(),
+       help="Receiver gain while radiosondes have the receiver: \"auto\" for the receiver's own AGC, or a gain "
+            "in the same units as Receiver gain, held. Your own gain is back when it ends.")
+    _k("wxsatGain", "str", bcastgain.AUTO, "setting", validate=bcastgain.job_gain_validator(),
+       help="Receiver gain while a weather satellite pass has the receiver: \"auto\" for the receiver's own "
+            "AGC, or a gain in the same units as Receiver gain, held. Your own gain is back when it ends.")
+
 
 # --- status (read-only) -------------------------------------------------------
 _o("rxDial", help="Frequency the receiver is demodulating (vfo + RIT, or the repeater input in reverse).")

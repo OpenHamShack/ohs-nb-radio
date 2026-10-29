@@ -16,8 +16,10 @@ own Mode S transmitter keys, end to end:
 - **A recording made while it holds** (api/recordings/start) is at its
   rate and centre.
 - **Refusals** with their sentences, as AIS's.
-- **Gain and notches:** the operator's gain stands; both notches out
-  whatever their settings.
+- **Gain and notches:** its own gain (`adsbGain`, AGC by default) while
+  it holds, whatever the operator's, and the operator's manual 40 back
+  after; a figure set for it is held, with the overload back-off on top;
+  both notches out whatever their settings.
 - **The table:** merging, the track, expiry after adsbKeepMinutes, `since`.
 - **Over the API:** api/adsb/session, api/adsb/aircraft[/{icao}].
 """
@@ -98,7 +100,8 @@ class OnTheSimulator(unittest.TestCase):
         st = r.state()
         own = st["rxOwner"]
         self.assertEqual((own["by"], own["session"], own["freqHz"]), ("adsb", "adsb", 1_090_000_000.0))
-        self.assertEqual(own["prior"], {"vfo": HOME, "mode": "fm", "rptOffsetHz": 600_000.0})
+        self.assertEqual(own["prior"], {"vfo": HOME, "mode": "fm", "rptOffsetHz": 600_000.0,
+                                        "rxGainMode": "slow_attack", "rxGain": 40.0, "sdrplayLna": 4})
         self.assertIn("ADS-B", own["text"])
         # Reopened at 6 MS/s, the operator's setting untouched.
         self.assertEqual((r.geo.fs, r.dev.fs, st["sampleRate"]), (6_000_000.0, 6_000_000.0, 2_400_000))
@@ -215,9 +218,26 @@ class OnTheSimulator(unittest.TestCase):
             r.decoders.start("adsb", 1_090_000_000.0, {})
         self.assertEqual(e.exception.code, "unknown_decoder")
 
-    def test_the_operators_gain_stands_and_both_notches_stay_out(self):
-        r = self.radio(stations=[air("SIM202")], rxGainMode="manual", rxGain=52.0, dabNotch="on", rfNotch="on")
+    def test_it_runs_at_agc_whatever_the_operators_gain_and_gives_theirs_back(self):
+        # ohs-box, 29/10/2026: the operator's manual 40 (gRdB 59 on its
+        # RSPdx) was what ADS-B inherited, and it heard to about 20 km.
+        r = self.radio(stations=[air("SIM202")], rxGainMode="manual", rxGain=40.0)
         r.adsb.join("tv-1")
+        self.assertTrue(wait(r, lambda: r.rx_gain_applied == ("slow_attack", None), 20))
+        st = r.state()
+        self.assertEqual(st["rxGainMode"], "slow_attack")
+        self.assertEqual((st["rxOwner"]["prior"]["rxGainMode"], st["rxOwner"]["prior"]["rxGain"]), ("manual", 40.0))
+        self.assertTrue(wait(r, lambda: (r.state()["broadcastGain"] or {}).get("why") == "agc", 10))
+        r.adsb.end("stopped")
+        self.assertTrue(wait(r, lambda: r.running and r.rx_gain_applied == ("manual", 40.0), 30))
+        st = r.state()
+        self.assertEqual((st["rxGainMode"], st["rxGain"], r.cfg["rxGainMode"]), ("manual", 40.0, "manual"))
+
+    def test_a_gain_of_its_own_is_held_with_the_back_off_and_both_notches_stay_out(self):
+        r = self.radio(stations=[air("SIM202")], rxGainMode="manual", rxGain=40.0, adsbGain="52",
+                       dabNotch="on", rfNotch="on")
+        r.adsb.join("tv-1")
+        self.assertEqual((r.state()["rxGainMode"], r.state()["rxGain"]), ("manual", 52.0))
         self.assertEqual(r._dab_held(), "adsb")
         self.assertEqual(r._broadcast_key(), ("adsb", "adsb"))
         a = notch.DabAuto()

@@ -2009,6 +2009,8 @@ class Engine(metaclass=_EngineType):
     # APRS: the dial on 144.800 MHz in FM, the receiver's centre 25 kHz
     # away so its DC spike is off the channel); `freqHz` in rxOwner is then
     # the dial's, the frequency the holder is about.
+    # Settings of the holder's own beyond the dial (_hold_settings: Radio's
+    # per-job receiver gain) are applied with it and put back with it.
     def hold_receiver(self, sid: str, by: str, centre: float, label: str, min_rate: float, *,
                       yields=None, feed=None, keep: tuple = (), dial: bool = True, texts: dict | None = None,
                       tune: dict | None = None) -> None:
@@ -2028,17 +2030,20 @@ class Engine(metaclass=_EngineType):
         # One that gives way gives way to this one, before the lock: giving
         # way puts settings back through set().
         self.preempt_receiver(by)
+        own = self._hold_settings(by, label)
         with self.lock:
             why = self._hold_refusal(centre, min_rate, texts or {})
             if why is not None:
                 raise Refused(*why)
-            prior = {k: self.st[k] for k in self.HOLD_PRIOR + tuple(keep) if k in self.st}
+            prior = {k: self.st[k] for k in self.HOLD_PRIOR + tuple(keep) + tuple(own) if k in self.st}
             self.held = {"session": sid, "by": by, "block": label, "centre": float(centre), "prior": prior,
                          "yields": yields, "feed": feed, "dial": dial, "texts": dict(texts or {}),
                          "freq": float((tune or {}).get("vfo", centre))}
         try:
-            if dial:
-                self._set_holding(**(tune or {"vfo": float(centre)}))
+            changes = dict(tune or {"vfo": float(centre)}) if dial else {}
+            changes.update(own)
+            if changes:
+                self._set_holding(**changes)
         except ValueError as e:
             with self.lock:
                 self.held = None
@@ -2047,6 +2052,15 @@ class Engine(metaclass=_EngineType):
         self._status(rxOwner=self._owner_view())
         self._derive()
         self._held_retune()
+
+    def _hold_settings(self, by: str, label: str) -> dict:
+        """Settings a `by` hold on `label` (DAB: the block) applies for as
+        long as it holds the receiver, besides the dial: put back from
+        `prior` when it ends,
+        like the dial. Radio gives each job its own receiver gain here
+        (ohsradio/bcastgain.py job_gain); nothing in an app that lends no
+        receiver."""
+        return {}
 
     def release_receiver(self, sid: str) -> None:
         """Session `sid` lets the receiver go: the operator's dial and mode

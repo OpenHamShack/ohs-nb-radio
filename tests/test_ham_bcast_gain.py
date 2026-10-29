@@ -28,9 +28,11 @@ whenever its gain is above a threshold, as the SDRplay API does):
   untouched.
 """
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
+import json
 import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from ohscore import sdr, smeter_cal
@@ -257,11 +259,15 @@ class InTheRadio(unittest.TestCase):
         self.assertEqual((bg["auto"], bg["db"], bg["operatorDb"], bg["gainModel"], bg["adaptive"]),
                          (True, dev.gain[1], 40.0, "db", True))
         self.assertGreater(bg["backoffs"], 0)
-        self.assertEqual(r.state()["rxGain"], 40.0)          # the operator's setting never moved
-        self.assertEqual(r.cfg["rxGain"], 40.0)
+        # The hold set the start (dabGain "broadcast": the db model's 30)
+        # and keeps the operator's to put back.
+        st = r.state()
+        self.assertEqual((st["rxGainMode"], st["rxGain"]), ("manual", 30.0))
+        self.assertEqual((st["rxOwner"]["prior"]["rxGainMode"], st["rxOwner"]["prior"]["rxGain"]), OPERATOR)
         self.assertTrue(r.decoders.stop(sess["id"]))
         self.assertTrue(wait(r, lambda: dev.gain == OPERATOR), dev.gains[-5:])
         self.assertEqual(r.state()["broadcastGain"], {})
+        self.assertEqual((r.state()["rxGainMode"], r.state()["rxGain"], r.cfg["rxGain"]), (*OPERATOR, 40.0))
 
     def test_the_radio_stopping_leaves_the_operators_gain(self):
         r, dev = self.radio()
@@ -312,13 +318,16 @@ class InTheRadio(unittest.TestCase):
         r.decoders.stop(sess["id"])
         self.assertTrue(wait(r, lambda: dev.gain == OPERATOR))
 
-    def test_under_the_radios_own_agc_nothing_changes(self):
+    def test_dab_gain_auto_leaves_it_to_the_radios_own_agc(self):
         r, dev = self.radio()
-        r.set(rxGainMode="slow_attack")
-        r.decoders.start("dab", DAB_CENTRE, {})
+        r.set(dabGain="auto")
+        sess = r.decoders.start("dab", DAB_CENTRE, {})
         self.assertTrue(wait(r, lambda: (r.state()["broadcastGain"] or {}).get("why") == "agc"))
         self.assertEqual(r.state()["broadcastGain"]["auto"], False)
+        self.assertTrue(wait(r, lambda: dev.gain[0] == "slow_attack"))     # the rx thread applies it
         self.assertNotIn(("manual", 30.0), dev.gains)
+        r.decoders.stop(sess["id"])
+        self.assertTrue(wait(r, lambda: dev.gain == OPERATOR))
 
     def test_soapysdrplay3_settles_with_fewer_lna_states_of_gain(self):
         r, dev = self.radio(model="soapysdrplay3", over_above=47.0)
@@ -342,6 +351,145 @@ class InTheRadio(unittest.TestCase):
         self.assertGreater(dev.overloads, 20)
         self.assertEqual(set(dev.gains), {("manual", 45.0)})
         self.assertEqual(r.state()["broadcastGain"]["signal"], "fibs")
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class AJobsOwnGain(unittest.TestCase):
+    """DAB's gain is its hold's (dabGain), saved nowhere: the operator's
+    comes back when it stops, and the configuration on disk never holds
+    anything else - on ohs-box the operator's manual 40 was blamed on DAB
+    (29/10/2026), so this is what proves it cannot be."""
+
+    def radio(self, **over):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.conf = Path(tmp.name) / "config.json"
+        cfg = {"device": "sim", "audioBackend": "null", "simRealtime": False, "simSeed": 7, "simHourUtc": 12.0,
+               "simSignals": False, "callsign": "GM4BRI", "licenceClass": "full", "vfo": HOME, "mode": "fm",
+               "rxGainMode": "slow_attack", "rxGain": 40.0, **over}
+        dev = OverloadingSim(dict(cfg), over_above=99.0)
+        r = Radio(cfg, conf_path=self.conf, data_dir=tmp.name, audio=TapAudio(), device=dev)
+        self.addCleanup(r.stop)
+        r.start()
+        r.set(aisKeepMinutes=61)                     # a change, so the file is written
+        return r, dev
+
+    def on_disk(self, r):
+        r.save_now()
+        c = json.loads(self.conf.read_text())
+        return c["rxGainMode"], c["rxGain"]
+
+    def test_dab_at_40_ends_with_the_operators_agc_back_and_nothing_saved(self):
+        r, dev = self.radio(dabGain="40")
+        self.assertEqual(self.on_disk(r), ("slow_attack", 40.0))
+        sess = r.decoders.start("dab", DAB_CENTRE, {})
+        self.assertTrue(wait(r, lambda: dev.gain == ("manual", 40.0)), dev.gains)
+        st = r.state()
+        self.assertEqual((st["rxGainMode"], st["rxGain"]), ("manual", 40.0))
+        self.assertTrue(wait(r, lambda: (r.state()["broadcastGain"] or {}).get("operatorDb") == 40.0))
+        self.assertEqual(self.on_disk(r), ("slow_attack", 40.0))      # held: the operator's on disk
+        r.decoders.stop(sess["id"])
+        self.assertTrue(wait(r, lambda: dev.gain[0] == "slow_attack"), dev.gains[-3:])
+        self.assertEqual((r.state()["rxGainMode"], r.state()["broadcastGain"]), ("slow_attack", {}))
+        self.assertEqual(self.on_disk(r), ("slow_attack", 40.0))
+        r.stop()                                       # and a radio started again opens with the operator's
+        self.assertEqual(Radio(conf_path=self.conf, persist=False).cfg["rxGainMode"], "slow_attack")
+
+    def test_by_default_dab_has_the_broadcast_gain_even_under_the_operators_agc(self):
+        r, dev = self.radio()
+        sess = r.decoders.start("dab", DAB_CENTRE, {})
+        self.assertTrue(wait(r, lambda: dev.gain == ("manual", 30.0)), dev.gains)
+        self.assertTrue(wait(r, lambda: (r.state()["broadcastGain"] or {}).get("auto") is True))
+        r.decoders.stop(sess["id"])
+        self.assertTrue(wait(r, lambda: dev.gain[0] == "slow_attack"))
+
+    def test_the_operators_change_while_dab_holds_is_dabs_and_goes_with_it(self):
+        r, dev = self.radio(dabGain="40")
+        sess = r.decoders.start("dab", DAB_CENTRE, {})
+        self.assertTrue(wait(r, lambda: dev.gain == ("manual", 40.0)))
+        r.set(rxGain=35.0)
+        self.assertTrue(wait(r, lambda: dev.gain == ("manual", 35.0)))
+        self.assertEqual(self.on_disk(r), ("slow_attack", 40.0))
+        r.decoders.stop(sess["id"])
+        self.assertTrue(wait(r, lambda: dev.gain[0] == "slow_attack"))
+        self.assertEqual((r.state()["rxGain"], self.on_disk(r)), (40.0, ("slow_attack", 40.0)))
+
+
+class LocalSim(OverloadingSim):
+    """Overload only while tuned to block 11B, the local multiplex (8 km
+    from ohs-box): the other blocks are clean at any gain here."""
+
+    LOCAL = 218_640_000.0
+
+    def overloaded(self):
+        return abs(getattr(self, "rx_if", 0.0) - self.LOCAL) < 1e6 and super().overloaded()
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class PerBlock(unittest.TestCase):
+    """Brian, 29/10/2026: the local multiplex's low gain must not carry on
+    to the weak ones after a retune. Each block keeps what it settled at;
+    a block never heard starts at the default."""
+
+    def test_the_local_blocks_low_gain_is_its_own(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cfg = {"device": "sim", "audioBackend": "null", "simRealtime": False, "simSeed": 7, "simHourUtc": 12.0,
+               "simSignals": False, "callsign": "GM4BRI", "licenceClass": "full", "vfo": HOME, "mode": "fm",
+               "rxGainMode": "slow_attack"}
+        dev = LocalSim(dict(cfg))
+        r = Radio(cfg, persist=False, data_dir=tmp.name, audio=TapAudio(), device=dev)
+        self.addCleanup(r.stop)
+        for name, value in (("HOLD_S", 1.0), ("CREEP_S", 3600.0)):
+            p = mock.patch.object(bcastgain, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        r.start()
+
+        def play(block):
+            dev.gains.clear()
+            sess = r.decoders.start("dab", None, {"block": block})
+            # The block's own policy, not the last block's view still showing.
+            self.assertTrue(wait(r, lambda: r.bgain.key == ("dab", block)
+                                 and (r.state()["broadcastGain"] or {}).get("state") == "settled"),
+                            r.state()["broadcastGain"])
+            return sess
+
+        sess = play("11B")
+        self.assertEqual(dev.gains[0], ("manual", 30.0))     # never heard: the default
+        local = dev.gain[1]
+        self.assertLessEqual(local, 24.0)                    # backed off below the overload
+        r.decoders.stop(sess["id"])
+        sess = play("12B")                                   # another block: its own, not 11B's
+        self.assertEqual(dev.gains[0], ("manual", 30.0))
+        self.assertEqual(dev.gain, ("manual", 30.0))
+        self.assertEqual(r.state()["broadcastGain"]["backoffs"], 0)
+        r.decoders.stop(sess["id"])
+        sess = play("11B")                                   # back: 11B's own at once
+        self.assertEqual(r.state()["rxGain"], local)
+        self.assertEqual(dev.gains[0], ("manual", local))
+        self.assertNotIn(("manual", 30.0), dev.gains)
+        r.decoders.stop(sess["id"])
+        self.assertTrue(wait(r, lambda: dev.gain[0] == "slow_attack"))
+        self.assertEqual(r.bgain.learned, {("db", "11B"): local, ("db", "12B"): 30.0})
+
+
+class JobGainSettings(unittest.TestCase):
+    def test_spellings_defaults_and_refusals(self):
+        r = Radio({"device": "sim", "audioBackend": "null"}, persist=False)
+        st = r.state()
+        self.assertEqual({k: st[k] for k in bcastgain.JOBS.values()},
+                         {"dabGain": "broadcast", "aisGain": "auto", "adsbGain": "auto", "aprsGain": "auto",
+                          "sondeGain": "auto", "wxsatGain": "auto"})
+        r.set(adsbGain=" 45 dB", sondeGain="AGC", dabGain="Auto")
+        st = r.state()
+        self.assertEqual((st["adsbGain"], st["sondeGain"], st["dabGain"]), ("45", "auto", "auto"))
+        for key, bad in (("adsbGain", "broadcast"), ("wxsatGain", "80"), ("aisGain", "loud"), ("dabGain", "-1")):
+            with self.assertRaises(ValueError):
+                r.set(**{key: bad})
+        self.assertEqual(bcastgain.job_gain_settings("broadcast", "soapysdrplay3", [0, 27]),
+                         {"rxGainMode": "manual", "rxGain": 45.0})
+        self.assertEqual(bcastgain.job_gain_settings("damaged", "db"), {"rxGainMode": "slow_attack"})
 
 
 class TheSMeter(unittest.TestCase):

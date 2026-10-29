@@ -198,7 +198,11 @@ class Radio(Engine):
     # (_adjust_set).
     HOLDS_RECEIVER = True
     HELD_KEYS = Engine.HELD_KEYS + ("rptReverse", "rptShift")
-    HOLD_PRIOR = Engine.HOLD_PRIOR + ("rptOffsetHz",)
+    # The receiver's gain goes back with them (29/10/2026): each job sets
+    # its own while it holds (_hold_settings), and whatever it or anyone
+    # set meanwhile, the operator's own is what comes back - and, the hold's
+    # prior being what a save writes, all that is ever on disk.
+    HOLD_PRIOR = Engine.HOLD_PRIOR + ("rptOffsetHz", "rxGainMode", "rxGain", "sdrplayLna")
     # Background decoder sessions pin the receiver's centre (pin_plan).
     PINS_SPAN = True
     # Every setting that moves the receive dial or widens what it hears:
@@ -1155,10 +1159,15 @@ class Radio(Engine):
     # moment at a time, and gives the receiver back the moment anyone
     # uses it. Nor is a background `wfm` decoder session: it shares the
     # receiver with the dial and every other session in the span.
+    # DAB's is its block, not its session (Brian, 29/10/2026): what the
+    # policy learns is the block's (Policy.learned), and a session renamed
+    # from its placeholder is the same station, not a new one.
     def _broadcast_key(self):
         h = self.held
         if h is not None:
-            return (h["by"], h["session"]) if h.get("by") in ("dab", "ais", "adsb") else None
+            if h.get("by") == "dab":
+                return ("dab", h["block"])
+            return (h["by"], h["session"]) if h.get("by") in ("ais", "adsb") else None
         return ("wfm",) if self.st["mode"] == "wfm" else None
 
     def _broadcast_tick(self, now: float) -> None:
@@ -1168,7 +1177,9 @@ class Radio(Engine):
         why = None
         if key is None:
             if bg.active():
-                self.log.info("broadcast gain ends: the operator's %s %g dB again", s["rxGainMode"], s["rxGain"])
+                # Not "the operator's gain again": a job's hold puts that
+                # back itself, on its own thread, a moment either side.
+                self.log.info("broadcast gain for %s ends", bg.key[0])
             bg.end()
         elif self.play is not None:
             why = ("playback", _("A recording is playing: its gain was fixed when it was recorded."))
@@ -1183,13 +1194,30 @@ class Radio(Engine):
             count = ds.get("overloads")
             count = int(count) if isinstance(count, (int, float)) else None
             if bg.key != key or bg.wanted is None:
-                # AIS and ADS-B keep the operator's gain until overload
-                # says otherwise (ais.py, adsb.py): weak-signal services,
-                # not a multiplex.
+                # rxGain here is the job's own, which its hold set
+                # (_hold_settings); the operator's is the hold's prior. A
+                # figure chosen for the job is where it starts and the most
+                # it climbs back to; AIS and ADS-B start at theirs and move
+                # only on overload (weak-signal services, not a multiplex).
+                # DAB's "broadcast" starts where its hold put it: the
+                # block's learned gain, or the broadcast default.
+                h = self.held
+                own = (h or {}).get("prior", {}).get("rxGain", s["rxGain"]) if key[0] != "wfm" else s["rxGain"]
+                broadcast = key[0] == "wfm" or (
+                    key[0] == "dab" and bcastgain.job_gain(s.get("dabGain"))[0] == bcastgain.BROADCAST)
+                # DAB's own broadcast gain is per block: a block heard
+                # before starts where it settled, one never heard at the
+                # default, and either may climb as far as the ladder goes
+                # (the weak-side cliff still stops it) - the operator's
+                # gain, the old ceiling, is no business of DAB's now.
+                learn = key[1] if broadcast and key[0] == "dab" else None
                 bg.begin(key, now, ds.get("gainModel") or "db", ds.get("rfgrRange"), float(s["rxGain"]),
-                         "overloaded" in ds or "overloads" in ds, from_operator=key[0] in ("ais", "adsb"))
-                self.log.info("broadcast gain for %s: %g (the operator's %g; %s model, %s)", key[0], bg.gain,
-                              bg.operator, bg.ladder.model, "backs off on overload" if bg.adaptive else "fixed")
+                         "overloaded" in ds or "overloads" in ds, from_operator=not broadcast, own_db=float(own),
+                         top_db=bcastgain.Ladder(ds.get("gainModel") or "db", ds.get("rfgrRange")).most()
+                         if learn is not None else None, learn=learn)
+                self.log.info("broadcast gain for %s: %g (from %g; the operator's own %g; %s model, %s)", key[0],
+                              bg.gain, bg.operator, bg.own, bg.ladder.model,
+                              "backs off on overload" if bg.adaptive else "fixed")
             else:
                 if float(s["rxGain"]) != bg.operator:
                     bg.operator_changed(now, float(s["rxGain"]))
@@ -1215,16 +1243,35 @@ class Radio(Engine):
         self._status(broadcastGain=bg.view())
 
     def _broadcast_fibs(self, key) -> tuple | None:
-        """(FIBs passed, FIBs failed) so far for the DAB session `key`
-        names, or None (wide FM; a session with no counts yet). What the
+        """(FIBs passed, FIBs failed) so far for the DAB session holding
+        the receiver (`key` names its block), or None (wide FM; a session
+        with no counts yet). What the
         broadcast gain steers DAB by (bcastgain.py)."""
-        if key[0] != "dab":
+        h = self.held
+        if key[0] != "dab" or h is None:
             return None
-        stats = self.decoders.held_stats(key[1])
+        stats = self.decoders.held_stats(h["session"])
         ok, bad = stats.get("fibsOk"), stats.get("fibsBad")
         if isinstance(ok, (int, float)) and isinstance(bad, (int, float)):
             return int(ok), int(bad)
         return None
+
+    def _hold_settings(self, by: str, label: str) -> dict:
+        """The job's own receiver gain for its hold (bcastgain.py, "each
+        job's own gain"): its setting, or nothing for a hold that is no
+        job of these (the band scan, which keeps the operator's). DAB's
+        broadcast gain on a block it settled on before starts there
+        (Policy.learned), so the device never gets the default between."""
+        key = bcastgain.JOBS.get(by)
+        if key is None:
+            return {}
+        ds = self.st.get("deviceStatus") or {}
+        model = ds.get("gainModel") or "db"
+        want = bcastgain.job_gain_settings(self.st.get(key, bcastgain.AUTO), model, ds.get("rfgrRange"))
+        known = self.bgain.learned.get((model, label)) if by == "dab" else None
+        if known is not None and bcastgain.job_gain(self.st.get(key))[0] == bcastgain.BROADCAST:
+            want["rxGain"] = known
+        return want
 
     def _rx_gain_wanted(self, s: dict) -> tuple:
         b = self.bgain.wanted

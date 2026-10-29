@@ -118,7 +118,8 @@ class OnTheSimulator(unittest.TestCase):
         st = r.state()
         own = st["rxOwner"]
         self.assertEqual((own["by"], own["session"], own["freqHz"]), ("ais", "ais", 162_000_000.0))
-        self.assertEqual(own["prior"], {"vfo": HOME, "mode": "fm", "rptOffsetHz": 600_000.0})
+        self.assertEqual(own["prior"], {"vfo": HOME, "mode": "fm", "rptOffsetHz": 600_000.0,
+                                        "rxGainMode": "slow_attack", "rxGain": 40.0, "sdrplayLna": 4})
         self.assertIn("AIS", own["text"])
         self.assertEqual(st["vfo"], 162_000_000.0)
         self.assertEqual(st["ais"]["state"], "running")
@@ -238,9 +239,10 @@ class OnTheSimulator(unittest.TestCase):
         self.assertEqual((r.ais.state, r.ais.why), ("idle", "radio_stopped"))
         self.assertEqual(r.state()["vfo"], HOME)
 
-    def test_the_operators_gain_stands_and_the_dab_notch_stays_out(self):
+    def test_it_runs_at_agc_not_the_operators_gain_and_the_dab_notch_stays_out(self):
         r = self.radio(rxGainMode="manual", rxGain=52.0)
         r.ais.join("tv-1")
+        self.assertEqual(r.state()["rxGainMode"], "slow_attack")        # aisGain "auto"
         self.assertEqual(r._dab_held(), "ais")
         self.assertFalse(notch.wanted("auto", "auto", 160.8e6, 163.2e6, dab_held=r._dab_held(),
                                       overload_in=True)["dab_notch"])

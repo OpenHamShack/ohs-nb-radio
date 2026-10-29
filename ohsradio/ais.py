@@ -35,11 +35,13 @@ caller says to stop them (`dropSessions`), as DAB is. When it ends, the
 dial, mode and repeater offset from before and the receiver's centre are
 put back (Engine.release_receiver, Radio._held_retune).
 
-**Gain and notches** (Radio's broadcast policy, bcastgain.py; notch.py).
-The operator's gain stands unless the receiver reports overload: AIS is a
-weak-signal service like 2 m, not a broadcast multiplex, so it starts at
-the operator's own gain rather than broadcast's lower default, steps down
-only on debounced overload and creeps back. The RSP's DAB notch is held
+**Gain and notches** (bcastgain.py; notch.py). AIS sets its own gain
+while it holds the receiver, `aisGain` (bcastgain.py, "each job's own
+gain"): "auto", the receiver's AGC, by default, and the operator's gain
+back when it ends. Set to a figure, Radio's broadcast policy steps down
+from it only on debounced overload and creeps back: AIS is a weak-signal
+service like 2 m, not a broadcast multiplex, so never broadcast's lower
+default. The RSP's DAB notch is held
 out: its stopband is >30 dB from 160 to 230 MHz (the RSPdx datasheet,
 notch.py), so the auto rule putting it in on overload - right on 2 m -
 would take 30 dB off AIS itself.

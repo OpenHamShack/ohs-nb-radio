@@ -1055,7 +1055,8 @@ runs at a time.
   the operator has it (the band scan holds it too, `"by": "scan"`, but
   gives it back at once: "Station lists" below):
   `{"by": "dab", "session": "ds_3f2a", "block": "11D", "freqHz": 222064000,
-  "prior": {"vfo": 145500000, "mode": "fm", "rptOffsetHz": 600000},
+  "prior": {"vfo": 145500000, "mode": "fm", "rptOffsetHz": 600000, "rxGainMode": "manual",
+  "rxGain": 40.0, "sdrplayLna": 4},
   "text": "<the tuning sentence below>"}`.
 - Tuning is refused: `api/set` with `vfo`, `mode`, `rit`, `ritOn`,
   `rptReverse` or `rptShift` answers `409 receiver_busy`, with `error` "The
@@ -1384,46 +1385,49 @@ and service following (listed only).
 ## Broadcast gain (Radio)
 
 A broadcast station is the strongest thing on the antenna by tens of dB,
-so it does not play at the operator's manual `rxGain`, which is set for
-weak amateur signals (an RSPdx on a local DAB multiplex at rxGain 40
-reported thousands of overloads and dropped audio at 48 dB SNR). While a
-DAB session holds the receiver, or the mode is `wfm`, Radio applies a gain
-of its own (ohsradio/bcastgain.py has the reasoning). AIS holding the
-receiver ("AIS" below) uses the same policy with one difference: it starts
-at the operator's own gain, not the broadcast default, and moves only on
-overload - AIS is weak signals, not a multiplex (`broadcastGain` while it
-runs says so).
+so it does not play at a gain set for weak amateur signals (an RSPdx on a
+local DAB multiplex at rxGain 40 reported thousands of overloads and
+dropped audio at 48 dB SNR). While a DAB session holds the receiver, or
+the mode is `wfm`, Radio applies a gain of its own (ohsradio/bcastgain.py
+has the reasoning). AIS and ADS-B holding the receiver with a figure of
+their own ("Each job's receiver gain" below) use the same policy with one
+difference: they start at that figure, not the broadcast default, and move
+only on overload - weak signals, not a multiplex.
 
-- **The operator's settings never change.** `rxGain`, `rxGainMode` and
-  the antenna keep what the operator set, in `api/state`, Settings and the
-  saved configuration; only what the device is given changes. When the
-  station ends - the session stopped, `api/stop`, a mode change out of
-  `wfm`, the radio stopping - the device gets the operator's exact gain
-  back.
-- It starts at a broadcast default for the device's `gainModel` (`db`:
-  30; `sdrplay`: 30, gRdB 49; `soapysdrplay3`: 45, gRdB 59 at LNA state
-  6, where every Band III block of a sweep on ohs-box was clean), or the
-  operator's own where that is already less gain.
+- **The operator's settings never change on disk.** A DAB session's hold
+  sets its own `rxGainMode` and `rxGain` (`dabGain`, below) and puts the
+  operator's back when it ends, as it does the dial; the saved
+  configuration keeps the operator's throughout. Wide FM is the
+  operator's own listening: there only what the device is given changes,
+  and the device gets the operator's exact gain back when it ends.
+- With `dabGain` "broadcast" (the default) DAB starts at a broadcast
+  default for the device's `gainModel` (`db`: 30; `sdrplay`: 30, gRdB 49;
+  `soapysdrplay3`: 45, gRdB 59 at LNA state 6, where every Band III block
+  of a sweep on ohs-box was clean) - **per block** (since 29/10/2026): a
+  block played before starts where it last settled, one never played at
+  the default, so the local multiplex's low gain never follows a retune to
+  a weak one. Learned gains last while Radio runs. Wide FM starts at the
+  default, or the operator's own where that is already less gain.
 - **DAB steers by its FIB errors** (the session's `fibsOk`/`fibsBad`, a
   second at a time). Clean FIBs move nothing, whatever the overload flag
   says (an RSP's flickers on clean blocks). Errors with overload reported:
   one step less gain; errors without: one step more, as far as the
-  operator's own gain. A step that makes the errors worse is undone and
-  never tried again for that station (`floorDb` on the weak side), so it
-  backs off only until the errors stop and never past the weak-signal
-  cliff.
+  ladder goes. A step that makes the errors worse is undone and never
+  tried again for that station (`floorDb` on the weak side), so it backs
+  off only until the errors stop and never past the weak-signal cliff.
 - **Wide FM, and DAB before it has FIBs,** have only the device's overload
   report (`deviceStatus` `overloads` rising, SDRplay RSPs): one step less
   after overload in three 1 s windows running, and one step back after
-  30 s clear, never past the start and never into a gain that overloaded
+  30 s clear, never past the default and never into a gain that overloaded
   in the last 5 minutes. A radio that reports no overload (RTL-SDR,
   Pluto, SoapySDR, the simulator) holds the default there; for DAB its
   FIB errors still steer it (trying less gain first).
-- Nothing changes under the radio's own AGC (`rxGainMode` not `manual`),
-  on a Hermes-Lite 2 (its gain is `hl2Lna`), or while a recording plays.
-  The band scan and background `wfm` decoder sessions keep the operator's
-  gain: the scan gives the receiver back at once, and a background session
-  shares it with the dial.
+- Nothing changes under the radio's own AGC (`rxGainMode` not `manual`:
+  `dabGain` "auto", or the operator's own for wide FM), on a Hermes-Lite 2
+  (its gain is `hl2Lna`), or while a recording plays. The band scan and
+  background `wfm` decoder sessions keep the operator's gain: the scan
+  gives the receiver back at once, and a background session shares it
+  with the dial.
 
 `broadcastGain` in `api/state` and `api/status`, for a client to show:
 
@@ -1445,8 +1449,9 @@ of FIBs failing in the last window) or `overload` (`fibBad` null).
 this station, or null. While a
 station plays and the operator's gain stands it is `{"auto": false, "db":
 null, "why": "agc" | "no_rx_gain" | "playback", "text": ...}`; `{}` while
-none plays. There is no per-session override: set `rxGainMode` to an AGC
-mode to keep the device's own control for broadcast listening.
+none plays. `operatorDb` is the operator's own `rxGain`, which comes back
+when the station ends. `dabGain` "auto" keeps the device's own AGC for
+DAB; the operator's `rxGainMode` does the same for wide FM.
 
 The S-meter reads the gain applied: a calibration made at the operator's
 gain is corrected for it dB for dB, or, where the broadcast gain moved an
@@ -1454,6 +1459,44 @@ RSP's LNA state (`soapysdrplay3`), does not hold (`why`
 `broadcast_gain`). `POST api/smeter/calibrate` answers `409
 cannot_calibrate` while a broadcast gain applies; the stored calibrations
 are never touched.
+
+## Each job's receiver gain (Radio)
+
+The operator's `rxGainMode` and `rxGain` are for the operator's own
+listening. Every job that holds the receiver (`rxOwner`) sets its own gain
+for as long as it holds it and puts the operator's back when it lets go,
+exactly as it does the dial (Brian, 29/10/2026: ohs-box's manual 40 - gRdB
+59 on its RSPdx, the least sensitive setting - was inherited by ADS-B,
+which then heard to about 20 km, and by a Meteor pass that came out
+flat).
+
+| Setting | Job | Default |
+|---|---|---|
+| `dabGain` | a DAB station | `"broadcast"` ("Broadcast gain" above) |
+| `aisGain` | AIS | `"auto"` |
+| `adsbGain` | ADS-B | `"auto"` |
+| `aprsGain` | APRS | `"auto"` |
+| `sondeGain` | radiosondes | `"auto"` |
+| `wxsatGain` | weather satellite passes | `"auto"` |
+
+Each is a string: `"auto"` - the receiver's AGC (`rxGainMode`
+`slow_attack`) - or a figure in `rxGain`'s own units and sense, 0-73
+(`"45"`; `"45 dB"` is taken and stored as `"45"`), held manual; `dabGain`
+may also be `"broadcast"`. Anything else is `400` from `api/set`. A figure
+for AIS, ADS-B or DAB is where the overload back-off starts ("Broadcast
+gain"); the others hold it.
+
+- While the job holds the receiver, `rxGainMode` and `rxGain` in
+  `api/state` are the job's, and `rxOwner.prior` carries the operator's
+  (`rxGainMode`, `rxGain`, `sdrplayLna`) beside the dial:
+  `{"vfo": 145500000, "mode": "fm", "rptOffsetHz": 600000, "rxGainMode":
+  "manual", "rxGain": 40.0, "sdrplayLna": 4}`.
+- **Nothing a job sets is saved.** A save while a job holds writes the
+  operator's values from `prior`, so a crash leaves the operator's gain on
+  disk. A gain change while a job holds (`api/set` `rxGain`, Settings) is
+  that job's, for as long as it holds, and goes with it.
+- The band scan holds no gain of its own: it gives the receiver back the
+  moment anyone uses it, with what it had.
 
 ## RSP notch filters (Radio)
 
@@ -2169,9 +2212,10 @@ Every answer of the session routes is the session view (also `ais` in
   (32); `503 not_running` (the radio is stopped: "Start the radio to see
   ships"). A view-level client (`403 level_too_low`) cannot start AIS but
   may read the table: show what is there and say decoding needs Control.
-- **Gain and notches:** the operator's gain stands; `broadcastGain` only
-  steps it down if the receiver reports overload (and back), as for wide
-  FM but starting from the operator's own gain. The RSP's DAB notch stays
+- **Gain and notches:** AIS's own, `aisGain` ("Each job's receiver gain":
+  AGC by default, the operator's back after); set to a figure,
+  `broadcastGain` steps it down only if the receiver reports overload (and
+  back), as for wide FM but starting from that figure. The RSP's DAB notch stays
   out (`notches.dab_notch.why: "ais"`): its stopband covers 162 MHz.
 
 **The vessels.** `GET api/ais/vessels` (view):
@@ -2335,8 +2379,9 @@ it whether the radio runs or not:
   open at the faster rate; it is back at the operator's rate). Every one
   is refused before the radio is reopened. A view-level client may read
   the table but not start ADS-B.
-- **Gain and notches:** the operator's gain stands unless the receiver
-  reports overload (as AIS); both RSP notches are out while ADS-B runs,
+- **Gain and notches:** ADS-B's own, `adsbGain` (AGC by default; a
+  figure backs off on overload, as AIS's), the operator's back after;
+  both RSP notches are out while ADS-B runs,
   whatever their settings (`notches.*.why: "adsb"`).
 
 **What is shown.** An aircraft appears only once the decoder believes in

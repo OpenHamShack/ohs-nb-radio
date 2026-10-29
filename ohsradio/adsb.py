@@ -36,8 +36,9 @@ on the hold's frequency, not the dial path's offset (rxLo), so the whole
 2 MHz of Mode S sits in the band. The decoder works on the magnitude, so
 the receiver's DC spike in the middle of it is taken out by its DC blocker.
 
-**Gain and notches:** the operator's gain stands unless the receiver
-reports overload (bcastgain.py, as for AIS); both RSP notches stay out,
+**Gain and notches:** its own gain while it holds, `adsbGain` ("auto",
+AGC, by default; a figure backs off on overload as AIS's does,
+bcastgain.py), the operator's back after; both RSP notches stay out,
 whatever their settings (Brian's brief), though neither's stopband
 reaches 1090 MHz.
 

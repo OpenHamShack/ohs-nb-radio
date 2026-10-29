@@ -436,6 +436,34 @@ class OnTheServer(unittest.TestCase):
         self.radio.wxsat.tick()                                # and it is not started again
         self.assertEqual(self.owner(), {})
 
+    def test_a_pass_records_at_agc_and_gives_the_operators_manual_gain_back(self):
+        # ohs-box, 29/10/2026: the 09:19 pass was recorded at the
+        # operator's manual 40 (gRdB 59 on its RSPdx) and came out flat.
+        r = self.radio
+        r.set(rxGainMode="manual", rxGain=40.0)
+        self.into_the_pass()
+        self.assertEqual(self.owner().get("by"), "wxsat")
+        self.assertEqual(r.state()["rxGainMode"], "slow_attack")           # wxsatGain "auto"
+        self.assertTrue(wait(lambda: r.rx_gain_applied == ("slow_attack", None)))
+        self.clock.t = AFTER
+        r.wxsat.tick()
+        st = r.state()
+        self.assertEqual((st["rxOwner"], st["rxGainMode"], st["rxGain"]), ({}, "manual", 40.0))
+        self.assertTrue(wait(lambda: r.rx_gain_applied == ("manual", 40.0)))
+
+    def test_a_gain_set_for_passes_is_the_one_they_record_at(self):
+        r = self.radio
+        s, v = self.req("POST", "/api/set", {"wxsatGain": "45 dB"})
+        self.assertEqual(s, 200, v)
+        self.assertEqual(r.state()["wxsatGain"], "45")
+        self.assertEqual(self.req("POST", "/api/set", {"wxsatGain": "loud"})[0], 400)
+        self.into_the_pass()
+        self.assertEqual((r.state()["rxGainMode"], r.state()["rxGain"]), ("manual", 45.0))
+        self.assertTrue(wait(lambda: r.rx_gain_applied == ("manual", 45.0)))
+        self.clock.t = AFTER
+        r.wxsat.tick()
+        self.assertEqual((r.state()["rxGainMode"], r.state()["rxGain"]), ("slow_attack", 40.0))
+
     def test_a_skipped_future_pass_is_left_alone_at_aos(self):
         s, v = self.req("DELETE", f"/api/wxsat/passes/{M23}/record")
         self.assertEqual((s, v["plan"]), (200, "skip-disabled"))

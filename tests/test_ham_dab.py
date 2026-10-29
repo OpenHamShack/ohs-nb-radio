@@ -99,7 +99,8 @@ class OnTheSimulator(unittest.TestCase):
         self.assertEqual(st["vfo"], CENTRE)
         own = st["rxOwner"]
         self.assertEqual((own["by"], own["session"], own["block"], own["freqHz"]), ("dab", sess["id"], BLOCK, CENTRE))
-        self.assertEqual(own["prior"], {"vfo": HOME, "mode": "fm", "rptOffsetHz": 600_000.0})
+        self.assertEqual(own["prior"], {"vfo": HOME, "mode": "fm", "rptOffsetHz": 600_000.0,
+                                        "rxGainMode": "slow_attack", "rxGain": 40.0, "sdrplayLna": 4})
         # The ensemble label (FIG 1/0) shares its slot with the two service
         # labels (tx.rs fic_block: one label every third eligible frame, so
         # each specific label repeats roughly once a second) and the DLS

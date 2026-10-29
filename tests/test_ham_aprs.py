@@ -134,7 +134,8 @@ class PublishedPackets(unittest.TestCase):
         st = box.req("GET", "/api/status", level="view")[1]
         own = st["rxOwner"]
         self.assertEqual((own["by"], own["freqHz"]), ("aprs", 144_800_000.0))
-        self.assertEqual(own["prior"], {"vfo": HOME, "mode": "fm", "rptOffsetHz": 600_000.0})
+        self.assertEqual(own["prior"], {"vfo": HOME, "mode": "fm", "rptOffsetHz": 600_000.0,
+                                        "rxGainMode": "slow_attack", "rxGain": 40.0, "sdrplayLna": 4})
         self.assertEqual((st["vfo"], st["mode"], st["aprs"]["state"]), (144_800_000.0, "fm", "running"))
         self.assertTrue(wait(self.heard_everything, radio=box.radio), box.stations())
         # The receiver's centre beside the channel, never on it.

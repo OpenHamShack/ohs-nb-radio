@@ -13,14 +13,16 @@ on the antenna by tens of dB, so it wants less gain, not the same.
 What happens instead, while one plays (`Policy`, driven ten times a second
 from Radio's supervisor tick):
 
-- **The operator's settings are never touched.** `rxGain`, `rxGainMode`
-  and the antenna stay exactly as they were (saved, shown in Settings);
-  what changes is only what the engine applies to the device
-  (Engine._rx_gain_wanted, the hook NB's dish alignment uses the same
-  way). So when the station stops - however it stops - there is nothing to
-  put back: the engine applies the operator's own figure again on its
-  next reconfigure, exactly, and a radio stopped meanwhile reopens with it
-  because it is what the configuration holds.
+- **The operator's settings are never touched.** What the policy changes
+  is only what the engine applies to the device (Engine._rx_gain_wanted,
+  the hook NB's dish alignment uses the same way), so when the station
+  stops - however it stops - it has nothing to put back. Since 29/10/2026
+  a DAB session's hold sets the gain it starts from (`dabGain`, "each
+  job's own gain" at the end of this module) and puts the operator's
+  `rxGainMode` and `rxGain` back when it ends, as it does the dial; the
+  saved configuration keeps the operator's throughout (the hold's prior is
+  what a save writes). Wide FM is the operator's own listening and starts
+  from the operator's gain.
 - **It starts at a broadcast default, never above the operator's gain.**
   The default (`DEFAULT`, per gain model) is a gain a strong local
   multiplex does not overload on the radios measured; where the operator
@@ -157,6 +159,10 @@ class Ladder:
             return None
         return min(g + DB_STEP, self.hi)
 
+    def most(self) -> float:
+        """The most real gain on this ladder."""
+        return self.lo if self.reduction else self.hi
+
     def start(self, operator: float) -> float:
         """The broadcast default, or the operator's own gain where that is
         already less."""
@@ -173,6 +179,11 @@ class Policy:
         self.key = None
         self.wanted: tuple | None = None       # ("manual", rxGain) while applying, else None
         self._view: dict = {}
+        # What each DAB block settled at, by (gain model, block), for as
+        # long as the program runs (begin's `learn`). Kept here rather than
+        # in a station's own state because a station ends at every retune.
+        self.learned: dict[tuple, float] = {}
+        self.learn_as = None
 
     def view(self) -> dict:
         return dict(self._view)
@@ -181,22 +192,42 @@ class Policy:
         return self.key is not None
 
     def begin(self, key, now: float, model: str, rfgr_range, operator_db: float, adaptive: bool,
-              from_operator: bool = False) -> None:
+              from_operator: bool = False, own_db: float | None = None, top_db: float | None = None,
+              learn=None) -> None:
         """A broadcast station starts (`key` names it: a new key is a new
-        station). `adaptive`: the device reports overload. `from_operator`:
-        start at the operator's own gain rather than the broadcast default
-        (AIS, ohsradio/ais.py: weak signals, so only overload moves it)."""
+        station). `operator_db` is the rxGain it starts from - since
+        29/10/2026 the job's own (job_gain), which its hold has set.
+        `adaptive`: the device reports overload. `from_operator`: start at
+        that gain rather than the broadcast default (a figure chosen for
+        the job, or AIS's and ADS-B's weak signals: only overload moves
+        it). `own_db`: the operator's own gain, which comes back when the
+        station stops - only what the status says (`operatorDb`).
+        `top_db`: the most gain the weak side may climb to, where that is
+        more than the start. `learn`: what to remember the settled gain
+        under (a DAB block's broadcast gain, in `learned`); it then starts
+        at `operator_db` exactly - what its hold set, the block's learned
+        gain or the default - and creeps back toward the default."""
         self.key = key
         self.rfgr_range = rfgr_range
         self.from_operator = bool(from_operator)
         self.ladder = Ladder(model, rfgr_range)
         self.operator = float(operator_db)
-        self.cap = self.ladder.clamp(operator_db) if from_operator else self.ladder.start(operator_db)
-        # The weak side may climb back as far as the operator's own gain
-        # where that is more than the start: they chose it.
-        op = self.ladder.clamp(operator_db)
+        self.own = float(operator_db) if own_db is None else float(own_db)
+        self.top_db, self.learn_as = top_db, learn
+        if learn is not None and not from_operator:
+            # A block heard before starts where it settled then, one never
+            # heard at the default (Brian, 29/10/2026: wanted per block, so
+            # the local multiplex's low gain never carries on to the weak
+            # ones); the creep back aims at the default either way.
+            self.cap = self.ladder.default
+            self.gain = self.ladder.clamp(operator_db)
+        else:
+            self.cap = self.ladder.clamp(operator_db) if from_operator else self.ladder.start(operator_db)
+            self.gain = self.cap
+        # The weak side may climb back as far as the gain it was given, or
+        # `top_db`, where either is more than the start.
+        op = self.ladder.clamp(operator_db if top_db is None else top_db)
         self.top = op if self.ladder.gainier(op, self.cap) else self.cap
-        self.gain = self.cap
         self.adaptive = bool(adaptive)
         self.changed_at = self.began_at = now
         self.trouble_at: float | None = None    # the last overload or FIB error that counted
@@ -217,12 +248,14 @@ class Policy:
         """A broadcast station plays but this policy may not touch the gain
         (`why` a code, `text` the sentence): the operator's gain stands."""
         self.key = key
+        self.learn_as = None
         self.wanted = None
         self._view = {"auto": False, "db": None, "why": why, "text": text}
 
     def end(self) -> None:
         self.key = None
         self.wanted = None
+        self.learn_as = None
         self._view = {}
 
     def operator_changed(self, now: float, operator_db: float) -> None:
@@ -231,7 +264,7 @@ class Policy:
         (their change is a deliberate act; what was learned stays)."""
         bad, floor = self.bad, self.floor
         self.begin(self.key, now, self.ladder.model, self.rfgr_range, operator_db, self.adaptive,
-                   from_operator=self.from_operator)
+                   from_operator=self.from_operator, own_db=self.own, top_db=self.top_db, learn=self.learn_as)
         self.bad, self.floor = bad, floor
 
     # -- the steps ------------------------------------------------------------
@@ -348,7 +381,92 @@ class Policy:
         else:
             state, text = "settled", _(
                 "Broadcast gain {db:g}, chosen for this station. Your own gain, {op:g}, is back when it stops.")
-        self._view = {"auto": True, "db": self.gain, "operatorDb": self.operator, "gainModel": self.ladder.model,
+        if state == "settled" and self.learn_as is not None:
+            self.learned[(self.ladder.model, self.learn_as)] = self.gain
+        self._view = {"auto": True, "db": self.gain, "operatorDb": self.own, "gainModel": self.ladder.model,
                       "adaptive": self.adaptive, "state": state, "signal": self.signal, "fibBad": self.fib_bad,
                       "overloaded": self.overloaded, "backoffs": self.backoffs, "atLimit": self.at_limit,
-                      "floorDb": self.floor, "text": text.format(db=self.gain, op=self.operator)}
+                      "floorDb": self.floor, "text": text.format(db=self.gain, op=self.own)}
+
+
+# -- each job's own gain (Brian, 29/10/2026) ---------------------------------
+# Until 29/10 every job that holds the receiver inherited the operator's
+# rxGainMode and rxGain. On ohs-box that was manual 40 - on its RSPdx under
+# SoapySDRPlay3 gRdB 59 at LNA state 1 - which a client set over the API
+# on 23/10 (manual at 05:39, 40 at the end of a gain sweep at 23:53, both
+# "remote client (post_set)" in its log; this policy never writes a
+# setting) and nobody put back; ADS-B then decoded only to
+# about 20 km, a Meteor pass at 09:19 on 29/10 was flat, and AIS, APRS and
+# the sondes all heard less than they could. The operator's gain is for the
+# operator's own listening; each job now sets its own for as long as it
+# holds the receiver, through the hold (Engine._hold_settings), and the
+# hold puts the operator's back when it ends, as it does the dial.
+#
+# A job's setting (JOBS) is "auto" - the receiver's AGC, slow_attack, the
+# default for the weak-signal services, where a fixed figure is right for
+# one band and one antenna only - or a figure in rxGain's own units and
+# sense ("45"), held manual. DAB's may also be "broadcast", its default:
+# manual, starting at the broadcast default for the gain model (Ladder),
+# or for a block played before where it settled then (Policy.learned: per
+# block, so the local multiplex's low gain never follows a retune), and
+# steered by its FIB errors as the module docstring says. On a figure,
+# DAB, AIS and ADS-B keep their overload back-off on top of it (Radio.
+# _broadcast_tick), starting from it; under "auto" the device's AGC
+# already follows the signal and the policy stands aside (`why` "agc").
+# Wide FM is the operator's own listening and keeps the operator's gain
+# under the policy, as before.
+JOBS = {"dab": "dabGain", "ais": "aisGain", "adsb": "adsbGain", "aprs": "aprsGain", "sonde": "sondeGain",
+        "wxsat": "wxsatGain"}
+AUTO, BROADCAST = "auto", "broadcast"
+AGC_MODE = "slow_attack"
+GAIN_RANGE = (0.0, 73.0)             # ohscore/state.py rxGain's
+
+
+def parse_job_gain(value: str, broadcast_ok: bool = False) -> tuple:
+    """A job's gain setting -> ("auto", None), ("broadcast", None) or
+    ("manual", dB). Raises ValueError with a sentence."""
+    v = str(value).strip().lower()
+    if v in ("", AUTO, "agc"):
+        return (AUTO, None)
+    if v == BROADCAST and broadcast_ok:
+        return (BROADCAST, None)
+    try:
+        db = float(v.removesuffix("db").strip())
+    except ValueError:
+        db = None
+    if db is None or db != db or not GAIN_RANGE[0] <= db <= GAIN_RANGE[1]:
+        if broadcast_ok:
+            raise ValueError(_("A job's receiver gain is \"auto\", \"broadcast\" or a gain from {lo:g} to {hi:g} dB, "
+                               "not {value}").format(lo=GAIN_RANGE[0], hi=GAIN_RANGE[1], value=repr(value)))
+        raise ValueError(_("A job's receiver gain is \"auto\" or a gain from {lo:g} to {hi:g} dB, not {value}")
+                         .format(lo=GAIN_RANGE[0], hi=GAIN_RANGE[1], value=repr(value)))
+    return ("manual", db)
+
+
+def job_gain_validator(broadcast_ok: bool = False):
+    """The setting's `validate`: its canonical spelling ("auto",
+    "broadcast", "45")."""
+    def validate(value: str) -> str:
+        kind, db = parse_job_gain(value, broadcast_ok)
+        return f"{db:g}" if kind == "manual" else kind
+    return validate
+
+
+def job_gain(value: str) -> tuple:
+    """parse_job_gain for a stored setting, which was checked when set:
+    a damaged one is "auto", the default that needs no figure."""
+    try:
+        return parse_job_gain(value, broadcast_ok=True)
+    except ValueError:
+        return (AUTO, None)
+
+
+def job_gain_settings(value: str, model: str | None, rfgr_range=None) -> dict:
+    """What a hold sets for a job whose gain setting is `value`, on a
+    device of gain model `model` (deviceStatus.gainModel)."""
+    kind, db = job_gain(value)
+    if kind == AUTO:
+        return {"rxGainMode": AGC_MODE}
+    if kind == BROADCAST:
+        db = Ladder(model or "db", rfgr_range).default
+    return {"rxGainMode": "manual", "rxGain": float(db)}

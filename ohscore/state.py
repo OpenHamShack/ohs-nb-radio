@@ -60,8 +60,8 @@ class Registry:
             "unit": unit, "persist": (kind != "status") if persist is None else persist, "auth": auth,
             "restart": restart, "help": help,
         }
-        # A dict- or list-valued key (HAM's band stacks and power chains, the
-        # converter list) checks its contents with `validate(value) ->
+        # A dict-, list- or str-valued key (HAM's band stacks and power
+        # chains, the converter list, Radio's per-job gains) checks its contents with `validate(value) ->
         # value`, raising ValueError with a sentence; only keys that need
         # one carry the field, so a key without it reads exactly as before.
         if validate is not None:
@@ -147,6 +147,10 @@ class Registry:
                     raise ValueError
                 if "\n" in value or len(value) > 200:
                     raise ValueError
+                # A string with a grammar of its own (Radio's per-job gains:
+                # "auto" or a figure in dB) checks it the same way.
+                if spec.get("validate") is not None:
+                    value = spec["validate"](value)
             elif t == "enum":
                 if value not in spec["choices"]:
                     # Accept numeric enums sent as strings (sample rate from a text field).
