@@ -23,7 +23,8 @@ import threading
 import time
 
 from ..i18n.text import _
-from . import presence, shack
+from . import presence
+from . import shack
 from .app import AppInfo, Server
 from .audio import StreamAudio
 

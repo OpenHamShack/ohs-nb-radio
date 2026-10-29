@@ -37,7 +37,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from ohscore import sdr
-from ohscore.server import presence, shack
+from ohscore.server import presence
+from ohscore.server import shack
 from ohscore.server.app import Server
 from ohscore.server.audio import StreamAudio
 from ohsradio import ais as aismod

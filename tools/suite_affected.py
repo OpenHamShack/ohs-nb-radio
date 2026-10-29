@@ -110,6 +110,11 @@ def affected(base: str, root: Path) -> tuple[list[str], list[str]]:
             chosen |= hits
         elif p.suffix in (".py", ".sh") or p.parts[0] in ("ohscore", "ohsnb", "ohsradio", "tools"):
             nothing.append(f)
+    # Any change can put a forbidden word into the published source, and
+    # nothing maps a file to that check by name: beta.17's release found
+    # three such lines that every scoped run had passed. So it always runs.
+    if chosen or nothing:
+        chosen.add("test_source_site")
     return sorted(chosen), nothing
 
 

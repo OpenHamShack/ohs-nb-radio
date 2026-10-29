@@ -67,8 +67,8 @@ BACKOFF_MAX_S = 30.0
 # No presence in the services map: look again this often (a platform
 # update may add it without restarting the app).
 SERVICES_RECHECK_S = 300.0
-# The platform sends a keepalive comment every 15 s (dock360 shack
-# services events.KEEPALIVE_S): three missed is a dead connection.
+# The platform sends a keepalive comment every 15 s (dock360
+# services events.KEEPALIVE_S on the platform): three missed is a dead connection.
 READ_TIMEOUT_S = 45.0
 
 
