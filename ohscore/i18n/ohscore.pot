@@ -46,7 +46,7 @@ msgstr ""
 msgid "A memory needs a name"
 msgstr ""
 
-#: ohscore/server/app.py:2007
+#: ohscore/server/app.py:2014
 msgid "A pad keys through api/ptt, not as an action"
 msgstr ""
 
@@ -54,7 +54,7 @@ msgstr ""
 msgid "A reply needs the decode's slot"
 msgstr ""
 
-#: ohscore/server/app.py:1503
+#: ohscore/server/app.py:1510
 msgid "A service id is four or eight hexadecimal digits"
 msgstr ""
 
@@ -88,19 +88,19 @@ msgstr ""
 msgid "Already transmitting"
 msgstr ""
 
-#: ohscore/server/app.py:1819
+#: ohscore/server/app.py:1826
 msgid "An ICAO address is six hexadecimal digits"
 msgstr ""
 
-#: ohscore/server/app.py:1739
+#: ohscore/server/app.py:1746
 msgid "An MMSI is a number of up to nine digits"
 msgstr ""
 
-#: ohscore/server/app.py:276
+#: ohscore/server/app.py:283
 msgid "An audio recording is being made"
 msgstr ""
 
-#: ohscore/server/app.py:665
+#: ohscore/server/app.py:672
 #: ohscore/server/autotx.py:107
 msgid "Another remote is transmitting"
 msgstr ""
@@ -159,11 +159,11 @@ msgstr ""
 msgid "Auto-tune: moved {shift:+d} Hz to the next best fit, not what it measured; press again to go back"
 msgstr ""
 
-#: ohscore/server/app.py:274
+#: ohscore/server/app.py:281
 msgid "Automatic transmit is armed"
 msgstr ""
 
-#: ohscore/server/app.py:668
+#: ohscore/server/app.py:675
 #: ohscore/server/autotx.py:150
 #: ohscore/server/autotx.py:104
 msgid "Automatic transmit is armed by another remote"
@@ -178,8 +178,8 @@ msgstr ""
 msgid "Automatic transmit is not armed"
 msgstr ""
 
-#: ohscore/server/app.py:786
-#: ohscore/server/app.py:787
+#: ohscore/server/app.py:793
+#: ohscore/server/app.py:794
 msgid "Automatic transmit stopped: an internal error"
 msgstr ""
 
@@ -197,7 +197,7 @@ msgstr ""
 msgid "Automatic transmit stopped: the mode changed"
 msgstr ""
 
-#: ohscore/server/app.py:1211
+#: ohscore/server/app.py:1218
 #, python-brace-format
 msgid "Automatic transmit switched off by {user}"
 msgstr ""
@@ -265,7 +265,7 @@ msgstr ""
 msgid "Choose the radio's sound device for transmit audio"
 msgstr ""
 
-#: ohscore/server/app.py:947
+#: ohscore/server/app.py:954
 msgid "Control"
 msgstr ""
 
@@ -298,11 +298,11 @@ msgstr ""
 msgid "DAB needs the receiver to run at {least:g} MS/s or more, and the {device} runs at {rate:g} MS/s: choose {faster:g} MS/s in Settings › Radio (the radio restarts)"
 msgstr ""
 
-#: ohscore/server/app.py:1113
+#: ohscore/server/app.py:1120
 msgid "Delete"
 msgstr ""
 
-#: ohscore/server/app.py:1125
+#: ohscore/server/app.py:1132
 msgid "Delete this recording?"
 msgstr ""
 
@@ -310,11 +310,11 @@ msgstr ""
 msgid "Device reconnected (transmit stays off until you key)"
 msgstr ""
 
-#: ohscore/server/app.py:1046
+#: ohscore/server/app.py:1053
 msgid "Dial"
 msgstr ""
 
-#: ohscore/server/app.py:1121
+#: ohscore/server/app.py:1128
 msgid "Download"
 msgstr ""
 
@@ -336,11 +336,11 @@ msgstr ""
 msgid "Found: {path}"
 msgstr ""
 
-#: ohscore/server/app.py:1121
+#: ohscore/server/app.py:1128
 msgid "Frequency"
 msgstr ""
 
-#: ohscore/server/app.py:1311
+#: ohscore/server/app.py:1318
 msgid "Give decoder, freqHz and, if any, params"
 msgstr ""
 
@@ -348,7 +348,7 @@ msgstr ""
 msgid "Give one of fromSecondsAgo, fromItemStart and lastMinutes"
 msgstr ""
 
-#: ohscore/server/app.py:1403
+#: ohscore/server/app.py:1410
 msgid "Give params"
 msgstr ""
 
@@ -361,12 +361,12 @@ msgstr ""
 msgid "HSmodem has no {speed} bit/s speed"
 msgstr ""
 
-#: ohscore/server/app.py:1116
-#: ohscore/server/app.py:1088
+#: ohscore/server/app.py:1123
+#: ohscore/server/app.py:1095
 msgid "IQ"
 msgstr ""
 
-#: ohscore/server/app.py:1098
+#: ohscore/server/app.py:1105
 #, python-brace-format
 msgid "IQ recordings are large. {cost} An IQ recording stops by itself after {minutes:g} minutes."
 msgstr ""
@@ -393,11 +393,11 @@ msgstr ""
 msgid "KG-STV sends a picture: none was given"
 msgstr ""
 
-#: ohscore/server/app.py:1121
+#: ohscore/server/app.py:1128
 msgid "Kind"
 msgstr ""
 
-#: ohscore/server/app.py:1121
+#: ohscore/server/app.py:1128
 msgid "Length"
 msgstr ""
 
@@ -406,8 +406,8 @@ msgstr ""
 msgid "Lines of text are sent in the text modes; the radio is in {mode}"
 msgstr ""
 
-#: ohscore/server/app.py:1046
-#: ohscore/server/app.py:1121
+#: ohscore/server/app.py:1053
+#: ohscore/server/app.py:1128
 msgid "Mode"
 msgstr ""
 
@@ -428,17 +428,17 @@ msgstr ""
 msgid "No DAB signal on this block."
 msgstr ""
 
-#: ohscore/server/app.py:1823
+#: ohscore/server/app.py:1830
 #, python-brace-format
 msgid "No aircraft {icao} has been heard lately"
 msgstr ""
 
-#: ohscore/server/app.py:1541
+#: ohscore/server/app.py:1548
 #, python-brace-format
 msgid "No logo has come for {sid} yet"
 msgstr ""
 
-#: ohscore/server/app.py:1899
+#: ohscore/server/app.py:1906
 msgid "No map picture here: draw the built-in map"
 msgstr ""
 
@@ -451,16 +451,16 @@ msgstr ""
 msgid "No more decoders can run at once"
 msgstr ""
 
-#: ohscore/server/app.py:1559
+#: ohscore/server/app.py:1566
 #, python-brace-format
 msgid "No programme guide has come for {sid} yet"
 msgstr ""
 
-#: ohscore/server/app.py:1124
+#: ohscore/server/app.py:1131
 msgid "No recordings yet."
 msgstr ""
 
-#: ohscore/server/app.py:1523
+#: ohscore/server/app.py:1530
 #, python-brace-format
 msgid "No slide has come from {sid} yet"
 msgstr ""
@@ -469,12 +469,12 @@ msgstr ""
 msgid "No sound card: transmit audio cannot reach the radio"
 msgstr ""
 
-#: ohscore/server/app.py:1743
+#: ohscore/server/app.py:1750
 #, python-brace-format
 msgid "No vessel {mmsi} has been heard lately"
 msgstr ""
 
-#: ohscore/server/app.py:1360
+#: ohscore/server/app.py:1367
 #, python-brace-format
 msgid "No {decoder} station is playing"
 msgstr ""
@@ -509,9 +509,9 @@ msgstr ""
 msgid "Not while a recording is playing: stop it first"
 msgstr ""
 
-#: ohscore/server/app.py:1316
-#: ohscore/server/app.py:1692
-#: ohscore/server/app.py:1773
+#: ohscore/server/app.py:1323
+#: ohscore/server/app.py:1699
+#: ohscore/server/app.py:1780
 msgid "Not while automatic transmit is armed: switch it off first"
 msgstr ""
 
@@ -528,7 +528,7 @@ msgstr ""
 msgid "Not while transmitting: DAB takes the receiver to Band III"
 msgstr ""
 
-#: ohscore/server/app.py:2399
+#: ohscore/server/app.py:2408
 msgid "Nothing is kept to listen behind live: the timeshift keeps a DAB or wide FM station while it plays"
 msgstr ""
 
@@ -552,7 +552,7 @@ msgstr ""
 msgid "Nothing was recorded"
 msgstr ""
 
-#: ohscore/server/app.py:1045
+#: ohscore/server/app.py:1052
 msgid "On the air"
 msgstr ""
 
@@ -564,7 +564,7 @@ msgstr ""
 msgid "Only subscribe messages are understood here."
 msgstr ""
 
-#: ohscore/server/app.py:2109
+#: ohscore/server/app.py:2116
 msgid "Only the controller's administrator may refresh the local frequencies."
 msgstr ""
 
@@ -603,7 +603,7 @@ msgstr ""
 msgid "PortAudio could not start ({error})"
 msgstr ""
 
-#: ohscore/server/app.py:1047
+#: ohscore/server/app.py:1054
 msgid "Problem"
 msgstr ""
 
@@ -617,11 +617,11 @@ msgstr ""
 msgid "QSO with {call} logged"
 msgstr ""
 
-#: ohscore/server/app.py:1044
+#: ohscore/server/app.py:1051
 msgid "Radio"
 msgstr ""
 
-#: ohscore/server/app.py:290
+#: ohscore/server/app.py:297
 #, python-brace-format
 msgid "Receive with {app}"
 msgstr ""
@@ -631,16 +631,16 @@ msgstr ""
 msgid "Receiver gain not applied: {error}"
 msgstr ""
 
-#: ohscore/server/app.py:832
-#: ohscore/server/app.py:865
+#: ohscore/server/app.py:839
+#: ohscore/server/app.py:872
 msgid "Reconnecting to the station…"
 msgstr ""
 
-#: ohscore/server/app.py:1092
+#: ohscore/server/app.py:1099
 msgid "Record IQ"
 msgstr ""
 
-#: ohscore/server/app.py:1092
+#: ohscore/server/app.py:1099
 msgid "Record audio"
 msgstr ""
 
@@ -659,13 +659,13 @@ msgstr ""
 msgid "Recording saved: {name}, {took}, {size}. Send both files, .sigmf-data and .sigmf-meta."
 msgstr ""
 
-#: ohscore/server/app.py:1087
+#: ohscore/server/app.py:1094
 #, python-brace-format
 msgid "Recording {kind}: {seconds} s, {size}."
 msgstr ""
 
-#: ohscore/server/app.py:1076
-#: ohscore/server/app.py:1082
+#: ohscore/server/app.py:1083
+#: ohscore/server/app.py:1089
 msgid "Recordings"
 msgstr ""
 
@@ -673,7 +673,7 @@ msgstr ""
 msgid "Right-click the meter › Calibrate…"
 msgstr ""
 
-#: ohscore/server/app.py:1044
+#: ohscore/server/app.py:1051
 msgid "Running"
 msgstr ""
 
@@ -714,7 +714,7 @@ msgstr ""
 msgid "Set your callsign in the station profile before transmitting"
 msgstr ""
 
-#: ohscore/server/app.py:1121
+#: ohscore/server/app.py:1128
 msgid "Size"
 msgstr ""
 
@@ -738,7 +738,7 @@ msgstr ""
 msgid "Start the radio first: the recording comes from its microphone"
 msgstr ""
 
-#: ohscore/server/app.py:1121
+#: ohscore/server/app.py:1128
 msgid "Started (UTC)"
 msgstr ""
 
@@ -746,7 +746,7 @@ msgstr ""
 msgid "Station conditions must be a short list of yes/no answers"
 msgstr ""
 
-#: ohscore/server/app.py:1095
+#: ohscore/server/app.py:1102
 msgid "Stop"
 msgstr ""
 
@@ -786,11 +786,11 @@ msgstr ""
 msgid "The RTL-SDR library (librtlsdr) is not installed: on Debian or Ubuntu, install librtlsdr0."
 msgstr ""
 
-#: ohscore/server/app.py:579
+#: ohscore/server/app.py:586
 msgid "The app is stopping"
 msgstr ""
 
-#: ohscore/server/app.py:941
+#: ohscore/server/app.py:948
 msgid "The client must name itself: 1-64 letters, digits, '.', '_', ':' or '-'"
 msgstr ""
 
@@ -824,12 +824,12 @@ msgstr ""
 msgid "The controller's hardware broker did not answer ({why})"
 msgstr ""
 
-#: ohscore/server/run.py:72
+#: ohscore/server/run.py:73
 #, python-brace-format
 msgid "The controller's services answered HTTP {code}"
 msgstr ""
 
-#: ohscore/server/run.py:70
+#: ohscore/server/run.py:71
 #, python-brace-format
 msgid "The controller's services did not answer ({why})"
 msgstr ""
@@ -893,13 +893,13 @@ msgstr ""
 msgid "The radio is not running."
 msgstr ""
 
-#: ohscore/server/app.py:369
+#: ohscore/server/app.py:376
 msgid "The radio stopped"
 msgstr ""
 
-#: ohscore/server/app.py:877
-#: ohscore/server/app.py:874
-#: ohscore/server/app.py:806
+#: ohscore/server/app.py:884
+#: ohscore/server/app.py:881
+#: ohscore/server/app.py:813
 msgid "The radio was handed to another app"
 msgstr ""
 
@@ -940,15 +940,15 @@ msgstr ""
 msgid "The receiver's samples do not suit this decoder ({detail})"
 msgstr ""
 
-#: ohscore/server/app.py:925
+#: ohscore/server/app.py:932
 msgid "The request is not JSON"
 msgstr ""
 
-#: ohscore/server/app.py:921
+#: ohscore/server/app.py:928
 msgid "The request is too large"
 msgstr ""
 
-#: ohscore/server/app.py:927
+#: ohscore/server/app.py:934
 msgid "The request must be a JSON object"
 msgstr ""
 
@@ -966,7 +966,7 @@ msgstr ""
 msgid "The sound system is not running"
 msgstr ""
 
-#: ohscore/server/app.py:2268
+#: ohscore/server/app.py:2275
 #, python-brace-format
 msgid "The spectrum feed is not available in this installation: {why}"
 msgstr ""
@@ -1077,7 +1077,7 @@ msgstr ""
 msgid "There is no call in that message to answer"
 msgstr ""
 
-#: ohscore/server/app.py:1482
+#: ohscore/server/app.py:1489
 #, python-brace-format
 msgid "There is no decoded picture called {name}"
 msgstr ""
@@ -1091,14 +1091,14 @@ msgstr ""
 #: ohscore/decoders.py:615
 #: ohscore/decoders.py:1164
 #: ohscore/decoders.py:680
-#: ohscore/server/app.py:1452
-#: ohscore/server/app.py:1460
+#: ohscore/server/app.py:1459
+#: ohscore/server/app.py:1467
 #, python-brace-format
 msgid "There is no decoder session called {id}"
 msgstr ""
 
-#: ohscore/server/app.py:2095
-#: ohscore/server/app.py:2085
+#: ohscore/server/app.py:2102
+#: ohscore/server/app.py:2092
 #, python-brace-format
 msgid "There is no entry {id} in my frequencies"
 msgstr ""
@@ -1107,7 +1107,7 @@ msgstr ""
 msgid "There is no reading to calibrate against."
 msgstr ""
 
-#: ohscore/server/app.py:1648
+#: ohscore/server/app.py:1655
 #, python-brace-format
 msgid "There is no screen called {id}"
 msgstr ""
@@ -1127,7 +1127,7 @@ msgstr ""
 msgid "There is no such QSO in the log"
 msgstr ""
 
-#: ohscore/server/app.py:2170
+#: ohscore/server/app.py:2177
 msgid "There is no such recording."
 msgstr ""
 
@@ -1136,8 +1136,8 @@ msgstr ""
 msgid "There is no voice memory {number} (there are {count})"
 msgstr ""
 
-#: ohscore/server/app.py:993
-#: ohscore/server/app.py:1663
+#: ohscore/server/app.py:1000
+#: ohscore/server/app.py:1670
 #, python-brace-format
 msgid "There is nothing at {path}"
 msgstr ""
@@ -1146,58 +1146,58 @@ msgstr ""
 msgid "There is nothing to send"
 msgstr ""
 
-#: ohscore/server/app.py:1261
+#: ohscore/server/app.py:1268
 msgid "This TV may only transmit with Enable TX"
 msgstr ""
 
-#: ohscore/server/app.py:974
+#: ohscore/server/app.py:981
 msgid "This app answers only through the OpenHamShack controller."
 msgstr ""
 
-#: ohscore/server/app.py:1752
+#: ohscore/server/app.py:1759
 msgid "This app has no ADS-B."
 msgstr ""
 
-#: ohscore/server/app.py:1672
+#: ohscore/server/app.py:1679
 msgid "This app has no AIS."
 msgstr ""
 
-#: ohscore/server/app.py:1279
+#: ohscore/server/app.py:1286
 msgid "This app has no CW skimmer."
 msgstr ""
 
-#: ohscore/server/app.py:1496
+#: ohscore/server/app.py:1503
 msgid "This app has no DAB."
 msgstr ""
 
-#: ohscore/server/app.py:1934
-#: ohscore/server/app.py:1945
-#: ohscore/server/app.py:1969
+#: ohscore/server/app.py:1941
+#: ohscore/server/app.py:1952
+#: ohscore/server/app.py:1976
 msgid "This app has no S-meter calibration."
 msgstr ""
 
-#: ohscore/server/app.py:2029
+#: ohscore/server/app.py:2036
 msgid "This app has no local frequencies."
 msgstr ""
 
-#: ohscore/server/app.py:1842
+#: ohscore/server/app.py:1849
 msgid "This app has no map."
 msgstr ""
 
-#: ohscore/server/app.py:1909
-#: ohscore/server/app.py:1917
+#: ohscore/server/app.py:1916
+#: ohscore/server/app.py:1924
 msgid "This app has no over-power watch."
 msgstr ""
 
-#: ohscore/server/app.py:1571
+#: ohscore/server/app.py:1578
 msgid "This app has no station lists."
 msgstr ""
 
-#: ohscore/server/app.py:1605
+#: ohscore/server/app.py:1612
 msgid "This app serves no screens."
 msgstr ""
 
-#: ohscore/server/app.py:1608
+#: ohscore/server/app.py:1615
 msgid "This app serves ui/1 screens, which this OpenHamShack app cannot show."
 msgstr ""
 
@@ -1218,7 +1218,7 @@ msgstr ""
 msgid "This decoder runs only as the radio's mode, not on a frequency of its own."
 msgstr ""
 
-#: ohscore/server/app.py:1869
+#: ohscore/server/app.py:1876
 msgid "This install has no land map"
 msgstr ""
 
@@ -1230,16 +1230,16 @@ msgstr ""
 msgid "This item began before the timeshift buffer: recording from the buffer's start"
 msgstr ""
 
-#: ohscore/server/app.py:985
+#: ohscore/server/app.py:992
 msgid "This needs the View level."
 msgstr ""
 
-#: ohscore/server/app.py:948
+#: ohscore/server/app.py:955
 #, python-brace-format
 msgid "This needs the {needs} level; your level for {app} is {level}."
 msgstr ""
 
-#: ohscore/server/app.py:675
+#: ohscore/server/app.py:682
 msgid "This radio can only receive"
 msgstr ""
 
@@ -1260,20 +1260,20 @@ msgstr ""
 msgid "Too many recordings started in the same second."
 msgstr ""
 
-#: ohscore/server/app.py:947
+#: ohscore/server/app.py:954
 msgid "Transmit"
 msgstr ""
 
-#: ohscore/server/app.py:871
+#: ohscore/server/app.py:878
 msgid "Transmit stopped by the controller"
 msgstr ""
 
-#: ohscore/server/app.py:1270
+#: ohscore/server/app.py:1277
 #, python-brace-format
 msgid "Transmit stopped by {user}"
 msgstr ""
 
-#: ohscore/server/app.py:773
+#: ohscore/server/app.py:780
 #, python-brace-format
 msgid "Transmit stopped: remote controller lost (no word from {id} for {s:.0f} s)"
 msgstr ""
@@ -1283,11 +1283,11 @@ msgstr ""
 msgid "Transmit stopped: {error}"
 msgstr ""
 
-#: ohscore/server/app.py:706
+#: ohscore/server/app.py:713
 msgid "Transmit switched off"
 msgstr ""
 
-#: ohscore/server/app.py:680
+#: ohscore/server/app.py:687
 #, python-brace-format
 msgid "Transmit with {app}"
 msgstr ""
@@ -1348,11 +1348,11 @@ msgstr ""
 msgid "Update the controller to use SDRplay radios and DAB+"
 msgstr ""
 
-#: ohscore/server/app.py:1058
+#: ohscore/server/app.py:1065
 msgid "Use OpenHamShack Remote to operate this app. This page shows how it is."
 msgstr ""
 
-#: ohscore/server/app.py:947
+#: ohscore/server/app.py:954
 msgid "View"
 msgstr ""
 
@@ -1419,8 +1419,8 @@ msgstr ""
 msgid "another app"
 msgstr ""
 
-#: ohscore/server/app.py:1116
-#: ohscore/server/app.py:1088
+#: ohscore/server/app.py:1123
+#: ohscore/server/app.py:1095
 msgid "audio"
 msgstr ""
 
@@ -1428,11 +1428,11 @@ msgstr ""
 msgid "bad DC size"
 msgstr ""
 
-#: ohscore/server/app.py:1875
+#: ohscore/server/app.py:1882
 msgid "bbox is west,south,east,north in degrees; detail auto, fine or coarse; format geojson or compact"
 msgstr ""
 
-#: ohscore/server/app.py:2343
+#: ohscore/server/app.py:2352
 msgid "behind must be a number of seconds, 0 or more"
 msgstr ""
 
@@ -1445,12 +1445,12 @@ msgstr ""
 msgid "block data ran out"
 msgstr ""
 
-#: ohscore/server/app.py:2050
+#: ohscore/server/app.py:2057
 #, python-brace-format
 msgid "category must be one of {names}"
 msgstr ""
 
-#: ohscore/server/app.py:2334
+#: ohscore/server/app.py:2343
 msgid "channels must be 1 or 2"
 msgstr ""
 
@@ -1462,7 +1462,7 @@ msgstr ""
 msgid "converters must be a list"
 msgstr ""
 
-#: ohscore/server/app.py:1555
+#: ohscore/server/app.py:1562
 msgid "date is YYYY-MM-DD"
 msgstr ""
 
@@ -1471,7 +1471,7 @@ msgstr ""
 msgid "dbfs must be a number"
 msgstr ""
 
-#: ohscore/server/app.py:1949
+#: ohscore/server/app.py:1956
 msgid "dbm is required"
 msgstr ""
 
@@ -1517,16 +1517,16 @@ msgstr ""
 msgid "its folder does not allow programs to run"
 msgstr ""
 
-#: ohscore/server/app.py:1423
+#: ohscore/server/app.py:1430
 msgid "listen is true or false"
 msgstr ""
 
-#: ohscore/server/app.py:2318
+#: ohscore/server/app.py:2327
 msgid "loHz and hiHz must be frequencies in Hz, loHz below hiHz."
 msgstr ""
 
-#: ohscore/server/app.py:1044
-#: ohscore/server/app.py:1045
+#: ohscore/server/app.py:1051
+#: ohscore/server/app.py:1052
 msgid "no"
 msgstr ""
 
@@ -1543,7 +1543,7 @@ msgstr ""
 msgid "not enough free disk space"
 msgstr ""
 
-#: ohscore/server/app.py:746
+#: ohscore/server/app.py:753
 msgid "not transmitting under a remote lease"
 msgstr ""
 
@@ -1573,7 +1573,7 @@ msgstr ""
 msgid "q65code produced no 'Channel symbols' line for {message}: {output}"
 msgstr ""
 
-#: ohscore/server/app.py:2044
+#: ohscore/server/app.py:2051
 #, python-brace-format
 msgid "radiusKm must be a number from {lo} to {hi}"
 msgstr ""
@@ -1582,14 +1582,14 @@ msgstr ""
 msgid "reduce is peak or mean, and depth 8 or 16."
 msgstr ""
 
-#: ohscore/server/app.py:1220
-#: ohscore/server/app.py:1196
+#: ohscore/server/app.py:1227
+#: ohscore/server/app.py:1203
 msgid "remote must be 1 to 64 letters, digits, '.', '_', ':' or '-'"
 msgstr ""
 
-#: ohscore/server/app.py:1448
-#: ohscore/server/app.py:1723
-#: ohscore/server/app.py:1804
+#: ohscore/server/app.py:1455
+#: ohscore/server/app.py:1730
+#: ohscore/server/app.py:1811
 msgid "since must be a whole number"
 msgstr ""
 
@@ -1660,20 +1660,20 @@ msgstr ""
 msgid "time limit"
 msgstr ""
 
-#: ohscore/server/app.py:749
+#: ohscore/server/app.py:756
 msgid "transmit is held by another remote"
 msgstr ""
 
-#: ohscore/server/app.py:1537
+#: ohscore/server/app.py:1544
 msgid "variant is square or wide"
 msgstr ""
 
-#: ohscore/server/app.py:1044
-#: ohscore/server/app.py:1045
+#: ohscore/server/app.py:1051
+#: ohscore/server/app.py:1052
 msgid "yes"
 msgstr ""
 
-#: ohscore/server/app.py:2280
+#: ohscore/server/app.py:2289
 #, python-brace-format
 msgid "{app} already serves {n} spectrum clients; try again when one has gone."
 msgstr ""
@@ -1683,7 +1683,7 @@ msgstr ""
 msgid "{app} has this radio ({device}); it was not taken from it"
 msgstr ""
 
-#: ohscore/server/app.py:1026
+#: ohscore/server/app.py:1033
 #, python-brace-format
 msgid "{app} is transmitting"
 msgstr ""
@@ -1779,12 +1779,12 @@ msgstr ""
 msgid "{freq} is outside what the receiver covers now"
 msgstr ""
 
-#: ohscore/server/app.py:1160
+#: ohscore/server/app.py:1167
 #, python-brace-format
 msgid "{keys}: set in the station profile on the controller, not here"
 msgstr ""
 
-#: ohscore/server/app.py:1164
+#: ohscore/server/app.py:1171
 #, python-brace-format
 msgid "{keys}: the controller looks after these"
 msgstr ""
@@ -2006,7 +2006,7 @@ msgstr ""
 msgid "{title}: use must be rx, tx or rxtx"
 msgstr ""
 
-#: ohscore/server/app.py:1099
+#: ohscore/server/app.py:1106
 #, python-brace-format
 msgid "{used} of {limit} used; {free} free. The oldest are deleted past {limit}; nothing records with less than {floor} free."
 msgstr ""

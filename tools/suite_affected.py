@@ -127,9 +127,12 @@ def main(argv: list[str]) -> int:
     # Any change can put a forbidden word into the published source, and
     # nothing maps a file to that check by name: beta.17's release found
     # three such lines that every scoped run had passed. So it always runs.
-    if (mods or nothing) and "test_source_site" not in mods \
-            and (root / "tests" / "test_source_site.py").exists():
-        mods.append("test_source_site")
+    # The same for the gettext templates: they carry line numbers, so
+    # moving a translated string down one line makes them stale.
+    for always in ("test_source_site", "test_i18n"):
+        if (mods or nothing) and always not in mods \
+                and (root / "tests" / f"{always}.py").exists():
+            mods.append(always)
     for m in mods:
         print(m)
     for f in nothing:
