@@ -274,6 +274,13 @@ class Server:
             if svc is not None:
                 svc.vouch = (lambda client, hold=name: self.presence is not None
                              and self.presence.renews(client, hold))
+        # Radio's weather-satellite passes (ohsradio/wxsat.py): what only the
+        # server knows makes the receiver busy, and forcing a pass ends the
+        # client-scoped holds as a client's leaving does (end_client_holds).
+        wx = getattr(radio, "wxsat", None)
+        if wx is not None:
+            wx.probes.append(self._wxsat_busy)
+            wx.end_client_holds = self.end_client_holds
 
     def _scan_busy(self) -> str:
         """The band scan's reasons to wait that only the server knows."""
@@ -282,6 +289,18 @@ class Server:
         if self.recordings.summary().get("active"):
             return _("An audio recording is being made")
         return ""
+
+    def _wxsat_busy(self):
+        """A weather-satellite pass's reasons the receiver is in use that
+        only the server knows: transmit and recordings it never takes the
+        receiver from, and listeners it leaves alone unless forced."""
+        if self.lease is not None or self.digi.remote is not None:
+            return "skip-conflict", _("Transmit is in use (a remote's PTT or automatic transmit)")
+        if self.recordings.summary().get("active"):
+            return "skip-conflict", _("A recording is being made")
+        if self.audio.listeners():
+            return "skip-busy", _("Someone is listening to the radio")
+        return None
 
     # ---------------------------------------------------------- lifecycle
     def device(self) -> str:
@@ -404,18 +423,7 @@ class Server:
                 self._gone_later.append((client, why))
                 return
             closed = self.holds.end_streams(client)
-            ended = []
-            d = self.radio.decoders
-            for kind, sid in self.holds.leave(client):
-                if kind == "held":
-                    if d.stop(sid):
-                        ended.append(f"decoder session {sid}")
-                elif kind == "listen" and d.listening == sid:
-                    try:
-                        d.listen(sid, False)
-                        ended.append(f"listening to {sid}")
-                    except Exception:  # noqa: BLE001 - a session gone since is not listened to
-                        pass
+            ended = self._end_holds(self.holds.leave(client))
             for name in ("ais", "adsb", "aprs"):
                 svc = getattr(self.radio, name, None)
                 if svc is None:
@@ -428,19 +436,68 @@ class Server:
                 with svc.lock:
                     last = svc.state == "running" and not svc.clients
                 if last:
-                    svc.end("idle")
+                    self._end_map(svc, "idle")
                     ended.append(name)
-                    # ADS-B reopens the radio at the operator's rate on a
-                    # thread of its own: done before the park looks, or the
-                    # reopen could follow the claim's release.
-                    t = getattr(svc, "restoring", None)
-                    if t is not None:
-                        t.join(15.0)
             if closed or ended:
                 log.info("presence: %s gone (%s): %d stream(s) closed%s", client, why, closed,
                          (", ended " + ", ".join(ended)) if ended else "")
                 self.park_pending = True
         self._maybe_park()
+
+    def _end_holds(self, keys) -> list[str]:
+        """End the client-scoped holds `keys` (presence.Holds' keys): a
+        decoder session holding the receiver (DAB) stopped, a listen
+        ended. What was ended, for the log."""
+        ended = []
+        d = self.radio.decoders
+        for kind, sid in keys:
+            if kind == "held":
+                if d.stop(sid):
+                    ended.append(f"decoder session {sid}")
+            elif kind == "listen" and d.listening == sid:
+                try:
+                    d.listen(sid, False)
+                    ended.append(f"listening to {sid}")
+                except Exception:  # noqa: BLE001 - a session gone since is not listened to
+                    pass
+        return ended
+
+    @staticmethod
+    def _end_map(svc, why: str) -> None:
+        """End the AIS or ADS-B session `svc`, whoever has its map open."""
+        svc.end(why)
+        # ADS-B reopens the radio at the operator's rate on a thread of its
+        # own: done before the park looks, or the reopen could follow the
+        # claim's release.
+        t = getattr(svc, "restoring", None)
+        if t is not None:
+            t.join(15.0)
+
+    def end_client_holds(self, why: str) -> list[str]:
+        """End every client-scoped hold, whoever made it - the same ending
+        as a client's leaving (client_gone), for all of them at once:
+        forcing a weather-satellite pass (ohsradio/wxsat.py) is the one
+        thing that does. A DAB station a client started without an id is
+        ended too: it is a person's, and the force is a person's choice.
+        Streams stay open (they hear silence while the pass holds the
+        receiver), station-scoped work is untouched, and nothing is done
+        while on the air. What was ended."""
+        with self._gone_lock:
+            if self.radio.state().get("keyed"):
+                return []
+            ended = self._end_holds(self.holds.take_all())
+            r = self.radio
+            for name in ("ais", "adsb", "aprs"):
+                svc = getattr(r, name, None)
+                if svc is not None and svc.state == "running":
+                    self._end_map(svc, "stopped")
+                    ended.append(name)
+            h = r.held
+            if h is not None and h.get("by") == "dab" and r.decoders.stop(h["session"]):
+                ended.append(f"decoder session {h['session']}")
+        if ended:
+            log.info("client-scoped holds ended (%s): %s", why, ", ".join(ended))
+        return ended
 
     def client_arrived(self, client: str) -> None:
         """A client has come to this app: the radio is wanted again."""
@@ -489,7 +546,18 @@ class Server:
                 return "band scan"
             if self._scan_due(scan):
                 return "band scan due"
+        if self._wxsat_due():
+            return "weather satellite pass"
         return ""
+
+    def _wxsat_due(self) -> bool:
+        """A weather-satellite pass (station-scoped) is being recorded, or
+        one to record rises within the minute."""
+        wx = getattr(self.radio, "wxsat", None)
+        try:
+            return wx is not None and wx.due()
+        except Exception:  # noqa: BLE001 - a prediction that fails keeps nothing awake
+            return False
 
     @staticmethod
     def _scan_due(scan) -> bool:
@@ -516,7 +584,7 @@ class Server:
                 return
             why = self.idle_reason()
             if why:
-                if why not in ("transmit", "band scan", "band scan due"):
+                if why not in ("transmit", "band scan", "band scan due", "weather satellite pass"):
                     self.park_pending = False
                 return
             self.park_pending = False
@@ -545,6 +613,11 @@ class Server:
                         # Station-scoped: the nightly scan runs on a parked
                         # radio as on one nobody is using, then it parks again.
                         self.wake("the nightly band scan")
+                        self.park_pending = True
+                    elif self._wxsat_due():
+                        # A pass likewise: recorded on a parked radio, which
+                        # parks again once it is over.
+                        self.wake("a weather satellite pass")
                         self.park_pending = True
                 self._maybe_park()
             except Exception:  # noqa: BLE001  the loop must outlive one bad pass
@@ -1834,6 +1907,73 @@ class _Handler(BaseHTTPRequestHandler):
         a = self._aprs()
         if a is not None:
             self._send(200, a.table.messages())
+    # api/wxsat (docs/SERVER-API.md "Weather satellites"): Radio's Meteor-M
+    # passes, their plans and the recording. NB has none and answers 404.
+    def _wxsat(self):
+        w = getattr(self.srv.radio, "wxsat", None)
+        if w is None:
+            self._error(404, _("This app has no weather satellites."), "not_found")
+        return w
+
+    def get_wxsat_passes(self, who, q):
+        """GET api/wxsat/passes[?hours=48]: the passes in the next `hours`
+        (1-72), each with its plan."""
+        w = self._wxsat()
+        if w is None:
+            return
+        try:
+            hours = float(q.get("hours", ["48"])[0])
+        except ValueError:
+            hours = -1.0
+        if not 1.0 <= hours <= 72.0:
+            self._error(400, _("hours must be a number from 1 to 72"), "bad_params")
+            return
+        self._send(200, w.passes_view(hours))
+
+    def get_wxsat_status(self, who, q):
+        w = self._wxsat()
+        if w is not None:
+            self._send(200, w.status_view())
+
+    def get_wxsat_images(self, who, q):
+        """GET api/wxsat/images: the decoded pictures. None yet: decoding is
+        the feature after this one, and the list's shape is its."""
+        if self._wxsat() is not None:
+            self._send(200, [])
+
+    def _wxsat_pass(self, act):
+        """POST or DELETE api/wxsat/passes/<id>/record."""
+        from ..decoders import Refused as DecoderRefused
+        w = self._wxsat()
+        if w is None:
+            return
+        parts = urlsplit(self.path).path.rstrip("/").split("/")
+        if len(parts) < 2 or parts[-1] != "record":
+            self._error(404, _("There is nothing at {path}").format(path=self.path), "not_found")
+            return
+        try:
+            view = act(w, parts[-2])
+        except DecoderRefused as e:
+            status = {"unknown_pass": 404, "pass_over": 409, "receiver_busy": 409}.get(e.code, 409)
+            self._error(status, str(e), e.code, why=str(e))
+            return
+        self._send(200, view)
+
+    def post_wxsat_record(self, who, q):
+        """Force a pass: recorded whatever its plan; one in the sky now
+        starts at once, ending client-scoped holds first (409 with `why`
+        for a recording, a scan or transmit, which are never preempted)."""
+        if self.srv.digi.remote is not None or self.srv.lease is not None:
+            why = _("Not while transmit is in use: a weather satellite pass never takes the receiver from it")
+            self._error(409, why, "on_air", why=why)
+            return
+        self._wxsat_pass(lambda w, pid: w.force(pid))
+        log.info("weather satellite pass forced by %s", who.get("user", "?"))
+
+    def delete_wxsat_record(self, who, q):
+        """Skip a pass; one being recorded stops, the receiver given back."""
+        self._wxsat_pass(lambda w, pid: w.skip(pid))
+        log.info("weather satellite pass skipped by %s", who.get("user", "?"))
 
     # api/adsb (docs/SERVER-API.md "ADS-B"): Radio's aircraft, on the same
     # map as its ships, shaped as api/ais is. NB has none and answers 404.
@@ -2615,6 +2755,9 @@ ROUTES = {
     ("DELETE", "/api/aprs/session"): ("control", _Handler.delete_aprs_session),
     ("GET", "/api/aprs/stations"): ("view", _Handler.get_aprs_stations),
     ("GET", "/api/aprs/messages"): ("view", _Handler.get_aprs_messages),
+    ("GET", "/api/wxsat/passes"): ("view", _Handler.get_wxsat_passes),
+    ("GET", "/api/wxsat/status"): ("view", _Handler.get_wxsat_status),
+    ("GET", "/api/wxsat/images"): ("view", _Handler.get_wxsat_images),
     ("GET", "/api/map/info"): ("view", _Handler.get_map_info),
     ("GET", "/api/map/land"): ("view", _Handler.get_map_land),
     ("GET", "/ui/v1/app"): ("view", _Handler.get_ui_app),
@@ -2640,6 +2783,8 @@ PREFIX_ROUTES = {
     ("GET", "/api/adsb/aircraft/"): ("view", _Handler.get_adsb_one),
     ("GET", "/api/aprs/stations/"): ("view", _Handler.get_aprs_station),
     ("GET", "/api/map/tiles/"): ("view", _Handler.get_map_tile),
+    ("POST", "/api/wxsat/passes/"): ("control", _Handler.post_wxsat_record),
+    ("DELETE", "/api/wxsat/passes/"): ("control", _Handler.delete_wxsat_record),
     ("DELETE", "/api/decoders/sessions/"): ("control", _Handler.delete_decoder_session),
     ("POST", "/api/decoders/sessions/"): ("control", _Handler.post_decoder_session_params),
     ("GET", "/api/decoders/files/"): ("view", _Handler.get_decoder_file),

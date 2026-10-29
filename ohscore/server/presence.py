@@ -166,6 +166,14 @@ class Holds:
                         out.append(key)
         return out
 
+    def take_all(self) -> list[tuple]:
+        """Every hold, whoever made it, taken off the list for the caller
+        to end (Server.end_client_holds)."""
+        with self.lock:
+            out = list(self.holders)
+            self.holders.clear()
+        return out
+
     def of(self, client: str) -> list[tuple]:
         with self.lock:
             return [k for k, who in self.holders.items() if client in who]

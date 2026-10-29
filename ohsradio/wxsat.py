@@ -119,8 +119,8 @@ RECOMPUTE_S = 600.0                # the predicted list is made again this often
 KEEP_MARKS_S = 7 * 86_400.0
 MATCH_S = 300.0                    # the same pass, though a newer element set moved its AOS
 # Holds a person made through a client (Server.end_client_holds ends them):
-# the decoder name a DAB station holds under, and the two maps.
-CLIENT_SCOPED = ("dab", "ais", "adsb")
+# the decoder name a DAB station holds under, and the three maps.
+CLIENT_SCOPED = ("dab", "ais", "adsb", "aprs")
 LIVE = ("recording", "done", "failed", "missed", "skip-busy", "skip-conflict")
 # A 2 m antenna's label, for antenna(): "2 m", "2m", "VHF", a 2 m or 137
 # MHz frequency, a dual-band, or a Diamond X-series vertical's model number
