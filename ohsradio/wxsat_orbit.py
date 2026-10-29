@@ -5,6 +5,7 @@ and loss (LOS) - in a time window.
 
     sat = Orbit(l1, l2)
     sat.look(t, lat, lon)                       # (az, el) in degrees at Unix time t
+    sat.doppler_hz(t, lat, lon, freq_hz)        # the shift of freq_hz heard at the station
     passes(sat, lat, lon, start, end)           # [{"aos", "tca", "los", "maxEl", "aosAz", "losAz"}]
     track(sat, lat, lon, aos, los, step=10.0)   # [{"t", "az", "el"}]
 
@@ -36,6 +37,7 @@ REFINE_S = 0.5
 WGS84_A = 6378.137                 # km
 WGS84_F = 1 / 298.257223563
 JD_UNIX = 2440587.5                # the Julian date of 1970-01-01 00:00 UTC
+C_KM_S = 299792.458                # the speed of light
 
 
 def gmst(jd: float) -> float:
@@ -74,15 +76,18 @@ class Orbit:
         c, s = math.cos(g), math.sin(g)
         return (r[0] * c + r[1] * s, -r[0] * s + r[1] * c, r[2])
 
+    def _station(self, lat: float, lon: float) -> tuple[float, float, float]:
+        if self._cache is None or self._cache[:2] != (lat, lon):
+            self._cache = (lat, lon, station_ecef(lat, lon))
+        return self._cache[2]
+
     def look(self, t: float, lat: float, lon: float) -> tuple[float, float]:
         """(azimuth, elevation) in degrees from the station; elevation -90
         where SGP4 cannot place the satellite."""
         p = self.ecef(t)
         if p is None:
             return 0.0, -90.0
-        if self._cache is None or self._cache[:2] != (lat, lon):
-            self._cache = (lat, lon, station_ecef(lat, lon))
-        sx, sy, sz = self._cache[2]
+        sx, sy, sz = self._station(lat, lon)
         dx, dy, dz = p[0] - sx, p[1] - sy, p[2] - sz
         la, lo = math.radians(lat), math.radians(lon)
         sla, cla, slo, clo = math.sin(la), math.cos(la), math.sin(lo), math.cos(lo)
@@ -92,6 +97,22 @@ class Orbit:
         az = math.degrees(math.atan2(east, north)) % 360.0
         el = math.degrees(math.atan2(up, math.hypot(east, north)))
         return az, el
+
+    def doppler_hz(self, t: float, lat: float, lon: float, freq_hz: float, dt: float = 0.5) -> float:
+        """The Doppler shift (Hz) of `freq_hz` sent by the satellite and
+        heard at the station at Unix time `t`: positive while it comes
+        closer. From the rate of change of range, by central difference of
+        two Earth-fixed positions `dt` apart - simpler than turning SGP4's
+        TEME velocity into the Earth's frame (which needs Earth's rotation
+        added to it) and, over half a second, good to well under a hertz of
+        a shift of a few kHz. 0.0 where SGP4 cannot place the satellite,
+        as look() gives -90 there."""
+        a, b = self.ecef(t - dt / 2), self.ecef(t + dt / 2)
+        if a is None or b is None:
+            return 0.0
+        s = self._station(lat, lon)
+        rate = (math.dist(b, s) - math.dist(a, s)) / dt        # km/s, positive while it goes away
+        return -freq_hz * rate / C_KM_S
 
 
 def _crossing(sat: Orbit, lat: float, lon: float, a: float, b: float, rising: bool) -> float:
