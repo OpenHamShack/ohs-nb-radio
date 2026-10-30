@@ -1,0 +1,163 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: OpenHamShack Radio <https://openhamshack.com/source/>
+Date: Fri, 30 Oct 2026 21:01:25 +0000
+Subject: [PATCH 1/2] MSU-MR LRPT: line channels up across the 43-packet loop
+
+OpenHamShack patch on SatDump 1.2.2 (tag 1.2.2, 7aef0fe8441b), for
+Meteor-M N2-3 passes whose MSU-MR channels came out shifted against each
+other. Equivalent to upstream's "LRPT alignment rework", commits
+b0fd1359b (09/01/2025) and e6661066a (11/01/2025) on master, which no
+release contains yet (master at 9fee0793c7d4, 22/10/2026, has them). The
+rework itself is not applied: it arrives with the 2.0 product and pipeline
+changes it was written against, so this is the same idea written onto
+1.2.2's reader:
+
+- a channel's offset is where its lines start in the 43-packet loop
+  (% 43), not % 43 % 14 with 0 meaning 14; the channel with the lowest
+  offset is the first one after the loop wraps, and it and the channels
+  after it are one line ahead of the ones before, which getChannel()
+  takes off;
+- every channel is cut to the same first and last line, so composites
+  line up row for row. 1.2.2 cut each channel from its own first segment,
+  so a pass that began part way through a loop (here: channel 4's end of
+  the previous line, then 1, 2, 4) left the channels one line apart.
+
+Checked on a real N2-3 pass (30/10/2026, channels 1, 2, 4) and with its
+APIDs remapped to 1, 2, 3, at all 43 loop phases: no line where the
+channels' timestamps disagree, where 1.2.2 had 48 of 57; and for a pass
+starting on a whole loop, the same pixels and timestamps as 1.2.2 on
+every line 1.2.2 produced (channels short of the longest are now padded
+to its height). Drop with the first SatDump release containing b0fd1359b.
+---
+ .../instruments/msumr/lrpt_msumr_reader.cpp   | 74 +++++++++++++++----
+ 1 file changed, 60 insertions(+), 14 deletions(-)
+
+diff --git a/plugins/meteor_support/meteor/instruments/msumr/lrpt_msumr_reader.cpp b/plugins/meteor_support/meteor/instruments/msumr/lrpt_msumr_reader.cpp
+index 2bb6b56eb..1d9814414 100644
+--- a/plugins/meteor_support/meteor/instruments/msumr/lrpt_msumr_reader.cpp
++++ b/plugins/meteor_support/meteor/instruments/msumr/lrpt_msumr_reader.cpp
+@@ -3,8 +3,10 @@
+ #include "common/utils.h"
+ #include <ctime>
+ #include <cmath>
++#include <algorithm>
+ 
+ #define SEG_CNT 20000 // 12250
++#define NO_OFFSET 4294967295 // offset[] of a channel not (yet) received
+ 
+ namespace meteor
+ {
+@@ -17,8 +19,8 @@ namespace meteor
+                 for (int i = 0; i < 6; i++)
+                 {
+                     segments[i] = new Segment[SEG_CNT];
+-                    firstSeg[i] = 4294967295;
+-                    rollover[i] = lastSeq[i] = offset[i] = lastSeg[i] = lines[i] = 0;
++                    firstSeg[i] = offset[i] = NO_OFFSET;
++                    rollover[i] = lastSeq[i] = lastSeg[i] = lines[i] = 0;
+                 }
+ 
+                 // Fetch current day
+@@ -68,15 +70,24 @@ namespace meteor
+                     rollover[currentChannel] += 16384;
+                 }
+ 
+-                if (offset[currentChannel] == 0)
++                // Where in the 43-packet loop (14 segments for each of three
++                // channels, then telemetry) this channel's lines start. It used
++                // to be taken "% 43 % 14", which gives every channel the same
++                // value only while the loop does not wrap a multiple of 43 in
++                // the middle of a line: otherwise the channels after the wrap
++                // landed one line lower than the others. getChannel() now
++                // corrects for the wrap instead (OpenHamShack backport of
++                // SatDump b0fd1359b/e6661066a, "LRPT alignment rework").
++                if (offset[currentChannel] == NO_OFFSET)
+                 {
+                     uint32_t mcu_count = mcuNumber / 14;
+-                    offset[currentChannel] = (sequence + (mcu_count > sequence ? 16384 : 0) - mcu_count + rollover[currentChannel]) % 43 % 14;
+-                    if (offset[currentChannel] == 0)
+-                        offset[currentChannel] = 14;
++                    offset[currentChannel] = (sequence + (mcu_count > sequence ? 16384 : 0) - mcu_count + rollover[currentChannel]) % 43;
+                 }
+ 
+-                uint32_t id = ((sequence + rollover[currentChannel] - offset[currentChannel]) / 43 * 14) + mcuNumber / 14;
++                // + 43 so that a line starting before sequence 0 cannot wrap
++                // the unsigned sum; every id moves by one line, which changes
++                // nothing since images are cut relative to the first one.
++                uint32_t id = ((sequence + rollover[currentChannel] + 43 - offset[currentChannel]) / 43 * 14) + mcuNumber / 14;
+ 
+                 if (id >= SEG_CNT)
+                     return;
+@@ -100,10 +111,43 @@ namespace meteor
+                 uint32_t firstSeg_l;
+                 uint32_t lastSeg_l;
+ 
++                uint32_t shift = 0; // segments to skip so this channel lines up with the others
++
+                 if (first == -1 || last == -1 || offsett == -1)
+                 {
+-                    firstSeg_l = firstSeg[channel];
+-                    lastSeg_l = lastSeg[channel];
++                    // The channel with the lowest offset is the first one
++                    // after the loop wraps. Unless that is the first channel
++                    // sent, it and the channels after it (the loop goes up
++                    // in APID order) are one line ahead of the ones before.
++                    int first_sent = -1, lowest = -1;
++                    for (int i = 0; i < 6; i++)
++                    {
++                        if (offset[i] == NO_OFFSET)
++                            continue;
++                        if (first_sent == -1)
++                            first_sent = i;
++                        if (lowest == -1 || offset[i] < offset[lowest])
++                            lowest = i;
++                    }
++                    auto line_shift = [&](int c)
++                    { return (lowest != first_sent && c >= lowest) ? 14u : 0u; };
++
++                    // All channels are cut to the same lines, the first and
++                    // last any of them has, so composites line up row for row.
++                    firstSeg_l = 4294967295;
++                    lastSeg_l = 0;
++                    for (int i = 0; i < 6; i++)
++                    {
++                        if (offset[i] == NO_OFFSET)
++                            continue;
++                        firstSeg_l = std::min<uint32_t>(firstSeg_l, firstSeg[i] - line_shift(i));
++                        lastSeg_l = std::max<uint32_t>(lastSeg_l, lastSeg[i] - line_shift(i));
++                    }
++
++                    if (offset[channel] == NO_OFFSET)
++                        firstSeg_l = lastSeg_l = 0; // nothing of this channel: no image
++                    else
++                        shift = line_shift(channel);
+                 }
+                 else
+                 {
+@@ -128,19 +172,21 @@ namespace meteor
+                     {
+                         for (uint32_t j = 0; j < 14; j++)
+                         {
+-                            if (segments[channel][x + j].isValid())
++                            uint32_t seg_id = x + shift + j;
++                            if (seg_id < SEG_CNT && segments[channel][seg_id].isValid())
+                             {
++                                Segment &seg = segments[channel][seg_id];
+                                 for (int f = 0; f < 14 * 8; f++)
+-                                    ret.set(index + f, segments[channel][x + j].lines[i][f]);
++                                    ret.set(index + f, seg.lines[i][f]);
+ 
+-                                if (segments[channel][x + j].partial)
++                                if (seg.partial)
+                                     for (uint32_t f = 0; f < 14 * 8; f++)
+                                         bad_px.insert(index + f);
+ 
+                                 if (meteorm2x_mode)
+-                                    line_timestamps.push_back(segments[channel][x + j].timestamp);
++                                    line_timestamps.push_back(seg.timestamp);
+                                 else
+-                                    line_timestamps.push_back(dayValue + segments[channel][x + j].timestamp - 3 * 3600);
++                                    line_timestamps.push_back(dayValue + seg.timestamp - 3 * 3600);
+                             }
+                             else
+                             {

@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: OpenHamShack Radio <https://openhamshack.com/source/>
+Date: Fri, 30 Oct 2026 21:01:33 +0000
+Subject: [PATCH 2/2] LRPT: take the median timestamp over lines that have one
+
+OpenHamShack patch on SatDump 1.2.2 (tag 1.2.2, 7aef0fe8441b). A line
+with no segments has the timestamp -1. The projection's timestamp filter
+(filter_timestamps_simple) and the MSU-MR product and dataset time took
+the median over every line, so a pass with more lines lost than received
+- the 30/10/2026 N2-3 recording lost signal for about 70 of its 139 lines
+- got a median of -1: dataset.json said "timestamp": -1, the filter then
+threw away every real timestamp as too far from it, and each projection
+logged "Solving TPS equations for 0 GCPs... Failure solving!", leaving
+MCIR black. Both now take the median of the lines that have a timestamp;
+with none at all they behave as before.
+
+Not fixed upstream: master's timestamp_filtering.cpp (9fee0793c7d4,
+22/10/2026) still takes the median over every line. Drop when it does.
+---
+ .../msumr/module_meteor_msumr_lrpt.cpp        | 19 ++++++++++++++++---
+ .../common/projection/timestamp_filtering.cpp | 12 +++++++++++-
+ 2 files changed, 27 insertions(+), 4 deletions(-)
+
+diff --git a/plugins/meteor_support/meteor/instruments/msumr/module_meteor_msumr_lrpt.cpp b/plugins/meteor_support/meteor/instruments/msumr/module_meteor_msumr_lrpt.cpp
+index 2831fc613..73602a3f9 100644
+--- a/plugins/meteor_support/meteor/instruments/msumr/module_meteor_msumr_lrpt.cpp
++++ b/plugins/meteor_support/meteor/instruments/msumr/module_meteor_msumr_lrpt.cpp
+@@ -23,6 +23,19 @@ namespace meteor
+ {
+     namespace msumr
+     {
++        // The product's and dataset's time: the median line timestamp,
++        // leaving out lines with none (-1). Over every line, a pass with
++        // more lines lost than received got -1, and with it no projection
++        // (OpenHamShack patch).
++        static double median_valid_timestamp(const std::vector<double> &timestamps)
++        {
++            std::vector<double> valid;
++            for (double v : timestamps)
++                if (v != -1)
++                    valid.push_back(v);
++            return get_median(valid.empty() ? timestamps : valid); // none at all: as before
++        }
++
+         void createMSUMRProduct(satdump::ImageProducts &product, double timestamp, int norad, int msumr_serial_number,
+             nlohmann::json &calib_cfg, uint8_t lrpt_channels)
+         {
+@@ -296,7 +309,7 @@ namespace meteor
+                     calib_cfg["vars"]["temps"].push_back(msu_mr_telemetry_calib[telemetry_timestamps[this_timestamp]]);
+             }
+ 
+-            createMSUMRProduct(msumr_products, get_median(msureader.timestamps), norad, msumr_serial_number, calib_cfg, lrpt_channels);
++            createMSUMRProduct(msumr_products, median_valid_timestamp(msureader.timestamps), norad, msumr_serial_number, calib_cfg, lrpt_channels);
+             msumr_products.images.swap(msumr_images);
+             msumr_products.save(directory);
+             msumr_products.images.clear(); // Free up memory
+@@ -304,7 +317,7 @@ namespace meteor
+             // Products dataset
+             satdump::ProductDataSet dataset;
+             dataset.satellite_name = sat_name;
+-            dataset.timestamp = get_median(msureader.timestamps);
++            dataset.timestamp = median_valid_timestamp(msureader.timestamps);
+             dataset.products_list.push_back("MSU-MR");
+ 
+             if (d_parameters.contains("fill_missing") && d_parameters["fill_missing"])
+@@ -352,7 +365,7 @@ namespace meteor
+                 }
+ 
+                 satdump::ImageProducts filled_products;
+-                createMSUMRProduct(filled_products, get_median(msureader.timestamps), norad, msumr_serial_number, calib_cfg, lrpt_channels);
++                createMSUMRProduct(filled_products, median_valid_timestamp(msureader.timestamps), norad, msumr_serial_number, calib_cfg, lrpt_channels);
+                 for (int i = 0; i < 6; i++)
+                 {
+                     image::Image img = msureader.getChannel(i, max_fill_lines);
+diff --git a/src-core/common/projection/timestamp_filtering.cpp b/src-core/common/projection/timestamp_filtering.cpp
+index 389b22e04..8ab2b62c2 100644
+--- a/src-core/common/projection/timestamp_filtering.cpp
++++ b/src-core/common/projection/timestamp_filtering.cpp
+@@ -7,7 +7,17 @@ namespace timestamp_filtering
+     std::vector<double> filter_timestamps_simple(std::vector<double> timestamps, double max_tolerate, double max_diff)
+     {
+         std::vector<double> filter_timestamps = timestamps;
+-        double avg = get_median(filter_timestamps);
++
++        // The reference is the median of the lines that HAVE a timestamp
++        // (-1 is "none"). Taken over every line, as it was, a pass with more
++        // lines missing than received has a median of -1, every real
++        // timestamp is then "too far" from it and is dropped, and the
++        // projection has 0 GCPs (OpenHamShack patch).
++        std::vector<double> valid;
++        for (double v : timestamps)
++            if (v != -1)
++                valid.push_back(v);
++        double avg = get_median(valid);
+         double last = -1;
+         for (double &v : filter_timestamps)
+         {
