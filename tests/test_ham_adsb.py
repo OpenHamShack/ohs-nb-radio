@@ -598,6 +598,23 @@ class MoreAboutEachFlight(unittest.TestCase):
             s, e = self.req("GET", path, level="view")
             self.assertEqual((s, e["code"]), (404, "not_found"), path)
 
+    def test_the_socket_items_carry_the_lookups_too(self):
+        got = []
+        frame = {"t": 1000.0, "fields": {"icao": "4CA264", "callsign": "RYR1AB", "lat": 55.5, "lon": -4.9,
+                                         "posT": 1000.0}}
+        with mock.patch.object(self.radio, "_publish", lambda ch, it: got.append(it)):
+            self.radio.adsb._frame(frame)
+            self.assertEqual({k: got[-1]["aircraft"][k] for k in ("info", "photo")}, {"info": None, "photo": None})
+            end = time.monotonic() + 15
+            while time.monotonic() < end and not (got[-1]["aircraft"]["info"] and got[-1]["aircraft"]["photo"]):
+                time.sleep(0.1)
+                frame = dict(frame, t=frame["t"] + 1)
+                self.radio.adsb._frame(frame)
+        item = got[-1]
+        self.assertEqual((item["type"], item["aircraft"]["info"]["registration"]), ("aircraft", "EI-DHH"))
+        self.assertEqual(item["aircraft"]["photo"]["link"], PHOTO["photos"][0]["link"])
+        self.assertIn("route", item["aircraft"])
+
     def test_the_settings_off_hide_both(self):
         self.radio.st["adsbAircraftLookup"] = False
         self.radio.st["adsbPhotoLookup"] = False

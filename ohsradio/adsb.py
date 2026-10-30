@@ -556,6 +556,12 @@ class AdsbService:
             return
         if new:
             self.counts["aircraftSeen"] += 1
+        # The extras too, as GET api/adsb/aircraft gives them: a lookup
+        # lands between frames without moving the aircraft's rev, so a
+        # client following the socket alone only learns of it here, on the
+        # aircraft's next frame (the Tablet session, 30/10: 39 items bare).
+        # Cache reads only (_more), never a request in this thread.
+        self.table._more(v)
         self.radio._publish("adsb", {"type": "aircraft", "rev": v["rev"], "aircraft": v})
 
     # -- views ---------------------------------------------------------------

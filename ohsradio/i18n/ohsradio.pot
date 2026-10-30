@@ -405,7 +405,7 @@ msgstr ""
 msgid "Line obstacle"
 msgstr ""
 
-#: ohsradio/adsb.py:578
+#: ohsradio/adsb.py:584
 msgid "Listening to ADS-B on 1090 MHz"
 msgstr ""
 
@@ -527,7 +527,7 @@ msgstr ""
 msgid "Not recorded: Radio was not running, or was too busy, at the time"
 msgstr ""
 
-#: ohsradio/adsb.py:582
+#: ohsradio/adsb.py:588
 #: ohsradio/ais.py:642
 #: ohsradio/aprs.py:651
 #: ohsradio/sonde.py:1135
@@ -837,7 +837,7 @@ msgstr ""
 msgid "Stop"
 msgstr ""
 
-#: ohsradio/adsb.py:580
+#: ohsradio/adsb.py:586
 #: ohsradio/ais.py:640
 #: ohsradio/aprs.py:649
 #: ohsradio/sonde.py:1133
@@ -848,7 +848,7 @@ msgstr ""
 msgid "Stopped: nobody had the APRS map open"
 msgstr ""
 
-#: ohsradio/adsb.py:579
+#: ohsradio/adsb.py:585
 msgid "Stopped: nobody had the aircraft map open"
 msgstr ""
 
@@ -860,7 +860,7 @@ msgstr ""
 msgid "Stopped: nobody had the ship map open"
 msgstr ""
 
-#: ohsradio/adsb.py:581
+#: ohsradio/adsb.py:587
 #: ohsradio/ais.py:641
 #: ohsradio/aprs.py:650
 #: ohsradio/sonde.py:1134
@@ -872,7 +872,7 @@ msgstr ""
 msgid "Stopped: the radio was wanted ({why})"
 msgstr ""
 
-#: ohsradio/adsb.py:582
+#: ohsradio/adsb.py:588
 #: ohsradio/ais.py:642
 #: ohsradio/aprs.py:651
 #: ohsradio/sonde.py:1135
