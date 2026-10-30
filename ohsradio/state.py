@@ -332,6 +332,24 @@ with REG.after("dmrIdLookup"):
             "the callsign, \"OpenHamShack-Radio\" and its version. Without internet, or for a callsign adsbdb "
             "does not know, the aircraft shows no route.")
 
+# --- aircraft details and photos (ohsradio/aircraftinfo.py) ------------------------
+# On by default, like the other online extras. Two settings because the
+# two reach different places: the details only Radio fetches; a photo's
+# picture the screen showing it fetches from Planespotters itself, which
+# their terms require (aircraftinfo.py).
+with REG.after("adsbRouteLookup"):
+    _k("adsbAircraftLookup", "bool", True, "setting",
+       help="Show each aircraft's registration, type and owner on the ADS-B map. Radio asks adsbdb.com, a free "
+            "public lookup, about each new aircraft it hears, once, in the background, and keeps the answer on "
+            "this computer for a month. What goes out: one web request per new aircraft (at most one a second), "
+            "saying only its Mode S address, \"OpenHamShack-Radio\" and its version. Without internet the "
+            "aircraft shows only what it sends.")
+    _k("adsbPhotoLookup", "bool", True, "setting",
+       help="Show a photo of each aircraft from Planespotters.net, with its photographer's credit. Radio asks "
+            "Planespotters which photo to show, saying only the aircraft's Mode S address and "
+            "\"OpenHamShack-Radio\" with its version and web address; the screen then loads the photo from "
+            "Planespotters itself, as their terms require, so that screen needs the internet too.")
+
 # --- radiosondes and SondeHub (ohsradio/sonde.py, sondehub.py) ---------------------
 # Both on by default, like the other online extras above (Brian: offline,
 # nothing changes). The upload is what radiosonde_auto_rx does by default

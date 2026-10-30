@@ -2412,7 +2412,14 @@ invented appears.
                "firstHeard": "2026-10-28T09:20:35Z", "messages": 37, "rssiDb": -35.8,
                "rev": 410,
                "route": {"from": "GLA", "to": "LGW", "fromName": "Glasgow", "toName": "London Gatwick",
-                         "fromIcao": "EGPF", "toIcao": "EGKK", "source": "adsbdb"}}]}
+                         "fromIcao": "EGPF", "toIcao": "EGKK", "source": "adsbdb"},
+               "info": {"registration": "G-EUPT", "typeCode": "A319", "type": "A319 131",
+                        "manufacturer": "Airbus", "owner": "British Airways", "country": "United Kingdom",
+                        "airline": {"name": "British Airways", "icao": "BAW", "iata": "BA"},
+                        "source": "adsbdb"},
+               "photo": {"src": "https://t.plnspttrs.net/.../..._280.jpg", "width": 416, "height": 280,
+                         "credit": "© A Photographer",
+                         "link": "https://www.planespotters.net/photo/...?utm_source=api"}}]}
 ```
 
 - One entry per ICAO address (six hex digits; a `~` first for an
@@ -2453,6 +2460,49 @@ invented appears.
   every aircraft's `route` is `null`, as before this feature. What goes
   out: one GET per new callsign, saying only the callsign and
   "OpenHamShack-Radio" with its version.
+- **Aircraft details** (30/10/2026). `info`: `{"registration", "typeCode"
+  (ICAO type designator), "type", "manufacturer", "owner" (registered
+  owner), "country" (of registration), "airline": {"name", "icao", "iata"}
+  | null, "source": "adsbdb"}`, any field `null` when adsbdb has none.
+  `info` is `null` until the aircraft has been looked up (or while the
+  lookup fails, or with the setting off), and `{}` when adsbdb does not
+  know the aircraft - so a client can tell "not yet" from "nothing
+  known". An airframe adsbdb does not know whose callsign names an
+  airline gives `{"airline": {...}, "source": "adsbdb"}`. The airline
+  comes from the callsign's route answer above (`null` for a GA
+  registration or a military callsign) and so follows `adsbRouteLookup`.
+  Code `ohsradio/aircraftinfo.py`, hooked in through
+  `AircraftTable.info_lookup`. Radio asks adsbdb's `GET
+  /v0/aircraft/<hex>` once per address, in the background at most once a
+  second, and keeps a hit 30 days and a miss a day (a failure, retried
+  after 10 minutes; after any failure the next request of any address
+  waits 30 s, doubling to 30 minutes while they go on). Not for an
+  anonymous `~` address. Setting `adsbAircraftLookup` (`api/set`,
+  Settings › ADS-B; default `true`): off, nothing is asked and `info` is
+  `null`. What goes out: the address and "OpenHamShack-Radio" with its
+  version.
+- **Photos** (30/10/2026). `photo`: `{"src", "width", "height",
+  "credit", "link"}` or `null` (none, not yet asked, or the setting off),
+  from Planespotters.net's photo API (`GET
+  /pub/photos/hex/<hex>`, its `thumbnail_large`, about 420x280).
+  **Radio never fetches, keeps or serves the picture**: Planespotters'
+  terms (planespotters.net/photo/api, read 30/10/2026) let a backend pass
+  the API's answer to its own app only if the image is fetched straight
+  from their `src` by the device that shows it, never stored, proxied or
+  passed on, and its JSON kept 24 hours at most. So **the client loads
+  `src` itself, unchanged** (a screen with no route out shows no photo),
+  and must show `credit` next to it and give the viewer an obvious way
+  to open `link`, unchanged: on a browser or touch screen, a link on the
+  picture; on a TV, an NFC tag or a QR code of `link` (their terms: the
+  URL as text is not enough). There is no `api/adsb/aircraft/{icao}/photo`
+  - it answers 404 like any Radio without one. Radio keeps Planespotters'
+  answer (not the picture) 24 hours, hit or miss, and drops it from disk
+  after; the same rate, backoff and code as the details. Setting
+  `adsbPhotoLookup` (default `true`): off, nothing is asked and `photo` is
+  `null`. What goes out: the address and "OpenHamShack-Radio/<version>
+  (+https://openhamshack.com/)" - their terms require a contact address
+  in a non-browser client's User-Agent, so it is the project's, never the
+  operator's.
 
 **Keeping up** exactly as AIS: `GET api/adsb/aircraft?since=<rev>` answers
 what changed after it (`aircraft`) and what was dropped (`removed`, ICAO
@@ -2470,6 +2520,22 @@ default set) sends:
 10 s have passed, the last 240. `404 unknown_aircraft` when it is not in
 the table; `400 bad_params` for something that is not an address.
 
+`GET api/adsb/aircraft/{icao}/trail` (view, 30/10/2026): its path for a
+flight-progress view, longer and sparser than `track`:
+
+```json
+{"icao": "4CA264", "points": [[1793342300.1, 55.61, -4.75, 5200], ...]}
+```
+
+Each point `[ts (Unix seconds, when the position was heard), lat, lon,
+altFt]`, oldest first: one every 12 s, or sooner on a turn (the ground
+track 5° or more from the last point's, no closer than 2 s), the last
+500 (over an hour and a half of straight flight); `altFt` barometric, or
+GNSS height when no barometric altitude has been heard, else `null`. Kept
+while the aircraft is in the table and dropped with it; `{"points": []}`
+before its first position. `404 unknown_aircraft`, `400 bad_params` as
+above; a Radio without it answers `404 not_found`.
+
 **The map** is the same `api/map/*` as the ships' (below): draw aircraft
 over it by `lat`/`lon`, rotated by `track`.
 
@@ -2483,7 +2549,10 @@ shack_sdr's transmitter, earned by the decoder like any aircraft. Open
 the map with the radio on the simulator and they appear within seconds.
 
 **Not done:** MLAT, ACARS and VDL2; Comm-B contents (an aircraft's
-selected altitude, heading and so on, in DF20/21).
+selected altitude, heading and so on, in DF20/21: Mode S EHS, BDS 4,0,
+5,0 and 6,0). shack_sdr's decoder checks DF20/21's parity and keeps
+their altitude and squawk but drops the 56-bit MB field, so `ehs` needs
+decoder work in ohs-libs first; until then there is no `ehs` field.
 
 ## APRS (Radio)
 

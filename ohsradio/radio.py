@@ -321,6 +321,17 @@ class Radio(Engine):
         self.adsb.table.route_lookup = self.flightroutes.lookup
         if self.persist:
             self.flightroutes.start()
+        # Each aircraft's details and photo (aircraftinfo.py), by ICAO
+        # address, on the same terms; the airline comes from the callsign's
+        # route answer above, at no request of its own.
+        from .aircraftinfo import AircraftInfo
+        self.aircraftinfo = AircraftInfo(Path(self.data_dir) / "aircraftinfo",
+                                         lambda: bool(self.st.get("adsbAircraftLookup", True)),
+                                         lambda: bool(self.st.get("adsbPhotoLookup", True)))
+        self.adsb.table.info_lookup = lambda icao, cs: self.aircraftinfo.info(icao, self.flightroutes.airline(cs))
+        self.adsb.table.photo_lookup = self.aircraftinfo.photo
+        if self.persist:
+            self.aircraftinfo.start()
         # APRS stations on 144.800 MHz (aprs.py), receive only, likewise
         # while a client has the station map open; the table keeps a day.
         from .aprs import AprsService

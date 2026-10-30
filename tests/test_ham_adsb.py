@@ -22,6 +22,10 @@ own Mode S transmitter keys, end to end:
   both notches out whatever their settings.
 - **The table:** merging, the track, expiry after adsbKeepMinutes, `since`.
 - **Over the API:** api/adsb/session, api/adsb/aircraft[/{icao}].
+- **More about each flight** (30/10/2026): the trail (a point every 12 s
+  or on a turn, at most 500, gone with the aircraft), and `info` and
+  `photo` from fake adsbdb and Planespotters over the API, with
+  api/adsb/aircraft/{icao}/trail and the photo path's 404.
 """
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import http.client
@@ -50,6 +54,7 @@ from ohsradio.radio import Radio
 from listen_helpers import ListeningSim, make_listener
 from test_server import SECRET
 from test_ham_flightroutes import FakeAdsbdb, ROUTE
+from test_ham_aircraftinfo import FakeSources, PHOTO
 
 HOME = 145_500_000.0
 
@@ -465,6 +470,145 @@ class TheTable(unittest.TestCase):
         self.assertIsNone(t.aircraft("F00202"))
 
 
+class TheTrail(unittest.TestCase):
+    """Needs no decoder: frames go straight into the table."""
+
+    def heard(self, t, posT, **over):
+        f = {"icao": "4CA264", "callsign": "RYR1AB", "lat": 55.5, "lon": -4.9, "posT": posT, "altBaro": 5200,
+             "track": 90.0}
+        f.update(over)
+        return self.table.heard(f, t)
+
+    def setUp(self):
+        self.table = adsbmod.AircraftTable()
+
+    def test_a_point_every_12_s_or_on_a_turn(self):
+        for i in range(31):                                  # a frame a second, straight on
+            self.heard(1000.0 + i, 1000.0 + i, lon=-4.9 + i * 0.002)
+        pts = self.table.trail("4CA264")["points"]
+        self.assertEqual([p[0] for p in pts], [1000.0, 1012.0, 1024.0])
+        self.assertEqual(pts[0], [1000.0, 55.5, -4.9, 5200])
+        # A turn: 3 degrees a second. A point once it has turned 5 degrees,
+        # but never closer than 2 s, however sharp.
+        self.heard(1031.0, 1031.0, track=93.0)
+        self.heard(1032.0, 1032.0, track=96.0)
+        self.heard(1033.0, 1033.0, track=99.0)
+        self.heard(1033.5, 1033.5, track=140.0)
+        self.assertEqual([p[0] for p in self.table.trail("4CA264")["points"]][3:], [1032.0])
+        # Across north is a small turn, not 358 degrees.
+        self.heard(1040.0, 1040.0, track=359.0)
+        self.heard(1042.0, 1042.0, track=1.0)
+        self.assertEqual(self.table.trail("4CA264")["points"][-1][0], 1040.0)
+        # Altitude from GNSS height when no barometric one has been heard.
+        self.heard(1060.0, 1060.0, icao="F00303", altBaro=None, altGeo=1200)
+        self.assertEqual(self.table.trail("F00303")["points"][0][3], 1200)
+
+    def test_at_most_500_and_gone_with_the_aircraft(self):
+        for i in range(adsbmod.TRAIL_POINTS + 20):
+            self.heard(1000.0 + i * 12, 1000.0 + i * 12)
+        pts = self.table.trail("4CA264")["points"]
+        self.assertEqual(len(pts), adsbmod.TRAIL_POINTS)
+        self.assertEqual(pts[0][0], 1000.0 + 20 * 12)
+        self.assertIsNone(self.table.trail("ABCDEF"))
+        self.table.expire(1e9, 300.0)
+        self.assertIsNone(self.table.trail("4CA264"))
+        self.assertEqual(self.table.trails, {})
+
+    def test_an_aircraft_with_no_position_yet_has_an_empty_trail(self):
+        self.table.heard({"icao": "4CA264", "callsign": "RYR1AB"}, 1000.0)
+        self.assertEqual(self.table.trail("4CA264"), {"icao": "4CA264", "points": []})
+
+
+class MoreAboutEachFlight(unittest.TestCase):
+    """info, photo and the trail over the API, on a radio whose table is
+    fed directly (no decoder needed), against fake adsbdb and Planespotters
+    (test_ham_aircraftinfo.py)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cfg = {"device": "sim", "audioBackend": "null", "simRealtime": False, "simSeed": 7, "simHourUtc": 12.0,
+               "simSignals": False, "callsign": "GM4BRI", "licenceClass": "full", "vfo": HOME, "mode": "fm",
+               "locator": "IO75RL", "sampleRate": 2_400_000}
+        self.audio = StreamAudio(realtime=False)
+        self.radio = Radio(cfg, persist=False, data_dir=tmp.name, audio=self.audio)
+        self.src = FakeSources()
+        self.addCleanup(self.src.close)
+        self.adsbdb = FakeAdsbdb()
+        self.adsbdb.routes = {"RYR1AB": json.loads(json.dumps(ROUTE))}
+        self.adsbdb.routes["RYR1AB"]["response"]["flightroute"]["airline"] = {"name": "Ryanair", "icao": "RYR",
+                                                                             "iata": "FR"}
+        self.addCleanup(self.adsbdb.close)
+        # persist=False starts no fetchers of its own: these point them at
+        # the fakes and start them.
+        self.radio.flightroutes.base_url = self.adsbdb.base_url()
+        ai = self.radio.aircraftinfo
+        ai.adsbdb_url = ai.planespotters_url = self.src.base_url()
+        self.radio.flightroutes.start()
+        ai.start()
+        self.addCleanup(self.radio.flightroutes.stop)
+        self.addCleanup(ai.stop)
+        self.srv = Server(self.radio, ham_server.info("9.9.9"), self.audio, secret=SECRET)
+        httpd = self.srv.serve("127.0.0.1", 0)
+        self.port = httpd.server_address[1]
+        self.addCleanup(self.srv.shutdown)
+
+    req = None   # set below, from OverTheApi
+
+    def test_info_photo_and_trail(self):
+        t = self.radio.adsb.table
+        for i in range(3):
+            t.heard({"icao": "4CA264", "callsign": "RYR1AB", "lat": 55.5, "lon": -4.9 + i * 0.03,
+                     "posT": 1000.0 + i * 12, "altBaro": 5200 + i * 100, "track": 90.0}, 1000.0 + i * 12)
+        t.heard({"icao": "ABC123", "callsign": "G-ABCD", "lat": 55.4, "lon": -4.6, "posT": 1000.0}, 1000.0)
+        s, a = self.req("GET", "/api/adsb/aircraft", level="view")
+        first = {v["icao"]: v for v in a["aircraft"]}
+        self.assertEqual((first["4CA264"]["info"], first["4CA264"]["photo"]), (None, None))   # not yet asked
+        end = time.monotonic() + 15
+        while time.monotonic() < end:
+            s, a = self.req("GET", "/api/adsb/aircraft", level="view")
+            by = {v["icao"]: v for v in a["aircraft"]}
+            if by["4CA264"]["info"] and by["4CA264"]["info"].get("airline") and by["4CA264"]["photo"] \
+                    and by["ABC123"]["info"] is not None:
+                break
+            time.sleep(0.1)
+        ryr = by["4CA264"]
+        self.assertEqual(ryr["info"], {"registration": "EI-DHH", "typeCode": "B738", "type": "737NG 8AS/W",
+                                       "manufacturer": "Boeing", "owner": "Ryanair", "country": "Ireland",
+                                       "airline": {"name": "Ryanair", "icao": "RYR", "iata": "FR"},
+                                       "source": "adsbdb"})
+        self.assertEqual(ryr["photo"]["link"], PHOTO["photos"][0]["link"])
+        self.assertEqual(ryr["photo"]["credit"], "© Björn Huke")
+        # Not known to adsbdb, no airline (a registration as callsign), no photo.
+        self.assertEqual((by["ABC123"]["info"], by["ABC123"]["photo"]), ({}, None))
+        s, v = self.req("GET", "/api/adsb/aircraft/4ca264", level="view")
+        self.assertEqual((s, v["info"]["registration"], v["photo"]["src"]),
+                         (200, "EI-DHH", PHOTO["photos"][0]["thumbnail_large"]["src"]))
+        s, tr = self.req("GET", "/api/adsb/aircraft/4ca264/trail", level="view")
+        self.assertEqual((s, tr), (200, {"icao": "4CA264", "points": [[1000.0, 55.5, -4.9, 5200],
+                                                                      [1012.0, 55.5, -4.87, 5300],
+                                                                      [1024.0, 55.5, -4.84, 5400]]}))
+        s, e = self.req("GET", "/api/adsb/aircraft/DEF456/trail", level="view")
+        self.assertEqual((s, e["code"]), (404, "unknown_aircraft"))
+        s, e = self.req("GET", "/api/adsb/aircraft/plane/trail", level="view")
+        self.assertEqual((s, e["code"]), (400, "bad_params"))
+        # No photo proxy: Planespotters' terms (aircraftinfo.py). The path
+        # answers 404 as on a Radio that never had one.
+        for path in ("/api/adsb/aircraft/4CA264/photo", "/api/adsb/aircraft/4CA264/trail/x"):
+            s, e = self.req("GET", path, level="view")
+            self.assertEqual((s, e["code"]), (404, "not_found"), path)
+
+    def test_the_settings_off_hide_both(self):
+        self.radio.st["adsbAircraftLookup"] = False
+        self.radio.st["adsbPhotoLookup"] = False
+        self.radio.adsb.table.heard({"icao": "4CA264", "lat": 55.5, "lon": -4.9, "posT": 1000.0}, 1000.0)
+        s, a = self.req("GET", "/api/adsb/aircraft", level="view")
+        time.sleep(0.3)
+        s, a = self.req("GET", "/api/adsb/aircraft", level="view")
+        self.assertEqual((a["aircraft"][0]["info"], a["aircraft"][0]["photo"]), (None, None))
+        self.assertEqual(self.src.requests, [])
+
+
 @unittest.skipUnless(has_adsb(), "no shack_sdr with ADS-B for this machine")
 class OverTheApi(unittest.TestCase):
     def setUp(self):
@@ -574,6 +718,9 @@ class OverTheApi(unittest.TestCase):
         self.assertEqual((s, a["code"]), (409, "span_pinned"))
         s, a = self.req("POST", "/api/adsb/session", {"client": "tv-1", "dropSessions": True})
         self.assertEqual(s, 200, a)
+
+
+MoreAboutEachFlight.req = OverTheApi.req
 
 
 if __name__ == "__main__":

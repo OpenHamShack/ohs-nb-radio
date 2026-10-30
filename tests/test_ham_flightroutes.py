@@ -12,6 +12,8 @@ and test_ham_radiodns.py do for their sources).
   file without asking the network again.
 - **The rate limit:** several callsigns queued at once are never asked
   faster than one a second.
+- **The airline** from the same answer: kept beside the route, survives a
+  restart, hidden with the setting off.
 - **Over the API:** the route appears in api/adsb/aircraft and
   api/adsb/aircraft/{icao} on the simulator (test_ham_adsb.py's
   OverTheApi, extended there rather than duplicated here).
@@ -235,6 +237,52 @@ class TheFakeServer(Base):
         ent = self.wait_cached(r, "BAW90")
         self.assertEqual((ent["status"], ent["route"]), ("error", None))
         self.assertIsNone(r.lookup("BAW90"))
+
+
+class TheAirline(Base):
+    """The airline comes in the route's own answer (aircraftinfo.py puts
+    it in an aircraft's `info`): no request of its own."""
+
+    def test_kept_beside_the_route_and_over_a_restart(self):
+        f = self.fake()
+        r = self.routes(f.base_url())
+        self.assertIsNone(r.airline("BAW90"))           # never asked: airline() queues nothing itself
+        time.sleep(0.05)
+        self.assertEqual(f.requests, [])
+        r.start()
+        r.lookup("BAW90")
+        self.wait_cached(r, "BAW90")
+        self.assertEqual(r.airline("baw90"), {"name": "British Airways", "icao": "BAW", "iata": "BA"})
+        self.assertEqual(len(f.requests), 1)
+        r.stop()
+        again = self.routes(f.base_url())
+        self.assertEqual(again.airline("BAW90")["icao"], "BAW")
+        self.on[0] = False
+        self.assertIsNone(again.airline("BAW90"))
+        self.on[0] = True
+        self.clock.t += flightroutes.POSITIVE_TTL_S + 1
+        self.assertIsNone(again.airline("BAW90"))        # stale with its route
+
+    def test_none_for_an_unknown_callsign_or_a_registration(self):
+        f = self.fake()
+        r = self.routes(f.base_url())
+        r.start()
+        r.lookup("RYR999")
+        self.wait_cached(r, "RYR999")
+        self.assertIsNone(r.airline("RYR999"))
+        self.assertIsNone(r.airline("G-ABCD"))
+
+    def test_a_half_filled_route_still_names_its_airline(self):
+        f = self.fake()
+        half = json.loads(json.dumps(ROUTE))
+        half["response"]["flightroute"]["destination"] = {}
+        f.routes["BAW91"] = half
+        r = self.routes(f.base_url())
+        r.start()
+        r.lookup("BAW91")
+        self.assertEqual(self.wait_cached(r, "BAW91")["status"], "unknown")
+        self.assertIsNone(r.lookup("BAW91"))
+        self.assertEqual(r.airline("BAW91")["name"], "British Airways")
 
 
 class TheSettingOff(Base):

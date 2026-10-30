@@ -6,6 +6,7 @@
     radio.adsb.view()                # the session (also `adsb` in the state)
     radio.adsb.table.view(since)     # GET api/adsb/aircraft[?since=rev]
     radio.adsb.table.aircraft(icao)  # GET api/adsb/aircraft/{icao}, with its track
+    radio.adsb.table.trail(icao)     # GET api/adsb/aircraft/{icao}/trail
     radio.adsb.tick(now)             # the supervisor, ten times a second
 
 Shaped exactly like AIS (ais.py): decoding only while a client has the map
@@ -52,6 +53,14 @@ state, its distance and bearing from the station, when it was first and
 last heard, and a track. An aircraft not heard for `adsbKeepMinutes`
 (default 5) is dropped. Unlike the vessel table it is not kept over a
 restart: aircraft move on in minutes, and a five-minute-old map is no map.
+
+**The trail** (30/10/2026, for the TV's flight progress) is a second,
+longer and sparser record than the track: `[ts, lat, lon, altFt]` every
+TRAIL_EVERY_S, or sooner when the aircraft turns (its ground track moves
+TRAIL_TURN_DEG from the last point's, no sooner than TRAIL_TURN_MIN_S), the
+last TRAIL_POINTS - over an hour and a half of straight flight, where the
+track's 240 points every 500 m are eight minutes of an airliner. The track
+stays as it was, for the clients already drawing it.
 """
 from __future__ import annotations
 
@@ -85,6 +94,10 @@ MAX_CLIENTS = 32
 TRACK_POINTS = 240
 TRACK_MIN_M = 500.0
 TRACK_MIN_S = 10.0
+TRAIL_POINTS = 500
+TRAIL_EVERY_S = 12.0
+TRAIL_TURN_DEG = 5.0
+TRAIL_TURN_MIN_S = 2.0      # a turn's points no closer than this: a jittery track is not a turn
 EXPIRE_EVERY_S = 5.0
 REMOVED_KEPT = 2000
 
@@ -126,6 +139,8 @@ class AircraftTable:
         self.lock = threading.Lock()
         self.a: dict[str, dict] = {}
         self.tracks: dict[str, deque] = {}
+        self.trails: dict[str, deque] = {}
+        self.trail_track: dict[str, float | None] = {}   # the ground track at each trail's last point
         self.rev = 0
         self.removed: deque = deque(maxlen=REMOVED_KEPT)    # (rev, icao)
         self.station: tuple[float, float] | None = None
@@ -133,6 +148,11 @@ class AircraftTable:
         # given a callsign, the route it flies, or None - never a fetch on
         # this thread. None here (a test's bare table) means no routes shown.
         self.route_lookup = None
+        # Set by Radio likewise (aircraftinfo.py): (icao, callsign) -> the
+        # aircraft's details, and icao -> its photo, both from a cache
+        # only. None (a bare table) means `info` and `photo` are null.
+        self.info_lookup = None
+        self.photo_lookup = None
 
     def set_station(self, locator: str) -> None:
         pos = locator_position(locator or "")
@@ -171,6 +191,7 @@ class AircraftTable:
             self._range(v)
             if v.get("lat") is not None and f.get("posT") is not None:
                 self._track(v, float(f["posT"]))
+                self._trail(v, float(f["posT"]))
             self.rev += 1
             v["rev"] = self.rev
             return dict(v)
@@ -187,12 +208,50 @@ class AircraftTable:
                 return
         tr.append(point)
 
+    def _trail(self, v: dict, t: float) -> None:
+        icao = v["icao"]
+        tr = self.trails.setdefault(icao, deque(maxlen=TRAIL_POINTS))
+        trk = v.get("track")
+        if tr:
+            dt = t - tr[-1][0]
+            if dt <= 0:
+                return
+            last = self.trail_track.get(icao)
+            turned = (trk is not None and last is not None
+                      and abs((float(trk) - last + 180.0) % 360.0 - 180.0) >= TRAIL_TURN_DEG)
+            if dt < TRAIL_EVERY_S and not (turned and dt >= TRAIL_TURN_MIN_S):
+                return
+        alt = v.get("altBaro") if v.get("altBaro") is not None else v.get("altGeo")
+        # Five places is a metre: plenty for a line on a map, and 500
+        # points of it stay small enough for a TV to ask for often.
+        tr.append([round(t, 1), round(float(v["lat"]), 5), round(float(v["lon"]), 5), alt])
+        self.trail_track[icao] = float(trk) if trk is not None else None
+
+    def trail(self, icao: str) -> dict | None:
+        """GET api/adsb/aircraft/{icao}/trail: None for an aircraft not in
+        the table."""
+        with self.lock:
+            if icao not in self.a:
+                return None
+            return {"icao": icao, "points": [list(p) for p in self.trails.get(icao, ())]}
+
+    def _more(self, v: dict) -> None:
+        """The looked-up extras of a copy of an entry, outside the table's
+        lock: each lookup takes its own and never blocks (flightroutes.py,
+        aircraftinfo.py)."""
+        cs = v.get("callsign")
+        v["route"] = self.route_lookup(cs) if self.route_lookup else None
+        v["info"] = self.info_lookup(v["icao"], cs) if self.info_lookup else None
+        v["photo"] = self.photo_lookup(v["icao"]) if self.photo_lookup else None
+
     def expire(self, now: float, keep_s: float) -> list[str]:
         with self.lock:
             gone = [k for k, v in self.a.items() if now - float(v.get("lastHeardTs") or 0) > keep_s]
             for k in gone:
                 self.a.pop(k, None)
                 self.tracks.pop(k, None)
+                self.trails.pop(k, None)
+                self.trail_track.pop(k, None)
                 self.rev += 1
                 self.removed.append((self.rev, k))
         return gone
@@ -208,7 +267,7 @@ class AircraftTable:
             rev = self.rev
         items.sort(key=lambda v: (v.get("distanceKm") is None, v.get("distanceKm") or 0.0, v["icao"]))
         for v in items:
-            v["route"] = self.route_lookup(v.get("callsign")) if self.route_lookup else None
+            self._more(v)
         return {"rev": rev, "full": full, "aircraft": items, "removed": removed}
 
     def aircraft(self, icao: str) -> dict | None:
@@ -219,7 +278,7 @@ class AircraftTable:
             out = dict(v)
             out["track"] = [{"t": _iso(p[0]), "lat": p[1], "lon": p[2], "altBaro": p[3], "groundSpeed": p[4],
                              "track": p[5]} for p in self.tracks.get(icao, ())]
-        out["route"] = self.route_lookup(out.get("callsign")) if self.route_lookup else None
+        self._more(out)
         return out
 
     def __len__(self) -> int:

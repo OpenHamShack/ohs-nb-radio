@@ -2197,14 +2197,24 @@ class _Handler(BaseHTTPRequestHandler):
                                      "lon": st[1] if st else None}})
 
     def get_adsb_one(self, who, q):
+        """GET api/adsb/aircraft/{icao}, and under it /trail. There is no
+        /photo: Planespotters' terms forbid serving their pictures from
+        anywhere but them, so `photo.src` is the screen's to load
+        (ohsradio/aircraftinfo.py), and the path answers 404 as on a Radio
+        that never had it - which is what a client probes for."""
         a = self._adsb()
         if a is None:
             return
-        icao = self._session_id().upper()
+        parts = urlsplit(self.path).path[len("/api/adsb/aircraft/"):].strip("/").split("/")
+        icao = parts[0].upper()
+        sub = parts[1] if len(parts) == 2 else None
+        if len(parts) > 2 or (sub is not None and sub != "trail"):
+            self._error(404, _("There is nothing at {path}").format(path=urlsplit(self.path).path), "not_found")
+            return
         if not re.match(r"^~?[0-9A-F]{6}$", icao):
             self._error(400, _("An ICAO address is six hexadecimal digits"), "bad_params")
             return
-        v = a.table.aircraft(icao)
+        v = a.table.trail(icao) if sub == "trail" else a.table.aircraft(icao)
         if v is None:
             self._error(404, _("No aircraft {icao} has been heard lately").format(icao=icao), "unknown_aircraft")
             return

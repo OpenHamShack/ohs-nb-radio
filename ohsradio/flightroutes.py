@@ -67,6 +67,14 @@ else its ICAO code (small airports often have no IATA); `fromIcao`/
 `toIcao` are always the ICAO code. A route missing either end's code
 (adsbdb occasionally has a half-filled record) counts as "no route
 known", not a wrong one: it is dropped rather than shown with a blank.
+
+**The airline** comes in the same answer (`flightroute.airline`), so it
+is kept beside the route at no extra request and handed out by
+`airline()`: `{"name": "Ryanair", "icao": "RYR", "iata": "FR"}` or
+`None` - aircraftinfo.py puts it in an aircraft's `info` (30/10/2026). It
+is kept even when the route is dropped as half-filled: the airline
+flying the callsign is still known. A cache written before the airline
+was kept has none until that entry is next asked (a week at most).
 """
 from __future__ import annotations
 
@@ -132,6 +140,18 @@ class FetchFailed(Exception):
     ERROR_RETRY_S; the cache (if any) stands."""
 
 
+def _parse_airline(data) -> dict | None:
+    """The airline flying the callsign, from the same answer as the route:
+    `{"name", "icao", "iata"}`, or None when adsbdb names none (a GA or
+    military callsign has no airline record)."""
+    resp = data.get("response") if isinstance(data, dict) else None
+    fr = resp.get("flightroute") if isinstance(resp, dict) else None
+    al = fr.get("airline") if isinstance(fr, dict) else None
+    if not isinstance(al, dict) or not al.get("name"):
+        return None
+    return {"name": str(al["name"]), "icao": al.get("icao") or None, "iata": al.get("iata") or None}
+
+
 def _parse_route(data, callsign: str) -> dict | None:
     """adsbdb's `{"response": {"flightroute": {...}}}`, or None for its
     `{"response": "unknown callsign"}` (or any shape that is not a route:
@@ -161,6 +181,7 @@ class FlightRoutes:
         routes = FlightRoutes(folder, enabled=lambda: True)
         routes.lookup("BAW90") -> {"from", "to", "fromName", "toName",
                                    "fromIcao", "toIcao", "source"} | None
+        routes.airline("BAW90") -> {"name", "icao", "iata"} | None
         routes.start() / routes.stop()
     """
 
@@ -226,6 +247,23 @@ class FlightRoutes:
         self._enqueue(cs)
         return None
 
+    def airline(self, callsign) -> dict | None:
+        """The airline flying `callsign`, from the cache only, on the same
+        terms as lookup(): None while not known, not yet asked, or the
+        setting off. Never queues a request of its own - lookup() asks for
+        the callsign whenever the aircraft is listed."""
+        if not self.enabled():
+            return None
+        cs = clean_callsign(callsign)
+        if cs is None:
+            return None
+        with self.lock:
+            ent = self.cache.get(cs)
+        if ent is None or ent["status"] == "error":
+            return None
+        ttl = POSITIVE_TTL_S if ent["status"] == "ok" else NEGATIVE_TTL_S
+        return ent.get("airline") if self.clock() - ent["at"] < ttl else None
+
     def _enqueue(self, cs: str) -> None:
         with self.lock:
             if cs in self.queued:
@@ -262,17 +300,18 @@ class FlightRoutes:
 
     def _fetch_and_store(self, cs: str) -> None:
         try:
-            route = self._fetch(cs)
+            route, airline = self._fetch(cs)
             status = "ok" if route is not None else "unknown"
         except FetchFailed as e:
-            status, route = "error", None
+            status, route, airline = "error", None, None
             log.debug("flight-route lookup failed, retrying in %ds (%s)", int(ERROR_RETRY_S), e)
         with self.lock:
-            self.cache[cs] = {"status": status, "route": route, "at": self.clock()}
+            self.cache[cs] = {"status": status, "route": route, "airline": airline, "at": self.clock()}
             self._prune()
             self._save()
 
-    def _fetch(self, cs: str) -> dict | None:
+    def _fetch(self, cs: str) -> tuple[dict | None, dict | None]:
+        """(route, airline), either None when adsbdb does not know it."""
         url = f"{self.base_url}/v0/callsign/{urllib.parse.quote(cs, safe='')}"
         req = urllib.request.Request(url, headers={"User-Agent": user_agent()})
         try:
@@ -280,7 +319,7 @@ class FlightRoutes:
                 raw = resp.read(MAX_BYTES + 1)
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                return None           # adsbdb's "unknown callsign" (29/10/2026)
+                return None, None     # adsbdb's "unknown callsign" (29/10/2026)
             raise FetchFailed(f"http {e.code}") from e
         except (urllib.error.URLError, OSError, TimeoutError) as e:
             raise FetchFailed(str(e)) from e
@@ -290,7 +329,7 @@ class FlightRoutes:
             data = json.loads(raw)
         except ValueError as e:
             raise FetchFailed(f"bad json: {e}") from e
-        return _parse_route(data, cs)
+        return _parse_route(data, cs), _parse_airline(data)
 
     # ------------------------------------------------------------ storage
     def _prune(self) -> None:
@@ -323,4 +362,6 @@ class FlightRoutes:
         for cs, ent in data.items():
             if (isinstance(ent, dict) and ent.get("status") in ("ok", "unknown", "error")
                     and isinstance(ent.get("at"), (int, float))):
-                self.cache[cs] = {"status": ent["status"], "route": ent.get("route"), "at": float(ent["at"])}
+                self.cache[cs] = {"status": ent["status"], "route": ent.get("route"),
+                                  "airline": ent.get("airline") if isinstance(ent.get("airline"), dict) else None,
+                                  "at": float(ent["at"])}

@@ -136,6 +136,10 @@ os.environ["OHS_DMRIDS_BASE"] = "http://127.0.0.1:9"
 # closed local port, for any radio or tool that starts the fetcher.
 os.environ["OHS_FLIGHTROUTES_BASE"] = "http://127.0.0.1:9"
 
+# Aircraft details (ohsradio/aircraftinfo.py) follow OHS_FLIGHTROUTES_BASE,
+# adsbdb being the same host; aircraft photos' Planespotters likewise.
+os.environ["OHS_PLANESPOTTERS_BASE"] = "http://127.0.0.1:9"
+
 # The time of day, too: the suite runs at local noon, whatever the machine's
 # clock says. Radio's weekly band scan (ohsradio/bandscan.py) starts by
 # itself at the first tick in the hour after scanHour (03:00 local), and a
