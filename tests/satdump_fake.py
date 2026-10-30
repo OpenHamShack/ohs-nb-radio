@@ -14,7 +14,9 @@ a real recording with no lock: an empty .cadu, dataset.json,
 telemetry.json holding "null", MSU-MR/product.cbor, no picture; exit 0),
 `crash` (its fatal-error line, exit 1), `slow` (sleeps first), `hang`
 (a day pass written, then 1.2.2's missing-map error and a sleep: what it
-did on the box on 29-30/10 without Natural Earth's borders).
+did on the box on 29-30/10 without Natural Earth's borders), `dark`
+(N2-3 at night as ohs-box heard it on 29/10 22:30Z: channels 1-3, the 221
+composite from dark visible channels, MCIR, 3.9 um and no 10.8 um).
 
 Not named test_*: the suite runs it only through the launcher a test
 writes, and it must not import scratch_home - HOME is part of what it
@@ -107,7 +109,7 @@ def main() -> None:
     msu = out / "MSU-MR"
     msu.mkdir()
     (out / "meteor_m2-x_lrpt.soft").write_bytes(b"\0" * 4096)
-    chans = {"day": [1, 2, 5], "night": [4, 5], "short": [1, 2, 5], "nolock": [], "slow": [1, 2, 5], "hang": [1, 2, 5]}[mode]
+    chans = {"day": [1, 2, 5], "night": [4, 5], "short": [1, 2, 5], "nolock": [], "slow": [1, 2, 5], "hang": [1, 2, 5], "dark": [1, 2, 3]}[mode]
     lines = 20 if mode == "short" else 600
     (out / "meteor_m2-x_lrpt.cadu").write_bytes(b"\x1a\xcf\xfc\x1d" * (2048 if chans else 0))
     (out / "dataset.json").write_text(json.dumps({"products": ["MSU-MR"], "satellite": "METEOR-M2 3" if chans else "Unknown Meteor",
@@ -142,8 +144,10 @@ def main() -> None:
         rgb("MSA", maps=True)
     if 5 in chans:
         grey16("10.8um_Thermal_IR_(Uncalibrated)"); proj("10.8um_Thermal_IR_(Uncalibrated)")
-    if 4 in chans:
+    if 4 in chans or 3 in chans:
         grey16("3.9_um_Shortwave_IR_(Uncalibrated)")
+    if mode == "dark":
+        rgb("MCIR")
     if mode == "hang":
         print("[06:12:53 - 29/10/2026] (I) Drawing map overlay...")
         print("[06:12:53 - 29/10/2026] \x1b[31m(E) Resources maps/ne_10m_admin_0_countries.shp does not exist!\x1b[0m")

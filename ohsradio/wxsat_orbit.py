@@ -47,6 +47,23 @@ def gmst(jd: float) -> float:
     return math.radians((sec % 86400.0) / 240.0)
 
 
+def sun_elevation(lat: float, lon: float, t: float) -> float:
+    """The Sun's elevation in degrees at (lat, lon) at Unix time `t`: the
+    low-precision formula of the Astronomical Almanac (about 0.01 deg in
+    declination, far finer than night against day needs). Used to tell a
+    night pass, whose visible channels are dark, from a day one."""
+    n = t / 86400.0 + 2440587.5 - 2451545.0
+    L = math.radians((280.460 + 0.9856474 * n) % 360.0)
+    g = math.radians((357.528 + 0.9856003 * n) % 360.0)
+    lam = L + math.radians(1.915) * math.sin(g) + math.radians(0.020) * math.sin(2 * g)
+    eps = math.radians(23.439 - 0.0000004 * n)
+    ra = math.atan2(math.cos(eps) * math.sin(lam), math.cos(lam))
+    dec = math.asin(math.sin(eps) * math.sin(lam))
+    ha = gmst(n + 2451545.0) + math.radians(lon) - ra
+    la = math.radians(lat)
+    return math.degrees(math.asin(math.sin(la) * math.sin(dec) + math.cos(la) * math.cos(dec) * math.cos(ha)))
+
+
 def station_ecef(lat: float, lon: float, h_km: float = 0.0) -> tuple[float, float, float]:
     la, lo = math.radians(lat), math.radians(lon)
     e2 = WGS84_F * (2 - WGS84_F)

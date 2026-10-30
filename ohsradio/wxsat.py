@@ -131,6 +131,7 @@ PAST_HOURS = 24.0                  # how far back GET api/wxsat/passes lists by 
 MAX_PAST_HOURS = 720.0             # and at most: 30 days, a fortnight's horizon map with room
 NEAR_PAST_HOURS = 1.0              # what the supervisor looks back over: it only starts and ends passes
 LATE_S = 30.0                      # a pass with less left than this is not started
+NIGHT_SUN_DEG = -6.0               # the Sun below civil twilight: a night pass leads with MCIR
 RECOMPUTE_S = 600.0                # the predicted list is made again this often
 # A pass's mark (its plan, file, imageId) is what a finished pass is
 # listed from. It used to be kept a week, for the list's last hour; it
@@ -605,9 +606,15 @@ class WxSat:
         have been."""
         meta = json.loads(sigmf.paths(data)[1].read_text(encoding="utf-8"))["global"]
         wx = meta.get("openhamshack:wxsat") or {}
+        stn = self.station()
+        aos = float(m.get("aos") or 0.0)
         return {"passId": pass_id, "sat": wx.get("satellite") or BY_ID.get(m.get("sat"), {}).get("name", ""),
                 "aos": wx.get("aos") or _iso(m.get("aos")), "maxElDeg": round(float(wx.get("maxElDeg") or 0.0), 1),
-                "data": str(data), "rate": float(meta["core:sample_rate"]), "tle": list(wx.get("tle") or [])}
+                "data": str(data), "rate": float(meta["core:sample_rate"]), "tle": list(wx.get("tle") or []),
+                # The Sun at the station, not under the satellite: a pass
+                # heard here is within ~2000 km, and twilight either way
+                # is only a question of which picture leads.
+                "night": bool(stn and aos and wxsat_orbit.sun_elevation(stn[0], stn[1], aos) < NIGHT_SUN_DEG)}
 
     def redecode(self, pass_id: str) -> dict:
         """Decode a finished pass's recording again, whatever became of it

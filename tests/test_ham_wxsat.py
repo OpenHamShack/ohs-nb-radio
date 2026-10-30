@@ -516,5 +516,17 @@ class OnTheServer(unittest.TestCase):
         self.assertTrue(self.radio.rec is not None)            # the other recording carries on
 
 
+
+class Sun(unittest.TestCase):
+    """Night or day for a pass (which picture leads), at the station."""
+
+    def test_the_suns_elevation_at_io75rl(self):
+        from ohsradio.wxsat_orbit import sun_elevation
+        lat, lon = 55.47917, -4.54167
+        # Midsummer noon: 90 - 55.48 + 23.44, less a little for 4.5 deg west.
+        self.assertAlmostEqual(sun_elevation(lat, lon, utc("2026-06-21T12:18:00Z")), 57.96, delta=0.2)
+        self.assertLess(sun_elevation(lat, lon, utc("2026-10-29T22:30:00Z")), -40.0)    # the first picture: night
+        self.assertGreater(sun_elevation(lat, lon, utc("2026-10-29T14:19:00Z")), 10.0)  # a day pass
+
 if __name__ == "__main__":
     unittest.main()

@@ -374,10 +374,13 @@ def _save_overlay(rgba: np.ndarray, path: Path, width: int, height: int) -> tupl
 
 
 # ------------------------------------------------------------------ SatDump's tree
-def harvest(out: Path) -> dict:
+def harvest(out: Path, night: bool = False) -> dict:
     """What SatDump made in `out` (module docstring's tree): {"lines": the
     most image lines of any channel, "cadu": bytes decoded, "products":
-    [(kind, name, path)], "projected": {kind: path}}."""
+    [(kind, name, path)], "projected": {kind: path}}. A `night` pass leads
+    with MCIR: its 221 composite is built from visible channels that are
+    flat grey in the dark (ohs-box's first picture, 29/10 22:30Z), and
+    N2-3 sends 3.9 um rather than 10.8 um then, so there is no "ir"."""
     msu = out / "MSU-MR"
     cadu = 0
     for p in out.glob("*.cadu"):
@@ -419,7 +422,8 @@ def harvest(out: Path) -> dict:
             except OSError:
                 pass
     products = [(k, n, p) for k, (n, p) in composites.items()]
-    products.sort(key=lambda t: (t[0] != "rgb", t[0] != "ir", t[0]))
+    lead = ("mcir", "ir", "rgb") if night else ("rgb", "ir")
+    products.sort(key=lambda t: (lead.index(t[0]) if t[0] in lead else len(lead), t[0]))
     products += [(k, _("Channel {n}").format(n=k[2:]), p) for k, p in sorted(channels.items())]
     return {"lines": lines, "cadu": cadu, "products": products, "projected": projected}
 
@@ -720,7 +724,7 @@ class Decoder:
         if timed_out:
             log.warning("weather satellites: SatDump on %s ran past %.0f s and was ended; its last line: %s",
                         pid, self.timeout_s, last or "-")
-        found = harvest(out)
+        found = harvest(out, bool(job.get("night")))
         log.info("weather satellites: SatDump on %s: exit %s in %.0f s, %d bytes of frames, %d lines, %s",
                  pid, rc, time.monotonic() - t0, found["cadu"], found["lines"],
                  ", ".join(k for k, _n, _p in found["products"]) or "no pictures")

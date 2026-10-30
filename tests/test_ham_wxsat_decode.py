@@ -182,6 +182,17 @@ class Decoding(unittest.TestCase):
                          ["ir", "3-9-um-shortwave-ir-uncalibrated", "ch4", "ch5"])
         self.assertTrue(img["projected"]["url"].endswith("/ir-projected.webp"))
 
+    def test_a_pass_in_the_dark_leads_with_mcir_not_the_grey_visible_composite(self):
+        set_mode(self.fake, "dark")
+        job = dict(a_job(self.dir), night=True)
+        self.assertEqual(self.dec.decode(job)[0], "done")
+        [img] = self.dec.images.listing()
+        self.assertEqual([p["kind"] for p in img["products"]][:2], ["mcir", "rgb"])
+        # The same tree by day leads with the 221 composite, as ever.
+        self.assertEqual(self.dec.decode(dict(job, night=False, passId="meteor-m2-3-20261029T1419Z"))[0], "done")
+        day = next(i for i in self.dec.images.listing() if i["id"] == "meteor-m2-3-20261029T1419Z")
+        self.assertEqual(day["products"][0]["kind"], "rgb")
+
     def test_without_webp_in_pillow_the_projection_is_png_with_alpha_never_jpeg(self):
         with mock.patch.object(wxsat_decode, "webp_supported", return_value=False), \
                 mock.patch.object(wxsat_decode, "_overlay_said", False), \
