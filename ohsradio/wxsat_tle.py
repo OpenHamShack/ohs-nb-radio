@@ -62,7 +62,9 @@ from pathlib import Path
 log = logging.getLogger("ohsradio.wxsat")
 
 CELESTRAK_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=tle"
-BUNDLED = Path(__file__).resolve().parent / "data" / "wxsat" / "tle.txt"
+# $OHS_WXSAT_BUNDLED stands in for it: the test suite points it at nothing
+# (tests/scratch_home.py), so no test radio has a sky unless it asks.
+BUNDLED = Path(os.environ.get("OHS_WXSAT_BUNDLED") or Path(__file__).resolve().parent / "data" / "wxsat" / "tle.txt")
 CACHE_FILE = "celestrak.txt"
 STATE_FILE = "tle-state.json"
 STALE_DAYS = 14.0

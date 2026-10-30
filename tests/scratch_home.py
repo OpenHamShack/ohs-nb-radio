@@ -140,6 +140,14 @@ os.environ["OHS_FLIGHTROUTES_BASE"] = "http://127.0.0.1:9"
 # adsbdb being the same host; aircraft photos' Planespotters likewise.
 os.environ["OHS_PLANESPOTTERS_BASE"] = "http://127.0.0.1:9"
 
+# And no weather satellites: a test radio at IO75RL with the bundled
+# element sets ran Radio's automatic Meteor recording on the real clock, so
+# any test that happened to run during a real pass had its receiver taken
+# to 137.9 MHz (test_station_link, 30/10 12:05Z: "not an amateur band"
+# where 2 m's 1000 W was expected). The weather-satellite tests give the
+# radio element sets and a clock of their own (test_ham_wxsat.py fix()).
+os.environ["OHS_WXSAT_BUNDLED"] = str(ROOT / "no-weather-satellites.txt")
+
 # The time of day, too: the suite runs at local noon, whatever the machine's
 # clock says. Radio's weekly band scan (ohsradio/bandscan.py) starts by
 # itself at the first tick in the hour after scanHour (03:00 local), and a
