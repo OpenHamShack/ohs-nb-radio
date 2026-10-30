@@ -22,6 +22,7 @@ import io
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -239,7 +240,29 @@ class Decoding(unittest.TestCase):
         plan, why, _id = self.decode()
         self.assertLess(time.monotonic() - t0, 10.0)
         self.assertEqual(plan, "failed")
-        self.assertIn("longer than", why)
+        # Its last line, not only that it was stopped.
+        self.assertEqual(why, "SatDump took longer than 0 minutes and was stopped: (I) Starting SatDump v1.2.2")
+
+    def test_a_decode_that_hangs_after_its_pictures_keeps_them(self):
+        # SatDump 1.2.2 without its map files: every product written, then
+        # one core spun for ever. The pass is decoded; the hang is ended.
+        set_mode(self.fake, "hang", sleep=60)
+        self.dec.timeout_s = 2.0
+        t0 = time.monotonic()
+        with self.assertLogs("ohsradio.wxsat", "WARNING") as logs:
+            plan, why, image_id = self.decode()
+        self.assertLess(time.monotonic() - t0, 15.0)
+        self.assertEqual((plan, why, image_id), ("done", None, "meteor-m2-3-20261029T0919Z"))
+        self.assertEqual([p["kind"] for p in self.dec.images.listing()[0]["products"]][:2], ["rgb", "ir"])
+        self.assertIn("ne_10m_admin_0_countries.shp does not exist!", logs.output[0])
+
+    def test_a_kill_reaches_satdump_itself_not_only_what_wraps_it(self):
+        set_mode(self.fake, "slow", sleep=60)
+        self.dec.timeout_s = 1.0
+        self.decode()
+        # Nothing it started is left running: not timeout(1), not SatDump.
+        out = subprocess.run(["pgrep", "-f", str(self.fake)], capture_output=True, text=True)
+        self.assertEqual(out.stdout.strip(), "")
 
     def test_the_pictures_keep_to_their_share_of_the_recordings_limit(self):
         self.decode(pid="meteor-m2-3-20261028T0919Z", aos="2026-10-28T09:19:21Z")
@@ -464,6 +487,27 @@ class OnTheServer(unittest.TestCase):
         self.assertEqual((p["plan"], p["imageId"]), ("failed", None))
         self.assertEqual(p["why"], "No signal from the satellite could be locked to during the pass")
         self.assertEqual(self.req("GET", "/api/wxsat/images"), (200, []))
+
+    def test_a_failed_pass_can_be_decoded_again_from_its_recording(self):
+        # The 29-30/10 case: SatDump failed on a pass whose recording was
+        # kept; once it is fixed, the pass is decoded again on request.
+        set_mode(self.fake, "crash")
+        self.record_the_pass()
+        self.assertTrue(wait(lambda: self.plan()["plan"] == "failed"))
+        self.assertEqual(self.req("POST", f"/api/wxsat/passes/{M23}/decode", level="view")[0], 403)
+        set_mode(self.fake, "day")
+        self.assertEqual(self.req("POST", f"/api/wxsat/passes/{M23}/decode", level="control"),
+                         (200, {"id": M23, "plan": "decoding"}))
+        self.assertTrue(wait(lambda: self.plan()["plan"] != "decoding"))
+        p = self.plan()
+        self.assertEqual((p["plan"], p["why"], p["imageId"]), ("done", None, M23))
+        self.assertEqual(len(runs(self.fake)), 2)
+        # Refused, with a reason: a pass never recorded, a recording gone.
+        s, e = self.req("POST", "/api/wxsat/passes/nonesuch/decode", level="control")
+        self.assertEqual((s, e["code"]), (404, "unknown_pass"))
+        (self.radio.recordings_dir() / self.radio.wxsat.marks[M23]["file"]).unlink()
+        s, e = self.req("POST", f"/api/wxsat/passes/{M23}/decode", level="control")
+        self.assertEqual((s, e["code"]), (404, "no_recording"))
 
     def test_a_pass_left_decoding_by_a_restart_is_decoded_again(self):
         set_mode(self.fake, "day")

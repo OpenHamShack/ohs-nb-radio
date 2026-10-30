@@ -62,7 +62,12 @@ RUN set -e; cd /src \
 # (MCIR and MSA) and the SIMD ones where the architecture has them, the
 # Meteor pipeline, the stock settings and the few resources the MSU-MR
 # products read (projection settings, LUTs, scripted composites, one font,
-# one map). The image below installs the libraries those need. Upstream
+# one map, and Natural Earth's borders, coasts and towns). The borders are
+# not optional however the settings ask for no overlay: 1.2.2 draws one on
+# some products regardless, and without ne_10m_admin_0_countries.shp it
+# logs "does not exist!" and then spins one core for ever with every
+# picture already written (the Tablet session, 30/10/2026). The image
+# below installs the libraries those need. Upstream
 # 1.2 only: the output tree wxsat_decode.py reads and its tests' fake
 # SatDump reproduces are 1.2's, so another major version fails the build
 # here rather than every pass in the field.
@@ -85,6 +90,8 @@ RUN set -e; apt-get update; cd /tmp; apt-get download satdump satdump-data \
     && cp -r x/$R/lut x/$R/scripted_compos /out/$R/ \
     && cp x/$R/projections_settings/meteor_* /out/$R/projections_settings/ \
     && cp x/$R/fonts/font.ttf /out/$R/fonts/ && cp x/$R/maps/nasa_hd.jpg /out/$R/maps/ \
+    && cp x/$R/maps/ne_10m_admin_0_countries.shp x/$R/maps/ne_10m_coastline.shp \
+         x/$R/maps/ne_10m_populated_places_simple.json /out/$R/maps/ \
     && cp x/usr/share/doc/satdump/copyright /out/usr/share/doc/satdump/
 
 # radiosonde_auto_rx's programs, for Radio's radiosondes (ohsradio/sonde.py;

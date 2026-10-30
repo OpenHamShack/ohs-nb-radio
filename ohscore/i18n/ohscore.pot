@@ -46,7 +46,7 @@ msgstr ""
 msgid "A memory needs a name"
 msgstr ""
 
-#: ohscore/server/app.py:2387
+#: ohscore/server/app.py:2393
 msgid "A pad keys through api/ptt, not as an action"
 msgstr ""
 
@@ -92,7 +92,7 @@ msgstr ""
 msgid "Already transmitting"
 msgstr ""
 
-#: ohscore/server/app.py:2199
+#: ohscore/server/app.py:2205
 msgid "An ICAO address is six hexadecimal digits"
 msgstr ""
 
@@ -432,7 +432,7 @@ msgstr ""
 msgid "No DAB signal on this block."
 msgstr ""
 
-#: ohscore/server/app.py:2203
+#: ohscore/server/app.py:2209
 #, python-brace-format
 msgid "No aircraft {icao} has been heard lately"
 msgstr ""
@@ -442,7 +442,7 @@ msgstr ""
 msgid "No logo has come for {sid} yet"
 msgstr ""
 
-#: ohscore/server/app.py:2279
+#: ohscore/server/app.py:2285
 msgid "No map picture here: draw the built-in map"
 msgstr ""
 
@@ -522,7 +522,7 @@ msgstr ""
 #: ohscore/server/app.py:1783
 #: ohscore/server/app.py:1864
 #: ohscore/server/app.py:1939
-#: ohscore/server/app.py:2153
+#: ohscore/server/app.py:2159
 msgid "Not while automatic transmit is armed: switch it off first"
 msgstr ""
 
@@ -530,7 +530,7 @@ msgstr ""
 msgid "Not while on the air: the PTT key stays where it is until you stop transmitting"
 msgstr ""
 
-#: ohscore/server/app.py:2116
+#: ohscore/server/app.py:2122
 msgid "Not while transmit is in use: a weather satellite pass never takes the receiver from it"
 msgstr ""
 
@@ -548,7 +548,7 @@ msgstr ""
 msgid "Nothing called {call} has been heard in the last day"
 msgstr ""
 
-#: ohscore/server/app.py:2781
+#: ohscore/server/app.py:2787
 msgid "Nothing is kept to listen behind live: the timeshift keeps a DAB or wide FM station while it plays"
 msgstr ""
 
@@ -584,7 +584,7 @@ msgstr ""
 msgid "Only subscribe messages are understood here."
 msgstr ""
 
-#: ohscore/server/app.py:2489
+#: ohscore/server/app.py:2495
 msgid "Only the controller's administrator may refresh the local frequencies."
 msgstr ""
 
@@ -990,7 +990,7 @@ msgstr ""
 msgid "The sound system is not running"
 msgstr ""
 
-#: ohscore/server/app.py:2648
+#: ohscore/server/app.py:2654
 #, python-brace-format
 msgid "The spectrum feed is not available in this installation: {why}"
 msgstr ""
@@ -1121,8 +1121,8 @@ msgstr ""
 msgid "There is no decoder session called {id}"
 msgstr ""
 
-#: ohscore/server/app.py:2475
-#: ohscore/server/app.py:2465
+#: ohscore/server/app.py:2481
+#: ohscore/server/app.py:2471
 #, python-brace-format
 msgid "There is no entry {id} in my frequencies"
 msgstr ""
@@ -1155,7 +1155,7 @@ msgstr ""
 msgid "There is no such QSO in the log"
 msgstr ""
 
-#: ohscore/server/app.py:2550
+#: ohscore/server/app.py:2556
 msgid "There is no such recording."
 msgstr ""
 
@@ -1187,7 +1187,7 @@ msgstr ""
 msgid "This app answers only through the OpenHamShack controller."
 msgstr ""
 
-#: ohscore/server/app.py:2132
+#: ohscore/server/app.py:2138
 msgid "This app has no ADS-B."
 msgstr ""
 
@@ -1207,22 +1207,22 @@ msgstr ""
 msgid "This app has no DAB."
 msgstr ""
 
-#: ohscore/server/app.py:2314
-#: ohscore/server/app.py:2325
-#: ohscore/server/app.py:2349
+#: ohscore/server/app.py:2320
+#: ohscore/server/app.py:2331
+#: ohscore/server/app.py:2355
 msgid "This app has no S-meter calibration."
 msgstr ""
 
-#: ohscore/server/app.py:2409
+#: ohscore/server/app.py:2415
 msgid "This app has no local frequencies."
 msgstr ""
 
-#: ohscore/server/app.py:2222
+#: ohscore/server/app.py:2228
 msgid "This app has no map."
 msgstr ""
 
-#: ohscore/server/app.py:2289
-#: ohscore/server/app.py:2297
+#: ohscore/server/app.py:2295
+#: ohscore/server/app.py:2303
 msgid "This app has no over-power watch."
 msgstr ""
 
@@ -1263,7 +1263,7 @@ msgstr ""
 msgid "This decoder runs only as the radio's mode, not on a frequency of its own."
 msgstr ""
 
-#: ohscore/server/app.py:2249
+#: ohscore/server/app.py:2255
 msgid "This install has no land map"
 msgstr ""
 
@@ -1477,11 +1477,11 @@ msgstr ""
 msgid "bad DC size"
 msgstr ""
 
-#: ohscore/server/app.py:2255
+#: ohscore/server/app.py:2261
 msgid "bbox is west,south,east,north in degrees; detail auto, fine or coarse; format geojson or compact"
 msgstr ""
 
-#: ohscore/server/app.py:2725
+#: ohscore/server/app.py:2731
 msgid "behind must be a number of seconds, 0 or more"
 msgstr ""
 
@@ -1494,12 +1494,12 @@ msgstr ""
 msgid "block data ran out"
 msgstr ""
 
-#: ohscore/server/app.py:2430
+#: ohscore/server/app.py:2436
 #, python-brace-format
 msgid "category must be one of {names}"
 msgstr ""
 
-#: ohscore/server/app.py:2716
+#: ohscore/server/app.py:2722
 msgid "channels must be 1 or 2"
 msgstr ""
 
@@ -1520,7 +1520,7 @@ msgstr ""
 msgid "dbfs must be a number"
 msgstr ""
 
-#: ohscore/server/app.py:2329
+#: ohscore/server/app.py:2335
 msgid "dbm is required"
 msgstr ""
 
@@ -1574,7 +1574,7 @@ msgstr ""
 msgid "listen is true or false"
 msgstr ""
 
-#: ohscore/server/app.py:2700
+#: ohscore/server/app.py:2706
 msgid "loHz and hiHz must be frequencies in Hz, loHz below hiHz."
 msgstr ""
 
@@ -1634,7 +1634,7 @@ msgstr ""
 msgid "q65code produced no 'Channel symbols' line for {message}: {output}"
 msgstr ""
 
-#: ohscore/server/app.py:2424
+#: ohscore/server/app.py:2430
 #, python-brace-format
 msgid "radiusKm must be a number from {lo} to {hi}"
 msgstr ""
@@ -1654,7 +1654,7 @@ msgstr ""
 
 #: ohscore/server/app.py:1539
 #: ohscore/server/app.py:1814
-#: ohscore/server/app.py:2184
+#: ohscore/server/app.py:2190
 msgid "since must be a whole number"
 msgstr ""
 
@@ -1738,7 +1738,7 @@ msgstr ""
 msgid "yes"
 msgstr ""
 
-#: ohscore/server/app.py:2662
+#: ohscore/server/app.py:2668
 #, python-brace-format
 msgid "{app} already serves {n} spectrum clients; try again when one has gone."
 msgstr ""

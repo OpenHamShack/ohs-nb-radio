@@ -44,7 +44,16 @@ these settings never have.
 at 19 too: a pass decodes
 in a few minutes of one core, and must never take time from the receive
 path or the decoders. Passes queue in order of LOS. A decode taking more
-than TIMEOUT_S is ended and failed.
+than TIMEOUT_S is ended, and the end does not depend on this process:
+SatDump runs under timeout(1), which sends TERM and then KILL by itself.
+On 29-30/10 a hung SatDump pushed the container into memory throttling
+that froze the server's own threads for six hours, this one's
+Popen.wait() with them, so a Python-side timeout never fired. A timeout
+here still keeps whatever pictures SatDump had already written: 1.2.2's
+hang on a missing map file came after every product was saved. SatDump
+also runs under stdbuf(1) line-buffered, so its log holds its last line
+even when it is killed - without it a killed run left only a start-up
+line, which was then reported as the error.
 
 **What it makes** (SatDump 1.2's tree, which the tests' fake SatDump
 reproduces from its source - plugins/meteor_support .../msumr and
@@ -120,6 +129,7 @@ import os
 import queue
 import re
 import shutil
+import signal
 import struct
 import subprocess
 import threading
@@ -133,7 +143,8 @@ from ohsradio.i18n import _
 log = logging.getLogger("ohsradio.wxsat")
 
 PIPELINE = "meteor_m2-x_lrpt"
-TIMEOUT_S = 3600.0
+TIMEOUT_S = 1800.0
+KILL_GRACE_S = 30                  # timeout(1)'s TERM to KILL
 THUMB_W = 400
 PROJ_MAX = 2048
 MIN_LINES = 64                     # under this many lines there is no picture to speak of
@@ -611,7 +622,7 @@ class Decoder:
         self.stopping = True
         p = self.proc
         if p is not None and p.poll() is None:
-            p.kill()
+            _kill_group(p)
 
     def _loop(self) -> None:
         try:
@@ -673,37 +684,55 @@ class Decoder:
         # nice(1) rather than setting the child's priority after it has
         # started: from its first instruction, whichever thread started it.
         nice = shutil.which("nice")
-        argv = ([nice, "-n", "19"] if nice else []) + [prog, PIPELINE, "baseband", str(data), str(out), "--samplerate", str(int(round(job["rate"]))),
+        timeout, stdbuf = shutil.which("timeout"), shutil.which("stdbuf")
+        wrap = (([timeout, "-k", str(KILL_GRACE_S), f"{self.timeout_s:g}"] if timeout else [])
+                + ([stdbuf, "-oL", "-eL"] if stdbuf else []) + ([nice, "-n", "19"] if nice else []))
+        argv = wrap + [prog, PIPELINE, "baseband", str(data), str(out), "--samplerate", str(int(round(job["rate"]))),
                 "--baseband_format", "cs16", "--tle_override", str(tle)]
         env = {k: v for k, v in os.environ.items() if k not in ("http_proxy", "https_proxy", "HTTP_PROXY",
                                                                 "HTTPS_PROXY", "ALL_PROXY", "all_proxy")}
         env["HOME"] = str(work / "home")
         logf = work / "satdump.log"
         t0 = time.monotonic()
+        timed_out = False
         try:
             with open(logf, "wb") as lf:
+                # Its own session, so a kill reaches SatDump and not only
+                # the timeout(1) or nice(1) in front of it.
                 self.proc = subprocess.Popen(argv, cwd=work, env=env, stdin=subprocess.DEVNULL, stdout=lf,
-                                             stderr=subprocess.STDOUT)
+                                             stderr=subprocess.STDOUT, start_new_session=True)
                 try:
-                    rc = self.proc.wait(timeout=self.timeout_s)
+                    # timeout(1) ends it first; this is only the backstop.
+                    rc = self.proc.wait(timeout=self.timeout_s + KILL_GRACE_S + 30)
                 except subprocess.TimeoutExpired:
-                    self.proc.kill()
-                    self.proc.wait()
-                    return self._fail(work, _("SatDump took longer than {m} minutes and was stopped").format(
-                        m=round(self.timeout_s / 60)))
+                    _kill_group(self.proc)
+                    rc = self.proc.wait()
+                    timed_out = True
         except OSError as e:
             return self._fail(work, _("SatDump could not be started: {error}").format(error=e))
         finally:
             self.proc = None
         if self.stopping:
             return self._fail(work, _("Radio stopped while the pass was being decoded"))
+        # 124: timeout(1) sent TERM; 137 (128 + 9): it had to send KILL.
+        timed_out = timed_out or (timeout is not None and rc in (124, 137))
+        last = _last_line(logf)
+        if timed_out:
+            log.warning("weather satellites: SatDump on %s ran past %.0f s and was ended; its last line: %s",
+                        pid, self.timeout_s, last or "-")
         found = harvest(out)
         log.info("weather satellites: SatDump on %s: exit %s in %.0f s, %d bytes of frames, %d lines, %s",
                  pid, rc, time.monotonic() - t0, found["cadu"], found["lines"],
                  ", ".join(k for k, _n, _p in found["products"]) or "no pictures")
         if not found["products"]:
+            if timed_out:
+                why = _("SatDump took longer than {m} minutes and was stopped").format(m=round(self.timeout_s / 60))
+                return self._fail(work, f"{why}: {last}" if last else why)
+            if rc < 0:
+                return self._fail(work, _("SatDump was ended from outside Radio (signal {n}); its last line: {line}")
+                                  .format(n=-rc, line=last or "-"))
             if rc != 0:
-                return self._fail(work, _("SatDump failed: {line}").format(line=_last_line(logf) or rc))
+                return self._fail(work, _("SatDump failed: {line}").format(line=last or rc))
             if found["cadu"] == 0:
                 return self._fail(work, _("No signal from the satellite could be locked to during the pass"))
             return self._fail(work, _("The signal was locked too briefly to make a picture"))
@@ -722,6 +751,14 @@ class Decoder:
     def _fail(work: Path, why: str) -> tuple[str, str, None]:
         shutil.rmtree(work, ignore_errors=True)
         return "failed", why, None
+
+
+def _kill_group(p: subprocess.Popen) -> None:
+    """KILL SatDump's whole session: timeout(1), nice(1) and SatDump."""
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        p.kill()
 
 
 def _last_line(path: Path) -> str:

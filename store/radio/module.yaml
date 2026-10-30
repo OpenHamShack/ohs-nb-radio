@@ -182,8 +182,14 @@ health:
   start_period: 20
 
 resources:
-  memory_max: 1G
-  memory_high: 768M
+  # The server alone sits near 700 MB, and a weather-satellite decode adds
+  # SatDump's 300-odd. At 768M high the two together kept the whole
+  # container throttled in reclaim: on 29-30/10 the server froze for six
+  # hours at a time behind one decode - passes went unrecorded, the
+  # decode's own timeout never ran and every client saw "box not
+  # answering". The box has 32 GB; this is headroom, not a target.
+  memory_max: 3G
+  memory_high: 2G
   cpu_quota: 200%
   pids_max: 512
 

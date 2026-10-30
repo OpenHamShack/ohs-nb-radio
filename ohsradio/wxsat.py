@@ -13,6 +13,7 @@ pass was heard, live and as a timeline kept after it, in wxsat_signal.py.
     ws.backfill_signal()                 # startup: a timeline for each recording that has none
     ws.force(pass_id)                    # POST api/wxsat/passes/<id>/record; raises Refused
     ws.skip(pass_id)                     # DELETE api/wxsat/passes/<id>/record
+    ws.redecode(pass_id)                 # POST api/wxsat/passes/<id>/decode; raises Refused
     ws.images_view()                     # GET api/wxsat/images (wxsat_decode.py)
     ws.composite_view(kind, hours)       # GET api/wxsat/composite
     ws.image_file(id, product, thumb, ext)  # GET api/wxsat/images/<id>/<product>.<ext>
@@ -330,7 +331,7 @@ class WxSat:
                 return "skip-low", _("It rises only to {el:.0f}°, below the {low}° minimum").format(
                     el=p["maxEl"], low=low)
         if p["los"] <= now:
-            return "missed", _("Radio was not running for this pass")
+            return "missed", _("Not recorded: Radio was not running, or was too busy, at the time")
         return "record", None
 
     def _mark_id(self, p: dict) -> str:
@@ -607,6 +608,37 @@ class WxSat:
         return {"passId": pass_id, "sat": wx.get("satellite") or BY_ID.get(m.get("sat"), {}).get("name", ""),
                 "aos": wx.get("aos") or _iso(m.get("aos")), "maxElDeg": round(float(wx.get("maxElDeg") or 0.0), 1),
                 "data": str(data), "rate": float(meta["core:sample_rate"]), "tle": list(wx.get("tle") or [])}
+
+    def redecode(self, pass_id: str) -> dict:
+        """Decode a finished pass's recording again, whatever became of it
+        the first time: for a SatDump fixed since (the missing map file
+        that hung 1.2.2 on 29-30/10) or a pass decoded badly. Queued like
+        a just-ended pass; its pictures replace any it had. Raises Refused
+        (code, sentence): no such pass recorded, its recording gone, or
+        no SatDump here."""
+        with self.lock:
+            m = self.marks.get(pass_id)
+            if m is None or not m.get("file"):
+                raise Refused("unknown_pass", _("No pass {id} was recorded").format(id=pass_id))
+            if m.get("plan") == "decoding":
+                return {"id": pass_id, "plan": "decoding"}
+            if self.job is not None and self.job["pass"]["id"] == pass_id:
+                raise Refused("pass_recording", _("That pass is still being recorded"))
+            data = self.radio.recordings_dir() / str(m["file"])
+            if not data.is_file():
+                raise Refused("no_recording", _("That pass's recording is no longer kept"))
+            if not self.decoder.available():
+                raise Refused("no_decoder", _("SatDump is not installed here"))
+            try:
+                job = self._decode_job(pass_id, m, data)
+            except (OSError, ValueError, KeyError) as e:
+                raise Refused("no_recording", _("The recording's metadata could not be read: {error}").format(
+                    error=e)) from e
+            self.decoder.submit(job)
+            m.update(plan="decoding", why=None)
+            self._save_marks()
+        log.info("weather satellites: %s queued to decode again", pass_id)
+        return {"id": pass_id, "plan": "decoding"}
 
     def resume_decoding(self) -> None:
         """Radio started: decode again every pass left `decoding` when it

@@ -12,7 +12,9 @@ projected 221 and IR), `night` (channels 4 and 5), `short` (a lock of 20
 lines), `nolock` (the tree the real SatDump 1.2.2 wrote on 29/10/2026 for
 a real recording with no lock: an empty .cadu, dataset.json,
 telemetry.json holding "null", MSU-MR/product.cbor, no picture; exit 0),
-`crash` (its fatal-error line, exit 1), `slow` (sleeps first).
+`crash` (its fatal-error line, exit 1), `slow` (sleeps first), `hang`
+(a day pass written, then 1.2.2's missing-map error and a sleep: what it
+did on the box on 29-30/10 without Natural Earth's borders).
 
 Not named test_*: the suite runs it only through the launcher a test
 writes, and it must not import scratch_home - HOME is part of what it
@@ -91,6 +93,9 @@ def main() -> None:
     with open(here / "runs.jsonl", "a") as f:
         f.write(json.dumps(seen) + "\n")
     mode = cfg["mode"]
+    # The decoder runs SatDump under stdbuf -oL; that reaches C stdio, not
+    # Python, so the fake buffers by line itself.
+    sys.stdout.reconfigure(line_buffering=True)
     print("[06:12:45 - 29/10/2026] (I) Starting SatDump v1.2.2")
     if mode == "slow":
         time.sleep(cfg.get("sleep", 30))
@@ -102,7 +107,7 @@ def main() -> None:
     msu = out / "MSU-MR"
     msu.mkdir()
     (out / "meteor_m2-x_lrpt.soft").write_bytes(b"\0" * 4096)
-    chans = {"day": [1, 2, 5], "night": [4, 5], "short": [1, 2, 5], "nolock": [], "slow": [1, 2, 5]}[mode]
+    chans = {"day": [1, 2, 5], "night": [4, 5], "short": [1, 2, 5], "nolock": [], "slow": [1, 2, 5], "hang": [1, 2, 5]}[mode]
     lines = 20 if mode == "short" else 600
     (out / "meteor_m2-x_lrpt.cadu").write_bytes(b"\x1a\xcf\xfc\x1d" * (2048 if chans else 0))
     (out / "dataset.json").write_text(json.dumps({"products": ["MSU-MR"], "satellite": "METEOR-M2 3" if chans else "Unknown Meteor",
@@ -139,6 +144,10 @@ def main() -> None:
         grey16("10.8um_Thermal_IR_(Uncalibrated)"); proj("10.8um_Thermal_IR_(Uncalibrated)")
     if 4 in chans:
         grey16("3.9_um_Shortwave_IR_(Uncalibrated)")
+    if mode == "hang":
+        print("[06:12:53 - 29/10/2026] (I) Drawing map overlay...")
+        print("[06:12:53 - 29/10/2026] \x1b[31m(E) Resources maps/ne_10m_admin_0_countries.shp does not exist!\x1b[0m")
+        time.sleep(cfg.get("sleep", 30))
     print("[06:12:54 - 29/10/2026] (I) Done! Goodbye")
 
 

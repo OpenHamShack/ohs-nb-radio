@@ -2090,20 +2090,20 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._send(200, w.composite_view(kind, hours))
 
-    def _wxsat_pass(self, act):
-        """POST or DELETE api/wxsat/passes/<id>/record."""
+    def _wxsat_pass(self, act, verb="record"):
+        """POST or DELETE api/wxsat/passes/<id>/<verb>."""
         from ..decoders import Refused as DecoderRefused
         w = self._wxsat()
         if w is None:
             return
         parts = urlsplit(self.path).path.rstrip("/").split("/")
-        if len(parts) < 2 or parts[-1] != "record":
+        if len(parts) < 2 or parts[-1] != verb:
             self._error(404, _("There is nothing at {path}").format(path=self.path), "not_found")
             return
         try:
             view = act(w, parts[-2])
         except DecoderRefused as e:
-            status = {"unknown_pass": 404, "pass_over": 409, "receiver_busy": 409}.get(e.code, 409)
+            status = {"unknown_pass": 404, "no_recording": 404, "no_decoder": 404}.get(e.code, 409)
             self._error(status, str(e), e.code, why=str(e))
             return
         self._send(200, view)
@@ -2111,7 +2111,13 @@ class _Handler(BaseHTTPRequestHandler):
     def post_wxsat_record(self, who, q):
         """Force a pass: recorded whatever its plan; one in the sky now
         starts at once, ending client-scoped holds first (409 with `why`
-        for a recording, a scan or transmit, which are never preempted)."""
+        for a recording, a scan or transmit, which are never preempted).
+        POST api/wxsat/passes/<id>/decode is here too: one prefix, one
+        handler, told apart by the last part."""
+        if urlsplit(self.path).path.rstrip("/").endswith("/decode"):
+            self._wxsat_pass(lambda w, pid: w.redecode(pid), "decode")
+            log.info("weather satellite pass decoded again for %s", who.get("user", "?"))
+            return
         if self.srv.digi.remote is not None or self.srv.lease is not None:
             why = _("Not while transmit is in use: a weather satellite pass never takes the receiver from it")
             self._error(409, why, "on_air", why=why)

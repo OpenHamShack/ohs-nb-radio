@@ -89,6 +89,7 @@ the desktop apps.
 | `GET api/map/info`, `GET api/map/land?bbox=`, `GET api/map/tiles/{z}/{x}/{y}.png` | view | Radio only: the map to draw ships on (below, "Map") |
 | `GET api/wxsat/passes[?hours=48]`, `GET api/wxsat/status`, `GET api/wxsat/images`, `GET api/wxsat/images/{id}/{product}.{jpg,webp}[?w=400]`, `GET api/wxsat/composite?product=&hours=` | view | Radio only: weather-satellite passes, their plans, what is being recorded or decoded, and the pictures (below, "Weather satellites") |
 | `POST`/`DELETE api/wxsat/passes/{id}/record` | control | Radio only: force or skip one pass |
+| `POST api/wxsat/passes/{id}/decode` | control | Radio only: decode a recorded pass again |
 | `GET api/local-frequencies?radiusKm=&category=` | view | Radio only: what there is to listen to near the station (below, "Local frequencies") |
 | `POST api/local-frequencies/mine`, `PUT`/`DELETE api/local-frequencies/mine/{id}` | control | Radio only: the operator's own list ("my frequencies") |
 | `POST api/local-frequencies/refresh` | control **and** the administrator flag | Radio only: download newer data (below) |
@@ -2873,10 +2874,10 @@ became of them - `done`, `failed`, `missed`, `skip-...` - each with its
     `failed` after `decoding` is the pass's result, not a fault: "No
     signal from the satellite could be locked to during the pass" (nothing
     decoded at all), "The signal was locked too briefly to make a
-    picture", SatDump's own error, a decode stopped after an hour, or no
+    picture", SatDump's own error, a decode stopped after 30 minutes, or no
     disk room ("Pictures", below). Where SatDump is not installed (the
     desktop) a recorded pass stays `done` with no `imageId`.
-  - `missed` - it was to be recorded and Radio was not running then.
+  - `missed` - it was to be recorded and Radio was not running then, or was too busy to start it (the server frozen by memory pressure did this on 29-30/10).
 - `imageId` is set when the pass's pictures are made (`done` after
   `decoding`), and is the pass's `id`; null before, and for a pass that
   has none.
@@ -2972,6 +2973,22 @@ Skip the pass: `plan` becomes `skip-disabled` ("Skipped by hand"). One
 being recorded stops now and the receiver goes back as it was; nothing
 else is touched. `200` with the pass, `404 unknown_pass`. A later `POST`
 un-skips it.
+
+### POST api/wxsat/passes/{id}/decode (control)
+
+Decode a recorded pass again from its kept recording, whatever became of
+it the first time - after a SatDump fix, say. Queued behind any pass
+already decoding; its pictures replace any it had. `200`
+`{"id", "plan": "decoding"}` (also when it is already decoding); the pass
+then ends `done` with its `imageId` or `failed` with `why`, as a
+just-ended pass does. Refusals, `{"error", "code", "why"}`:
+`404 unknown_pass` (no such pass was recorded), `404 no_recording` (its
+recording is no longer kept), `404 no_decoder` (no SatDump here),
+`409 pass_recording` (still being recorded).
+
+A decode is ended after 30 minutes by timeout(1), outside the server, and
+keeps whatever pictures SatDump wrote before it was ended. `why` for a
+failed decode carries SatDump's own last error line.
 
 ### GET api/wxsat/images (view)
 
