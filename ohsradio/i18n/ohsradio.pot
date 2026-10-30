@@ -210,7 +210,7 @@ msgstr ""
 msgid "Cargo"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:427
+#: ohsradio/wxsat_decode.py:428
 #, python-brace-format
 msgid "Channel {n}"
 msgstr ""
@@ -251,7 +251,7 @@ msgstr ""
 msgid "Decoding a radiosonde on {mhz} MHz"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:650
+#: ohsradio/wxsat_decode.py:698
 #, python-brace-format
 msgid "Decoding failed: {error}"
 msgstr ""
@@ -493,7 +493,7 @@ msgstr ""
 msgid "No ships heard yet: they appear within a minute of the map opening."
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:741
+#: ohsradio/wxsat_decode.py:789
 msgid "No signal from the satellite could be locked to during the pass"
 msgstr ""
 
@@ -515,7 +515,7 @@ msgstr ""
 msgid "Not a pass id: {id}"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:679
+#: ohsradio/wxsat_decode.py:727
 msgid "Not enough free disk space to decode the pass"
 msgstr ""
 
@@ -642,7 +642,7 @@ msgstr ""
 msgid "Radio is transmitting"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:720
+#: ohsradio/wxsat_decode.py:768
 msgid "Radio stopped while the pass was being decoded"
 msgstr ""
 
@@ -701,12 +701,12 @@ msgstr ""
 msgid "Sailing"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:716
+#: ohsradio/wxsat_decode.py:764
 #, python-brace-format
 msgid "SatDump could not be started: {error}"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:739
+#: ohsradio/wxsat_decode.py:787
 #, python-brace-format
 msgid "SatDump failed: {line}"
 msgstr ""
@@ -715,21 +715,21 @@ msgstr ""
 msgid "SatDump is not installed here"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:673
+#: ohsradio/wxsat_decode.py:721
 msgid "SatDump is not installed here, so the pass was recorded but not decoded"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:733
+#: ohsradio/wxsat_decode.py:781
 #, python-brace-format
 msgid "SatDump took longer than {m} minutes and was stopped"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:736
+#: ohsradio/wxsat_decode.py:784
 #, python-brace-format
 msgid "SatDump was ended from outside Radio (signal {n}); its last line: {line}"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:751
+#: ohsradio/wxsat_decode.py:799
 msgid "SatDump's pictures could not be read"
 msgstr ""
 
@@ -1046,7 +1046,7 @@ msgid "The recording stopped early"
 msgstr ""
 
 #: ohsradio/wxsat.py:663
-#: ohsradio/wxsat_decode.py:676
+#: ohsradio/wxsat_decode.py:724
 msgid "The recording was deleted before it could be decoded"
 msgstr ""
 
@@ -1074,11 +1074,11 @@ msgstr ""
 msgid "The ship map (AIS) is open"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:742
+#: ohsradio/wxsat_decode.py:790
 msgid "The signal was locked too briefly to make a picture"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:744
+#: ohsradio/wxsat_decode.py:792
 #, python-brace-format
 msgid "The signal was locked too briefly to make a picture ({n} lines)"
 msgstr ""
@@ -1249,11 +1249,11 @@ msgstr ""
 msgid "Wing in ground"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:295
+#: ohsradio/wxsat_decode.py:296
 msgid "a TIFF SatDump does not write"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:300
+#: ohsradio/wxsat_decode.py:301
 msgid "a TIFF cut short"
 msgstr ""
 
@@ -1343,7 +1343,7 @@ msgstr ""
 msgid "needs the AD9364 setting (out of reach as an AD9363)"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:303
+#: ohsradio/wxsat_decode.py:304
 msgid "no GeoTIFF tags: the projection is not in the file"
 msgstr ""
 
@@ -1351,7 +1351,7 @@ msgstr ""
 msgid "no answer"
 msgstr ""
 
-#: ohsradio/wxsat_decode.py:278
+#: ohsradio/wxsat_decode.py:279
 msgid "not a TIFF"
 msgstr ""
 

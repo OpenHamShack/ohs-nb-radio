@@ -193,6 +193,31 @@ class Decoding(unittest.TestCase):
         day = next(i for i in self.dec.images.listing() if i["id"] == "meteor-m2-3-20261029T1419Z")
         self.assertEqual(day["products"][0]["kind"], "rgb")
 
+    def test_a_black_composite_is_not_kept(self):
+        # N2-3 on 30/10: no timestamps, so nothing placed on the Earth and
+        # SatDump's MCIR all zeros - the night pass's cover, on every TV.
+        set_mode(self.fake, "dark", black=["MCIR"])
+        self.assertEqual(self.dec.decode(dict(a_job(self.dir), night=True))[0], "done")
+        [img] = self.dec.images.listing()
+        kinds = [p["kind"] for p in img["products"]]
+        self.assertNotIn("mcir", kinds)
+        self.assertEqual(kinds[0], "rgb")
+
+    def test_a_width_above_the_thumbnails_is_made_once_at_the_next_step(self):
+        _plan, _why, image_id = self.decode()
+        with Image.open(io.BytesIO(self.dec.images.file(image_id, "rgb", 0))) as im:
+            self.assertEqual(im.size, (1400, 600))
+        with Image.open(io.BytesIO(self.dec.images.file(image_id, "rgb", 300))) as im:
+            self.assertEqual(im.width, 400)                                 # the thumbnail
+        with Image.open(io.BytesIO(self.dec.images.file(image_id, "rgb", 900))) as im:
+            self.assertEqual((im.format, im.size), ("JPEG", (1000, 429)))   # 900 -> the next 200
+        self.assertTrue((self.dec.images.folder / image_id / "rgb.w1000.jpg").is_file())
+        with Image.open(io.BytesIO(self.dec.images.file(image_id, "rgb", 5000))) as im:
+            self.assertEqual(im.size, (1400, 600))                          # never wider than itself
+        with Image.open(io.BytesIO(self.dec.images.file(image_id, "rgb-projected", 1000, "webp"))) as im:
+            self.assertEqual((im.format, im.mode, im.width), ("WEBP", "RGBA", 1000))
+        self.assertIsNone(self.dec.images.file(image_id, "nonesuch", 1000))
+
     def test_without_webp_in_pillow_the_projection_is_png_with_alpha_never_jpeg(self):
         with mock.patch.object(wxsat_decode, "webp_supported", return_value=False), \
                 mock.patch.object(wxsat_decode, "_overlay_said", False), \

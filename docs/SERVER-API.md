@@ -3106,8 +3106,17 @@ One picture: `{product}` is a `kind` from the list, `.jpg`, served
 `image/webp` - `.png`, `image/png`, on a server without WebP, and `.jpg`
 for a pass decoded before projections were WebP. The URL the list or
 `composite` gives is the one that exists. `?w=` up to 400 gives the 400 px-wide
-thumbnail (aspect kept); larger or absent the full picture.
+thumbnail (aspect kept); above that, a copy at the next multiple of 200 px
+(made on the first request and kept; a projection keeps its alpha), never
+wider than the picture; absent, the full picture (2800 px wide for MSU-MR).
 `404 no_image` for anything else, a path included.
+
+A composite SatDump wrote black - one it could not make, as MCIR is when
+the pass could not be placed on the Earth - is not kept, so it is never in
+the list. SatDump 1.2.2 does that to every N2-3 pass since 30/10/2026, when
+the satellite began sending channels 1, 2 and 4: 1.2.2 aligns the image
+lines for 1, 2 and 3 only, so its timestamps and every map-based product
+fail (fixed in SatDump after 1.2.2, commit 9fee079, not yet released).
 
 ### GET api/wxsat/composite?product=rgb&hours=24 (view)
 

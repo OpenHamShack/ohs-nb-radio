@@ -5,7 +5,7 @@ recorded (wxsat.py) after LOS, and the pictures are kept and served
     dec = Decoder(folder, binary=None)   # made by WxSat
     dec.submit(job)                      # a pass recorded: decode it, later
     dec.images.listing()                 # GET api/wxsat/images
-    dec.images.file(id, product, thumb, ext)  # GET api/wxsat/images/<id>/<product>.<ext>
+    dec.images.file(id, product, width, ext)  # GET api/wxsat/images/<id>/<product>.<ext>[?w=]
     dec.images.composite(kind, since)    # GET api/wxsat/composite
 
 **SatDump, never a decoder of our own** (Brian's rule): its CLI, GPL-3.0,
@@ -146,6 +146,7 @@ PIPELINE = "meteor_m2-x_lrpt"
 TIMEOUT_S = 1800.0
 KILL_GRACE_S = 30                  # timeout(1)'s TERM to KILL
 THUMB_W = 400
+SIZE_STEP = 200                    # ?w= above THUMB_W: made at the next multiple of this, and kept
 PROJ_MAX = 2048
 MIN_LINES = 64                     # under this many lines there is no picture to speak of
 IMAGES_SHARE = 0.1                 # of the recordings' limit
@@ -487,19 +488,58 @@ class Images:
                         "bounds": p["bounds"]})
         return out
 
-    def file(self, image_id: str, product: str, thumb: bool, ext: str = "jpg") -> bytes | None:
+    def file(self, image_id: str, product: str, width: int = 0, ext: str = "jpg") -> bytes | None:
         """One picture, or None for anything not in the folder (a path, a
         dot or an unknown product included). Products are JPEG only; a
-        projection may be any of CONTENT_TYPES (the old ones JPEG)."""
+        projection may be any of CONTENT_TYPES (the old ones JPEG).
+        `width` 0 is the picture itself, up to THUMB_W its thumbnail, and
+        above that a copy at the next SIZE_STEP, made once and kept beside
+        it, never wider than the picture: a TV asks for its screen's
+        width, and 2800 px of JPEG is most of a megabyte to show 960."""
         if not _ID_OK.match(image_id) or ".." in image_id:
             return None
         projected = product.endswith("-projected")
         kind = product[:-len("-projected")] if projected else product
         if not _KIND_OK.match(kind) or ext not in CONTENT_TYPES or (ext != "jpg" and not projected):
             return None
-        name = f"{product}.thumb.{ext}" if thumb else f"{product}.{ext}"
+        width = int(width or 0)
+        if 0 < width <= THUMB_W:
+            name = f"{product}.thumb.{ext}"
+        elif width > THUMB_W:
+            return self._sized(self.folder / image_id, product, ext, -(-width // SIZE_STEP) * SIZE_STEP)
+        else:
+            name = f"{product}.{ext}"
         try:
             return (self.folder / image_id / name).read_bytes()
+        except OSError:
+            return None
+
+    def _sized(self, folder: Path, product: str, ext: str, width: int) -> bytes | None:
+        full = folder / f"{product}.{ext}"
+        made = folder / f"{product}.w{width}.{ext}"
+        try:
+            return made.read_bytes()
+        except OSError:
+            pass
+        Image = _pil()
+        try:
+            with Image.open(full) as im:
+                if width >= im.width:
+                    return full.read_bytes()
+                h = max(1, round(im.height * width / im.width))
+                small = im.resize((width, h), Image.LANCZOS)
+        except OSError:
+            return None
+        a = np.asarray(small)
+        with self.lock:
+            if not folder.is_dir():         # pruned meanwhile
+                return None
+            if ext == "jpg":
+                _save_jpeg(a, made)
+            else:
+                _save_overlay(a, made, width, h)
+        try:
+            return made.read_bytes()
         except OSError:
             return None
 
@@ -544,6 +584,14 @@ class Images:
                 a = read_png(path)
             except Exception as e:  # noqa: BLE001 - one unreadable picture is not the pass's end
                 log.warning("weather satellites: %s of %s unreadable: %s", kind, image_id, e)
+                continue
+            if _blank(a):
+                # SatDump writes a composite it could not make as a black
+                # picture, not none: MCIR, painted over a map, is all zeros
+                # when the pass could not be placed on the Earth (N2-3 on
+                # 30/10: "Solving TPS equations for 0 GCPs"). Kept, it led
+                # a night pass and was every TV's black cover.
+                log.info("weather satellites: %s of %s is blank; not kept", kind, image_id)
                 continue
             w, h = _save_jpeg(a, tmp / f"{kind}.jpg")
             _save_jpeg(a, tmp / f"{kind}.thumb.jpg", min(THUMB_W, w))
@@ -763,6 +811,13 @@ def _kill_group(p: subprocess.Popen) -> None:
         os.killpg(p.pid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError):
         p.kill()
+
+
+def _blank(a: np.ndarray) -> bool:
+    """A black picture: what SatDump writes for a composite it could not
+    make (its unplaceable MCIR is all zeros). Only black: a flat bright one
+    is a real, if dull, picture of cloud."""
+    return a.size == 0 or int(a.max()) <= 2
 
 
 def _last_line(path: Path) -> str:

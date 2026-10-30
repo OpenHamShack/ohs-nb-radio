@@ -17,6 +17,7 @@ telemetry.json holding "null", MSU-MR/product.cbor, no picture; exit 0),
 did on the box on 29-30/10 without Natural Earth's borders), `dark`
 (N2-3 at night as ohs-box heard it on 29/10 22:30Z: channels 1-3, the 221
 composite from dark visible channels, MCIR, 3.9 um and no 10.8 um).
+Any mode: "black" in fake.json, composite names written all zeros.
 
 Not named test_*: the suite runs it only through the launcher a test
 writes, and it must not import scratch_home - HOME is part of what it
@@ -123,6 +124,8 @@ def main() -> None:
 
     def rgb(name, corrected=True, maps=False):
         a = rng.integers(0, 255, (lines, W, 3), dtype=np.uint8)
+        if name in cfg.get("black", ()):        # as SatDump writes a composite it could not place
+            a[:] = 0
         Image.fromarray(a, "RGB").save(msu / f"msu_mr_rgb_{name}.png")
         if corrected:
             Image.fromarray(a[:, :1400], "RGB").save(msu / f"msu_mr_rgb_{name}_corrected.png")

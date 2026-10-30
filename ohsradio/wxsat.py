@@ -16,7 +16,7 @@ pass was heard, live and as a timeline kept after it, in wxsat_signal.py.
     ws.redecode(pass_id)                 # POST api/wxsat/passes/<id>/decode; raises Refused
     ws.images_view()                     # GET api/wxsat/images (wxsat_decode.py)
     ws.composite_view(kind, hours)       # GET api/wxsat/composite
-    ws.image_file(id, product, thumb, ext)  # GET api/wxsat/images/<id>/<product>.<ext>
+    ws.image_file(id, product, width, ext)  # GET api/wxsat/images/<id>/<product>.<ext>[?w=]
 
 **The satellites** (SATELLITES): Meteor-M N2-3 on 137.900 MHz and N2-4 on
 137.100 MHz, LRPT. The table first had them the other way round, as WMO
@@ -717,8 +717,8 @@ class WxSat:
         since = _iso(self.clock() - hours * 3600.0)
         return {"frames": self.decoder.images.composite(kind, since)}
 
-    def image_file(self, image_id: str, product: str, thumb: bool, ext: str = "jpg") -> bytes | None:
-        return self.decoder.images.file(image_id, product, thumb, ext)
+    def image_file(self, image_id: str, product: str, width: int = 0, ext: str = "jpg") -> bytes | None:
+        return self.decoder.images.file(image_id, product, width, ext)
 
     def radio_stopped(self) -> None:
         """The radio is stopping: a pass being recorded ends here, with the

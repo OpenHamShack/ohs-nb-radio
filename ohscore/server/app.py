@@ -2054,7 +2054,8 @@ class _Handler(BaseHTTPRequestHandler):
         """GET api/wxsat/images/<id>/<product>.<jpg|webp|png>[?w=400]: one
         picture, typed by its extension (products JPEG, projections WebP,
         PNG where Pillow lacks WebP, JPEG from before either);
-        `w` up to 400 gives its 400 px-wide thumbnail. 404 `no_image` for
+        `w` up to 400 gives its 400 px-wide thumbnail, more a copy at the
+        next 200 px (wxsat_decode.Images.file). 404 `no_image` for
         anything not in the list, a path included."""
         w = self._wxsat()
         if w is None:
@@ -2068,7 +2069,7 @@ class _Handler(BaseHTTPRequestHandler):
                 width = int(q.get("w", ["0"])[0] or 0)
             except ValueError:
                 width = 0
-            data = w.image_file(unquote(parts[-2]), stem, 0 < width <= w.THUMB_W, ext)
+            data = w.image_file(unquote(parts[-2]), stem, max(0, width), ext)
         if data is None:
             self._error(404, _("There is no such weather satellite picture"), "no_image")
             return
