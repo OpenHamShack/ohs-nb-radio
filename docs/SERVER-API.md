@@ -3113,10 +3113,10 @@ wider than the picture; absent, the full picture (2800 px wide for MSU-MR).
 
 A composite SatDump wrote black - one it could not make, as MCIR is when
 the pass could not be placed on the Earth - is not kept, so it is never in
-the list. SatDump 1.2.2 does that to every N2-3 pass since 30/10/2026, when
-the satellite began sending channels 1, 2 and 4: 1.2.2 aligns the image
-lines for 1, 2 and 3 only, so its timestamps and every map-based product
-fail (fixed in SatDump after 1.2.2, commit 9fee079, not yet released).
+the list. Stock SatDump 1.2.2 did that to N2-3 passes on 30/10/2026: a
+pass that lost signal for part of its lines got a median timestamp of -1,
+so nothing was placed on the Earth (0 GCPs). Radio's image builds 1.2.2
+with two patches of our own (store/radio/satdump/) that fix it.
 
 ### GET api/wxsat/composite?product=rgb&hours=24 (view)
 
