@@ -5,6 +5,11 @@
 # them), never from a working tree, and carried in the signed package so a
 # controller with no route out can install it (D12).
 #
+# x86_64 only (Brian, 30/10/2026: "drop arm completely"). Every box is
+# x86_64 and every store build runs on one; an arm64 image was never built
+# or tested, so each stage below refuses anything else at its first step
+# rather than half-building.
+#
 # Debian 13, as the .deb is tested on: Debian's numpy, libiio 0.26 and
 # libad9361 for the Pluto, codec2 for FreeDV, cryptography for nothing here
 # but kept because ohscore imports it lazily for update checks. No PyQt, no
@@ -32,7 +37,8 @@ COPY sdrplay/ /src/
 COPY tools/vendor/sdrplay.lock /src/
 RUN set -e; cd /src \
     && grep -v '^#' sdrplay.lock | sha256sum -c - \
-    && case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) echo "no SDRplay API for $(uname -m)"; exit 1 ;; esac \
+    && { [ "$(uname -m)" = x86_64 ] || { echo "Store Radio is built for x86_64 only, not $(uname -m)"; exit 1; }; } \
+    && arch=amd64 \
     && sh ./SDRplay_RSP_API-Linux-*.run --noexec --target api >/dev/null \
     && lib="$(cd api/$arch && ls libsdrplay_api.so.*)" \
     && mkdir -p /out/usr/local/lib /out/usr/local/bin /out/usr/share/doc/sdrplay-api \
@@ -115,6 +121,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY satdump/ /patches/
 RUN set -e; git clone -q --depth 1 --branch 1.2.2 https://github.com/SatDump/SatDump /src \
     && test "$(git -C /src rev-parse HEAD)" = 7aef0fe8441bc3eb440b1b6ba053556da5e40991 \
+    && { [ "$(uname -m)" = x86_64 ] || { echo "Store Radio is built for x86_64 only, not $(uname -m)"; exit 1; }; } \
     && git -C /src apply /patches/01-meteor-m2x-channel-offset.patch /patches/02-lrpt-timestamp-median.patch \
     && off="" && for o in AIRSPY_SDR AIRSPYHF_SDR HACKRF_SDR LIMESDR_SDR SDRPLAY_SDR PLUTOSDR_SDR BLADERF_SDR \
          USRP_SDR RTLSDR_SDR MIRISDR_SDR SDDC_SDR SOAPY_SDR RFNM_SDR NET_SOURCE_SDR REMOTE_SDR; do \
