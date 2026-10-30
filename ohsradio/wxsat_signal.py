@@ -324,6 +324,12 @@ class SignalWorker:
             ok, why = True, None
             try:
                 save(self.folder, pid, timeline(job))
+            except ValueError as e:
+                # timeline()'s own refusals (an empty recording, one with no
+                # start time): said once by done() below. A traceback here
+                # came back at every start for the 29/10 20:47Z pass, whose
+                # recording the radio stopped at 0 s.
+                ok, why = False, str(e) or type(e).__name__
             except Exception as e:  # noqa: BLE001 - a bad or missing recording fails its job, never the thread
                 log.warning("weather satellites: the signal timeline of %s failed", pid, exc_info=True)
                 ok, why = False, str(e) or type(e).__name__
