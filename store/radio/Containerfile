@@ -52,47 +52,101 @@ RUN set -e; cd /src \
 
 # SatDump's command line, for the weather-satellite pictures
 # (ohsradio/wxsat_decode.py; Brian, 29/10/2026: use the library, write no
-# decoder of our own). Debian 13 packages it (satdump 1.2.2, GPL-3.0), but
-# as one package with its GUI and every SDR it can drive: installed, it
-# pulls in GLFW, OpenGL, UHD, LimeSuite, bladeRF, HackRF, Airspy and
-# PortAudio, hundreds of MB for a program that only ever reads a file
-# here. So this stage downloads Debian's two packages without installing
-# them and keeps only what `satdump meteor_m2-x_lrpt baseband ...` loads:
-# the CLI, its core library, the Meteor plugin, the C++ composites plugin
-# (MCIR and MSA) and the SIMD ones where the architecture has them, the
-# Meteor pipeline, the stock settings and the few resources the MSU-MR
-# products read (projection settings, LUTs, scripted composites, one font,
-# one map, and Natural Earth's borders, coasts and towns). The borders are
-# not optional however the settings ask for no overlay: 1.2.2 draws one on
-# some products regardless, and without ne_10m_admin_0_countries.shp it
-# logs "does not exist!" and then spins one core for ever with every
-# picture already written (the Tablet session, 30/10/2026). The image
-# below installs the libraries those need. Upstream
-# 1.2 only: the output tree wxsat_decode.py reads and its tests' fake
-# SatDump reproduces are 1.2's, so another major version fails the build
-# here rather than every pass in the field.
+# decoder of our own). Built here from SatDump's source with two patches of
+# ours (Brian, 30/10/2026: "write our own version and fix it and we'll just
+# use that"), where until 0.1.22-beta.27 it was Debian 13's satdump 1.2.2
+# packages, unpacked.
+#
+# Why: from 30/10/2026 Meteor-M N2-3 passes decoded to dataset.json
+# "timestamp": -1, every projection logged "Solving TPS equations for 0
+# GCPs... Failure solving!", and MCIR came out black. Two faults in 1.2.2,
+# both in satdump/ beside this file, with the reasons in each patch:
+#   01-meteor-m2x-channel-offset.patch - MSU-MR channels were cut each from
+#     its own first segment, and their offsets in the 43-packet loop taken
+#     "% 43 % 14", so a pass that began mid-loop (that evening's: channels
+#     1, 2 and 4 since 30/10, 1, 2 and 3 before) had them a line apart.
+#     The same idea as upstream's "LRPT alignment rework" (b0fd1359b and
+#     e6661066a, on master by 9fee0793c7d4), written onto 1.2.2's reader:
+#     upstream's commits come with 2.0's product rework.
+#   02-lrpt-timestamp-median.patch - what actually blackened that pass: it
+#     lost signal for half its lines, a line with no data has the timestamp
+#     -1, and the projection's filter and the dataset took the median over
+#     every line, so -1, and then threw away every real timestamp. Upstream
+#     master still does this.
+# Drop 01 with the first SatDump release containing b0fd1359b, and 02 when
+# upstream's timestamp filter skips -1; until then a new pin means checking
+# both still apply (git apply fails the build if not) and still matter.
+#
+# Pinned: tag 1.2.2, commit 7aef0fe8441bc3eb440b1b6ba053556da5e40991 of
+# github.com/SatDump/SatDump (GPL-3.0); the build fails if the tag ever
+# names another commit. Upstream 1.2 only: the output tree wxsat_decode.py
+# reads and its tests' fake SatDump reproduces are 1.2's.
+#
+# Only what `satdump meteor_m2-x_lrpt baseband ...` loads is built: the CLI
+# (no GUI), its core library, the Meteor plugin, the C++ composites plugin
+# (MCIR and MSA) and the SIMD ones where the architecture has them - no SDR
+# or audio plugin, no OpenCL. Debian's package carries the GUI and every
+# SDR it can drive, hundreds of MB for a program that only ever reads a
+# file here. Then the Meteor pipeline, the stock settings and the few
+# resources the MSU-MR products read (projection settings, LUTs, scripted
+# composites, one font, one map, and Natural Earth's borders, coasts and
+# towns), the same files as Debian's (its LUT PNGs are recompressed, the
+# pixels identical). The borders are not optional however the settings ask
+# for no overlay: 1.2.2 draws one on some products regardless, and without
+# ne_10m_admin_0_countries.shp it logs "does not exist!" and then spins one
+# core for ever with every picture already written (the Tablet session,
+# 30/10/2026). The image below installs the libraries those link.
+#
+# The licence: Debian's copyright file for 1.2.2, as the image has always
+# carried it (it lists every third-party file in the source, with its
+# authors' addresses - which is why it is fetched from Debian's package here
+# rather than kept in this repository, whose published source tarball
+# refuses personal mail addresses: packaging/source-scrub.txt), SatDump's own LICENSE,
+# the patches, and a SOURCE note naming the commit they apply to.
 FROM docker.io/library/debian:13-slim AS satdump
-RUN set -e; apt-get update; cd /tmp; apt-get download satdump satdump-data \
-    && dpkg-deb -f satdump_*.deb Version | grep -q '^1\.2\.' \
-    && mkdir x && for d in satdump_*.deb satdump-data_*.deb; do dpkg-deb -x "$d" x; done \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        g++ cmake make pkg-config git ca-certificates \
+        libjemalloc-dev libvolk-dev libnng-dev libarmadillo-dev libpng-dev libfftw3-dev \
+        libzstd-dev libcurl4-openssl-dev libtiff-dev \
+    && cd /tmp && apt-get download satdump && dpkg-deb -f satdump_*.deb Version | grep -q '^1\.2\.2-' \
+    && dpkg-deb --fsys-tarfile satdump_*.deb | tar -x -O ./usr/share/doc/satdump/copyright > /copyright \
+    && test -s /copyright && rm satdump_*.deb \
+    && rm -rf /var/lib/apt/lists/*
+COPY satdump/ /patches/
+RUN set -e; git clone -q --depth 1 --branch 1.2.2 https://github.com/SatDump/SatDump /src \
+    && test "$(git -C /src rev-parse HEAD)" = 7aef0fe8441bc3eb440b1b6ba053556da5e40991 \
+    && git -C /src apply /patches/01-meteor-m2x-channel-offset.patch /patches/02-lrpt-timestamp-median.patch \
+    && off="" && for o in AIRSPY_SDR AIRSPYHF_SDR HACKRF_SDR LIMESDR_SDR SDRPLAY_SDR PLUTOSDR_SDR BLADERF_SDR \
+         USRP_SDR RTLSDR_SDR MIRISDR_SDR SDDC_SDR SOAPY_SDR RFNM_SDR NET_SOURCE_SDR REMOTE_SDR; do \
+         off="$off -DPLUGIN_${o}_SUPPORT=OFF"; done \
+    && cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+         -DBUILD_GUI=OFF -DBUILD_OPENCL=OFF -DPLUGINS_ALL=OFF -DPLUGIN_METEOR=ON -DPLUGIN_STANDARD_CPP_COMPOS=ON \
+         -DPLUGIN_SIMD_NEON=OFF -DPLUGIN_SPYSERVER_SUPPORT=OFF -DPLUGIN_RTLTCP_SUPPORT=OFF \
+         -DPLUGIN_SDRPP_SERVER_SUPPORT=OFF -DPLUGIN_PORTAUDIO_SINK=OFF -DPLUGIN_AAUDIO_SINK=OFF $off >/dev/null \
+    && { cmake --build /build -j"$(nproc)" >/build.log 2>&1 || { tail -40 /build.log; exit 1; }; } \
+    && DESTDIR=/x cmake --install /build >/dev/null \
     && L="usr/lib/$(uname -m)-linux-gnu" && R=usr/share/satdump/resources \
     && mkdir -p /out/usr/bin "/out/$L/satdump/plugins" /out/usr/share/satdump/pipelines \
-         /out/$R/maps /out/$R/fonts /out/$R/projections_settings /out/usr/share/doc/satdump \
-    && cp x/usr/bin/satdump /out/usr/bin/ \
-    && cp "x/$L/libsatdump_core.so" "/out/$L/" \
+         /out/$R/maps /out/$R/fonts /out/$R/projections_settings /out/usr/share/doc/satdump/patches \
+    && cp /x/usr/bin/satdump /out/usr/bin/ \
+    && cp "/x/$L/libsatdump_core.so" "/out/$L/" \
     && for p in meteor cpp_compos simd_avx2 simd_sse41; do \
-         f="x/$L/satdump/plugins/lib${p}_support.so"; [ -e "$f" ] || f="x/$L/satdump/plugins/lib${p}.so"; \
+         f="/x/$L/satdump/plugins/lib${p}_support.so"; [ -e "$f" ] || f="/x/$L/satdump/plugins/lib${p}.so"; \
          if [ -e "$f" ]; then cp "$f" "/out/$L/satdump/plugins/"; \
          elif [ "$p" = meteor ] || [ "$p" = cpp_compos ]; then echo "no $p plugin"; exit 1; fi; \
        done \
-    && cp x/usr/share/satdump/satdump_cfg.json /out/usr/share/satdump/ \
-    && cp x/usr/share/satdump/pipelines/Meteor-M.json /out/usr/share/satdump/pipelines/ \
-    && cp -r x/$R/lut x/$R/scripted_compos /out/$R/ \
-    && cp x/$R/projections_settings/meteor_* /out/$R/projections_settings/ \
-    && cp x/$R/fonts/font.ttf /out/$R/fonts/ && cp x/$R/maps/nasa_hd.jpg /out/$R/maps/ \
-    && cp x/$R/maps/ne_10m_admin_0_countries.shp x/$R/maps/ne_10m_coastline.shp \
-         x/$R/maps/ne_10m_populated_places_simple.json /out/$R/maps/ \
-    && cp x/usr/share/doc/satdump/copyright /out/usr/share/doc/satdump/
+    && cp /x/usr/share/satdump/satdump_cfg.json /out/usr/share/satdump/ \
+    && cp /x/usr/share/satdump/pipelines/Meteor-M.json /out/usr/share/satdump/pipelines/ \
+    && cp -r /x/$R/lut /x/$R/scripted_compos /out/$R/ \
+    && cp /x/$R/projections_settings/meteor_* /out/$R/projections_settings/ \
+    && cp /x/$R/fonts/font.ttf /out/$R/fonts/ && cp /x/$R/maps/nasa_hd.jpg /out/$R/maps/ \
+    && cp /x/$R/maps/ne_10m_admin_0_countries.shp /x/$R/maps/ne_10m_coastline.shp \
+         /x/$R/maps/ne_10m_populated_places_simple.json /out/$R/maps/ \
+    && strip --strip-unneeded /out/usr/bin/satdump "/out/$L/libsatdump_core.so" "/out/$L/satdump/plugins/"*.so \
+    && cp /copyright /src/LICENSE /out/usr/share/doc/satdump/ \
+    && cp /patches/*.patch /out/usr/share/doc/satdump/patches/ \
+    && echo "SatDump 1.2.2 (7aef0fe8441bc3eb440b1b6ba053556da5e40991, https://github.com/SatDump/SatDump) with the OpenHamShack patches in patches/, applied in order" \
+         > /out/usr/share/doc/satdump/SOURCE
 
 # radiosonde_auto_rx's programs, for Radio's radiosondes (ohsradio/sonde.py;
 # Brian, 29/10/2026: no sonde demodulator of our own). Pinned: tag v1.9.0,
