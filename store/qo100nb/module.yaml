@@ -9,7 +9,7 @@ apiVersion: dock360/v1
 # shared libraries beside this file and signs the package with the image in it.
 id: shack-qo100nb
 name: QO-100 NB
-version: 0.1.23-beta.1
+version: 0.1.23-beta.2
 summary: QO-100 narrowband - SSB, CW and the digital modes through the satellite with a Pluto.
 description: >
   OpenHamShack QO-100 NB on the controller: the narrowband transponder's
