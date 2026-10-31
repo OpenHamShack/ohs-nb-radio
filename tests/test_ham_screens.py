@@ -574,6 +574,12 @@ class Aircraft(unittest.TestCase):
         pump(self.radio, 10, until=lambda: self.radio.state()["rxOwner"] == {})
         self.assertEqual(self.radio.state()["rxOwner"], {})
 
+    def test_a_count_reads_as_a_whole_number(self):
+        from ohsradio.screens import traffic
+        # The decoder sends 2034.0; the TV drew "2,034.0" (31/10/2026).
+        self.assertEqual(traffic.aircraft_item({"icao": "406A93", "messages": 2034.0})["messagesText"], "2,034")
+        self.assertIsNone(traffic.aircraft_item({"icao": "406A93"})["messagesText"])
+
     def test_the_photo_follows_planespotters_terms(self):
         from ohsradio.screens import traffic
         icao = "F00202"

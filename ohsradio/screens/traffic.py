@@ -312,7 +312,8 @@ def aircraft_item(a: dict) -> dict:
         "trackText": None if a.get("track") is None else f"{a['track']:.0f}°",
         "squawk": a.get("squawk"), "squawkTone": "emergency" if emergency else None,
         "rssiText": None if a.get("rssiDb") is None else _("{db} dBFS").format(db=f"{a['rssiDb']:.1f}"),
-        "messagesText": None if a.get("messages") is None else f"{a['messages']:,}",
+        # The decoder's count arrives as a JSON float (2034.0): a count is whole.
+        "messagesText": None if a.get("messages") is None else f"{round(a['messages']):,}",
     }
 
 
