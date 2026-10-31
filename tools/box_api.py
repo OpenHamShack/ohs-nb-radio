@@ -82,10 +82,14 @@ class Api:
     def __init__(self, prefix: str):
         global _token
         _token = open(TOKEN_FILE).read().strip()
-        self.base = API_ROOT.rstrip("/") + "/" + prefix.strip("/") + "/api/"
+        self.app = API_ROOT.rstrip("/") + "/" + prefix.strip("/") + "/"
+        self.base = self.app + "api/"
 
-    def call(self, method: str, path: str, body: dict | None = None, timeout: float = 30) -> dict:
-        req = urllib.request.Request(self.base + path, method=method,
+    def call(self, method: str, path: str, body: dict | None = None, timeout: float = 30,
+             under_api: bool = True) -> dict:
+        """`path` under the app's api/, or, with under_api False, under the
+        app itself (ui/v2 sits beside api/, not in it)."""
+        req = urllib.request.Request((self.base if under_api else self.app) + path, method=method,
                                      data=None if body is None else json.dumps(body).encode(),
                                      headers={"Authorization": "Bearer " + _token, "Content-Type": "application/json",
                                               "Accept": "application/json"})
@@ -107,16 +111,18 @@ class Api:
 # ---------------------------------------------------------------- smoke
 
 def smoke(api: Api, checks_file: str) -> int:
-    """Each check is {"get": "api/...", "keys": [...]?}: the path must
-    answer 200 (JSON), and an object answer must hold every key named.
-    GET only: a smoke check must never change the radio."""
+    """Each check is {"get": "api/..." or "ui/v2/...", "keys": [...]?}: the
+    path must answer 200 (JSON), and an object answer must hold every key
+    named. GET only: a smoke check must never change the radio."""
     checks = json.load(open(checks_file)).get("checks", [])
     bad = 0
     for c in checks:
         path = str(c["get"])
-        rel = path[len("api/"):] if path.startswith("api/") else path
         try:
-            got = api.call("GET", rel)
+            if path.startswith("api/"):
+                got = api.call("GET", path[len("api/"):])
+            else:
+                got = api.call("GET", path, under_api=False)
         except (ApiError, OSError) as e:
             say("FAIL", "GET", path, e)
             bad += 1

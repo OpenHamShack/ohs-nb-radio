@@ -76,7 +76,13 @@ class PadActions:
         elif action == "tune":
             r.set(vfo=s["vfo"] + n * self.step_hz)
         elif action == "step":
-            self.step_i = (self.step_i + 1) % len(STEPS_HZ)
+            # Pressed (the pad's key), the next step round; turned (a
+            # screen's step control, ◀ and ▶), up or down by `step` and no
+            # further than the ends, so ◀ held at 10 Hz stays there.
+            if kind == "turn":
+                self.step_i = min(len(STEPS_HZ) - 1, max(0, self.step_i + n))
+            else:
+                self.step_i = (self.step_i + 1) % len(STEPS_HZ)
         elif action == "mode:next":
             i = self.modes.index(s["mode"]) if s["mode"] in self.modes else -1
             r.set(mode=self.modes[(i + 1) % len(self.modes)])

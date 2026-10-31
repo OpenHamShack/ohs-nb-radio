@@ -142,12 +142,22 @@ class PostInstall(unittest.TestCase):
         self.assertFailedWithRollback(res)
         self.assertEqual(self.fake.paths("POST"), [], "smoke checks only ever GET")
 
+    def test_a_ui_check_is_asked_at_the_apps_base_not_under_api(self):
+        # ui/v2 sits beside api/ (ohscore/server/uiv2.py), so the smoke list
+        # names it as "ui/v2/..." and the box is asked /radio/ui/v2/...
+        self.fake.app_extra["ui/v2/app"] = {"ui": "2.0", "app": "shack-radio"}
+        self.smoke.write_text(json.dumps({"checks": [{"get": "ui/v2/app", "keys": ["ui", "app"]}]}))
+        res = self.run_it()
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("ok GET ui/v2/app", res.stdout)
+        self.assertIn("ui/v2/app", self.fake.paths("GET"))
+
     def test_the_committed_smoke_lists_are_well_formed(self):
         for app in ("radio", "qo100nb"):
             checks = json.loads((REPO / "store" / app / "smoke.json").read_text())["checks"]
             self.assertTrue(checks)
             for c in checks:
-                self.assertTrue(c["get"].startswith("api/"), c)
+                self.assertTrue(c["get"].startswith(("api/", "ui/v2/")), c)
                 self.assertLessEqual(set(c), {"get", "keys"}, c)
 
     def test_bad_arguments_are_refused(self):

@@ -202,10 +202,9 @@ FROM docker.io/library/debian:13-slim
 # says the module is absent; soapysdr-tools for SoapySDRUtil, which is how
 # to see from a shell on the controller what the container can find
 # (podman exec ... SoapySDRUtil --find).
-# python3-jsonschema for shack_ui, which checks every ui/1 screen against
-# the pinned schema as it is served (Document.to_json), so a screen that
-# would break a client is a 500 here rather than a broken TV page; Debian
-# 13's 4.19 meets the wheel's >=4.18.
+# No python3-jsonschema any more: shack_ui v2 (ui/2 screens) checks each
+# screen with its own named rules, standard library only, where v1 needed
+# jsonschema to check ui/1 screens against a schema as they were served.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-numpy \
@@ -213,7 +212,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-paramiko \
         python3-libiio \
         python3-soapysdr \
-        python3-jsonschema \
         soapysdr-tools \
         libusb-1.0-0 \
         librtlsdr0 \
@@ -269,7 +267,7 @@ RUN cd /tmp/vendor \
          echo "$want  $f" | sha256sum -c - || exit 1; \
          python3 -m zipfile -e "$f" "$site"; \
        done \
-    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum, shack_ui, shack_packet.sdr, sgp4.api; shack_bandplan.load()" \
+    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum, shack_ui, shack_packet.sdr, sgp4.api; shack_bandplan.load(); shack_ui.Symbols.load('aircraft'); shack_ui.LiveHub" \
     && arch="$(uname -m)" \
     && f="$(ls shack_sdr-*-manylinux_*_${arch}.whl)" \
     && want="$(sed -n "s/^shack-sdr==.*--hash=sha256:\([0-9a-f]*\).*_${arch}$/\1/p" shack-sdr.lock)" \

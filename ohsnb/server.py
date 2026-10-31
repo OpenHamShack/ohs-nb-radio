@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from ohscore.server.app import AppInfo
 
-from . import bandplan
+from . import bandplan, screens
+from .overlay import NbOverlay
 
 DEVICES = {"pluto": "pluto-1"}
 
@@ -26,5 +27,8 @@ def onair_body(radio) -> dict:
 
 
 def info(version: str, commit: str = "") -> AppInfo:
+    # screens: NB's ui/2 screens (screens.py); overlay: the labels on its
+    # scopes (overlay.py), NB's band plan and beacons in place of the
+    # terrestrial plan's one "satellites" segment.
     return AppInfo("shack-qo100nb", "qo100nb", "QO-100 NB", version, onair_body,
-                   lambda dev: DEVICES.get(dev, ""), commit)
+                   lambda dev: DEVICES.get(dev, ""), commit, screens=screens.NbScreens(), overlay=NbOverlay)

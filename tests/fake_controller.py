@@ -42,6 +42,7 @@ class FakeRadio:
         self.messages = 7         # what an AIS/ADS-B session says its decoder heard
         self.iq = None            # (rate, centre) -> ci16 bytes a recording holds; else a small fixed pattern
         self.extra = {}           # GET path -> JSON answered (smoke checks)
+        self.app_extra = {}       # likewise beside api/, at the app's base (ui/v2/...)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
@@ -188,6 +189,14 @@ class FakeRadio:
                 base = f"/{fake.prefix}/api/"
                 if self.headers.get("Authorization") != f"Bearer {TOKEN}":
                     status, out = 401, {"error": "sign in", "code": "unauthorised"}
+                elif u.path.startswith(f"/{fake.prefix}/ui/"):
+                    # ui/v2 sits beside api/, at the app's base: answered
+                    # from `app_extra` only, so one asked under api/ misses.
+                    path = u.path[len(f"/{fake.prefix}/"):]
+                    with fake.lock:
+                        fake.calls.append((method, path, body))
+                    status, out = (200, fake.app_extra[path]) if method == "GET" and path in fake.app_extra else \
+                        (404, {"error": "not found", "code": "not_found"})
                 elif not u.path.startswith(base):
                     status, out = 404, {"error": "not found", "code": "not_found"}
                 else:

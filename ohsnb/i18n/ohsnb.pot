@@ -13,8 +13,23 @@ msgstr ""
 msgid "A recording is running: the hold is marked in it."
 msgstr ""
 
+#: ohsnb/screens.py:377
+#: ohsnb/screens.py:378
+msgid "AGC"
+msgstr ""
+
+#: ohsnb/screens.py:212
+msgid "Auto"
+msgstr ""
+
 #: ohsnb/rigsetup.py:446
 msgid "Band NB tunes (selected)"
+msgstr ""
+
+#: ohsnb/screens.py:431
+#: ohsnb/screens.py:443
+#: ohsnb/screens.py:561
+msgid "Band activity"
 msgstr ""
 
 #: ohsnb/rigsetup.py:435
@@ -23,13 +38,42 @@ msgstr ""
 msgid "Band on MAIN"
 msgstr ""
 
+#: ohsnb/screens.py:354
+#: ohsnb/screens.py:331
+msgid "Beacon"
+msgstr ""
+
+#: ohsnb/screens.py:297
+#: ohsnb/screens.py:330
+#: ohsnb/screens.py:389
+#: ohsnb/screens.py:390
+msgid "Beacon lock"
+msgstr ""
+
 #: ohsnb/radio.py:851
 #, python-brace-format
 msgid "Beacon lock: no beacon within +-{tight:g} kHz of the correction held; searching +-{search:g} kHz"
 msgstr ""
 
+#: ohsnb/screens.py:1072
+#, python-brace-format
+msgid "Block {t}"
+msgstr ""
+
+#: ohsnb/screens.py:350
+msgid "Bookmark"
+msgstr ""
+
 #: ohsnb/ui/settings.py:24
 msgid "CI-V address: a hex number such as A2"
+msgstr ""
+
+#: ohsnb/screens.py:409
+msgid "CW speed"
+msgstr ""
+
+#: ohsnb/screens.py:367
+msgid "Call CQ"
 msgstr ""
 
 #: ohsnb/rigsetup.py:626
@@ -40,9 +84,19 @@ msgstr ""
 msgid "Choose your upconverter (Settings > Transmitter, from the list in Settings > Converters): OpenHamShack QO-100 NB cannot work out where to put the IC-9700 without its local oscillator"
 msgstr ""
 
+#: ohsnb/screens.py:317
+#: ohsnb/screens.py:511
+#: ohsnb/screens.py:317
+msgid "Clear"
+msgstr ""
+
 #: ohsnb/extrig.py:306
 #, python-brace-format
 msgid "Could not unkey the IC-9700 ({error}): NB cannot confirm it stopped transmitting - check the radio, and release it there if it is still on the air"
+msgstr ""
+
+#: ohsnb/screens.py:268
+msgid "Country"
 msgstr ""
 
 #: ohsnb/rigsetup.py:421
@@ -67,9 +121,73 @@ msgstr ""
 msgid "DATA MOD set to USB"
 msgstr ""
 
+#: ohsnb/screens.py:268
+msgid "DT"
+msgstr ""
+
+#: ohsnb/screens.py:481
+msgid "DX cluster"
+msgstr ""
+
+#: ohsnb/screens.py:499
+#: ohsnb/screens.py:338
+#: ohsnb/screens.py:506
+msgid "Decodes"
+msgstr ""
+
+#: ohsnb/screens.py:320
+#: ohsnb/screens.py:520
+#: ohsnb/screens.py:523
+msgid "Decodes appear here in FT8, FT4, Q65 and JS8"
+msgstr ""
+
+#: ohsnb/screens.py:963
+msgid "Enable TX armed"
+msgstr ""
+
+#: ohsnb/screens.py:149
+msgid "Error"
+msgstr ""
+
+#: ohsnb/screens.py:212
+msgid "Fast"
+msgstr ""
+
+#: ohsnb/screens.py:381
+msgid "Filter high (Hz)"
+msgstr ""
+
+#: ohsnb/screens.py:380
+msgid "Filter low (Hz)"
+msgstr ""
+
+#: ohsnb/screens.py:268
+msgid "Freq"
+msgstr ""
+
+#: ohsnb/screens.py:316
+msgid "Full screen"
+msgstr ""
+
 #: ohsnb/radio.py:877
 #, python-brace-format
 msgid "GPS-locked LNB: predicted transmit correction {pred:+.0f} Hz"
+msgstr ""
+
+#: ohsnb/screens.py:379
+msgid "Gain (AGC off)"
+msgstr ""
+
+#: ohsnb/screens.py:370
+msgid "Halt"
+msgstr ""
+
+#: ohsnb/screens.py:155
+msgid "Held"
+msgstr ""
+
+#: ohsnb/screens.py:213
+msgid "Hold"
 msgstr ""
 
 #: ohsnb/rigsetup.py:770
@@ -87,8 +205,39 @@ msgstr ""
 msgid "LEILA evidence saved: {name} ({seconds:.0f} s of receive IQ, in Recordings)"
 msgstr ""
 
+#: ohsnb/screens.py:762
+msgid "LEILA sounded"
+msgstr ""
+
+#: ohsnb/overlay.py:140
+#: ohsnb/screens.py:757
+msgid "LEILA?"
+msgstr ""
+
+#: ohsnb/screens.py:148
+#: ohsnb/screens.py:578
+msgid "Listening"
+msgstr ""
+
+#: ohsnb/screens.py:391
+#: ohsnb/screens.py:392
+msgid "Lock to"
+msgstr ""
+
+#: ohsnb/screens.py:154
+msgid "Locked"
+msgstr ""
+
+#: ohsnb/screens.py:154
+msgid "Lost"
+msgstr ""
+
 #: ohsnb/extrig.py:496
 msgid "Lost the IC-9700 link while it was transmitting: receive audio is back on, and NB no longer knows whether it is transmitting"
+msgstr ""
+
+#: ohsnb/screens.py:213
+msgid "Lower"
 msgstr ""
 
 #: ohsnb/rigsetup.py:586
@@ -104,12 +253,81 @@ msgstr ""
 msgid "MAIN selected"
 msgstr ""
 
+#: ohsnb/screens.py:213
+#: ohsnb/screens.py:155
+msgid "Manual"
+msgstr ""
+
+#: ohsnb/screens.py:212
+msgid "Medium"
+msgstr ""
+
+#: ohsnb/screens.py:268
+msgid "Message"
+msgstr ""
+
+#: ohsnb/screens.py:404
+msgid "Microphone gain (dB)"
+msgstr ""
+
+#: ohsnb/screens.py:213
+msgid "Middle"
+msgstr ""
+
+#: ohsnb/screens.py:474
+msgid "Middle beacon text"
+msgstr ""
+
+#: ohsnb/screens.py:296
+msgid "Mode"
+msgstr ""
+
+#: ohsnb/screens.py:475
+msgid "Multimedia beacon"
+msgstr ""
+
+#: ohsnb/screens.py:355
+#: ohsnb/screens.py:284
+#: ohsnb/screens.py:436
+#: ohsnb/screens.py:503
+msgid "Mute"
+msgstr ""
+
 #: ohsnb/rigsetup.py:314
 msgid "NB is transmitting: the setup assistant waits until it has stopped"
 msgstr ""
 
 #: ohsnb/rigsetup.py:747
 msgid "NB's level was not changed."
+msgstr ""
+
+#: ohsnb/screens.py:705
+#, python-brace-format
+msgid "Near {name}"
+msgstr ""
+
+#: ohsnb/screens.py:238
+msgid "Next bookmark"
+msgstr ""
+
+#: ohsnb/screens.py:939
+msgid "No"
+msgstr ""
+
+#: ohsnb/screens.py:488
+msgid "No DX-cluster spots from the beacon yet"
+msgstr ""
+
+#: ohsnb/screens.py:383
+msgid "Noise blanker"
+msgstr ""
+
+#: ohsnb/screens.py:351
+msgid "Noise reduction"
+msgstr ""
+
+#: ohsnb/screens.py:384
+msgid "Noise reduction strength"
 msgstr ""
 
 #: ohsnb/radio.py:725
@@ -121,12 +339,37 @@ msgstr ""
 msgid "Nothing has been kept yet: capture has only just been turned on"
 msgstr ""
 
+#: ohsnb/screens.py:456
+msgid "Nothing over the beacon in the last 30 minutes"
+msgstr ""
+
 #: ohsnb/rigsetup.py:457
 msgid "Nothing to change: the IC-9700 is already set up for NB"
 msgstr ""
 
 #: ohsnb/rigsetup.py:548
 msgid "Nothing to restore: the setup assistant has not changed the radio"
+msgstr ""
+
+#: ohsnb/screens.py:146
+#: ohsnb/screens.py:212
+#: ohsnb/screens.py:147
+#: ohsnb/screens.py:156
+msgid "Off"
+msgstr ""
+
+#: ohsnb/screens.py:568
+#: ohsnb/screens.py:897
+#: ohsnb/screens.py:938
+msgid "On the air"
+msgstr ""
+
+#: ohsnb/overlay.py:145
+msgid "Over"
+msgstr ""
+
+#: ohsnb/screens.py:454
+msgid "Over the beacon, and LEILA"
 msgstr ""
 
 #: ohsnb/rigdiag.py:410
@@ -139,9 +382,48 @@ msgstr ""
 msgid "Own signal not found near the expected place; searching the whole band"
 msgstr ""
 
+#: ohsnb/screens.py:239
+msgid "Previous bookmark"
+msgstr ""
+
+#: ohsnb/screens.py:277
+#: ohsnb/screens.py:560
+msgid "QO-100 NB"
+msgstr ""
+
+#: ohsnb/screens.py:468
+#: ohsnb/screens.py:473
+#: ohsnb/screens.py:562
+msgid "QO-100 beacon"
+msgstr ""
+
 #: ohsnb/rigsetup.py:778
 #, python-brace-format
 msgid "RF POWER is not low{rf}, so the audio reaching the radio is too hot. Its USB MOD Level is {pct} %, in the usual range, so Check and set leaves it: turn it down on the radio (SET > Connectors > MOD Input > USB MOD Level), to 20 % say, then set the level again."
+msgstr ""
+
+#: ohsnb/screens.py:386
+msgid "RIT"
+msgstr ""
+
+#: ohsnb/screens.py:387
+msgid "RIT offset"
+msgstr ""
+
+#: ohsnb/screens.py:900
+#, python-brace-format
+msgid "RIT {hz:+.0f} Hz"
+msgstr ""
+
+#: ohsnb/screens.py:329
+msgid "Radio"
+msgstr ""
+
+#: ohsnb/screens.py:352
+#: ohsnb/screens.py:282
+#: ohsnb/screens.py:333
+#: ohsnb/screens.py:374
+msgid "Receive"
 msgstr ""
 
 #: ohsnb/radio.py:1472
@@ -152,6 +434,21 @@ msgstr ""
 #: ohsnb/radio.py:1476
 #, python-brace-format
 msgid "Receive gain held at {db:g} dB (manual), where the AGC had it. The AGC is back when you close this."
+msgstr ""
+
+#: ohsnb/screens.py:148
+#: ohsnb/screens.py:578
+#: ohsnb/screens.py:938
+msgid "Receiving"
+msgstr ""
+
+#: ohsnb/screens.py:335
+#: ohsnb/screens.py:939
+msgid "Recording"
+msgstr ""
+
+#: ohsnb/screens.py:931
+msgid "Running"
 msgstr ""
 
 #: ohsnb/rigsetup.py:581
@@ -179,8 +476,68 @@ msgstr ""
 msgid "Save Settings with IC-9700 (CI-V) as the transmitter first: the level set keys it through NB's link"
 msgstr ""
 
+#: ohsnb/screens.py:147
+#: ohsnb/screens.py:154
+msgid "Searching"
+msgstr ""
+
+#: ohsnb/screens.py:332
+msgid "Segment"
+msgstr ""
+
 #: ohsnb/rigsetup.py:307
 msgid "Set the IC-9700's CI-V port first (Settings > Transmitter)"
+msgstr ""
+
+#: ohsnb/screens.py:301
+msgid "Signal"
+msgstr ""
+
+#: ohsnb/screens.py:353
+#: ohsnb/screens.py:339
+msgid "Signals"
+msgstr ""
+
+#: ohsnb/screens.py:450
+msgid "Signals on the transponder"
+msgstr ""
+
+#: ohsnb/screens.py:298
+msgid "Simulator"
+msgstr ""
+
+#: ohsnb/screens.py:575
+msgid "Skimmer off"
+msgstr ""
+
+#: ohsnb/screens.py:943
+msgid "Skimmer off: Settings › Band"
+msgstr ""
+
+#: ohsnb/screens.py:575
+msgid "Skimming"
+msgstr ""
+
+#: ohsnb/screens.py:212
+msgid "Slow"
+msgstr ""
+
+#: ohsnb/screens.py:407
+msgid "Split"
+msgstr ""
+
+#: ohsnb/screens.py:652
+msgid "Start the radio"
+msgstr ""
+
+#: ohsnb/screens.py:283
+#: ohsnb/screens.py:340
+msgid "Status"
+msgstr ""
+
+#: ohsnb/screens.py:570
+#: ohsnb/screens.py:931
+msgid "Stopped"
 msgstr ""
 
 #: ohsnb/rigsetup.py:750
@@ -318,6 +675,14 @@ msgstr ""
 msgid "The over-power watch is off (Settings › LNB & locks)"
 msgstr ""
 
+#: ohsnb/screens.py:653
+msgid "The radio is starting."
+msgstr ""
+
+#: ohsnb/screens.py:650
+msgid "The radio is stopped."
+msgstr ""
+
 #: ohsnb/rigsetup.py:794
 #, python-brace-format
 msgid "The radio's USB MOD Level ({pct} %) was left as it is: it is in the usual range, and NB's level is the one you can see and move."
@@ -344,6 +709,11 @@ msgstr ""
 msgid "The radio's USB MOD Level is {pct} %: raise it on the radio (SET > Connectors > MOD Input > USB MOD Level), or the computer's volume for the IC-9700 sound device, then set the level again."
 msgstr ""
 
+#: ohsnb/screens.py:327
+#: ohsnb/screens.py:453
+msgid "The skimmer has heard nothing yet"
+msgstr ""
+
 #: ohsnb/state.py:360
 msgid "The transmit filter may be 2.7 kHz wide at most (QO-100 rule)"
 msgstr ""
@@ -365,6 +735,19 @@ msgstr ""
 msgid "Tick that the IC-9700 is into a dummy load first: the sound device test transmits"
 msgstr ""
 
+#: ohsnb/screens.py:147
+msgid "Tracking"
+msgstr ""
+
+#: ohsnb/screens.py:334
+#: ohsnb/screens.py:400
+msgid "Transmit"
+msgstr ""
+
+#: ohsnb/screens.py:401
+msgid "Transmit gain (dB)"
+msgstr ""
+
 #: ohsnb/state.py:366
 #, python-brace-format
 msgid "Transmit gain cannot exceed the ceiling of {ceiling:g} dB set in Settings"
@@ -373,6 +756,10 @@ msgstr ""
 #: ohsnb/radio.py:308
 #, python-brace-format
 msgid "Transmit gain cannot exceed {cap:g} dB: more would overdrive {converter} (Settings › Converters)"
+msgstr ""
+
+#: ohsnb/screens.py:369
+msgid "Transmit settings"
 msgstr ""
 
 #: ohsnb/radio.py:1378
@@ -402,13 +789,37 @@ msgstr ""
 msgid "USB MOD Level set to {pct} %"
 msgstr ""
 
+#: ohsnb/screens.py:149
+msgid "Unavailable"
+msgstr ""
+
 #: ohsnb/radio.py:1694
 msgid "Unkeyed: lost the IC-9700 link mid-over. NB cannot confirm the radio stopped transmitting - check it, and release it there if it is still on the air"
+msgstr ""
+
+#: ohsnb/screens.py:214
+msgid "Upper"
+msgstr ""
+
+#: ohsnb/screens.py:336
+msgid "Version"
+msgstr ""
+
+#: ohsnb/screens.py:607
+msgid "View only: this device cannot change the radio"
+msgstr ""
+
+#: ohsnb/screens.py:480
+msgid "Waiting for the middle beacon's text (a block every 25 s)"
 msgstr ""
 
 #: ohsnb/extrig.py:180
 #, python-brace-format
 msgid "With a {lo:.3f} MHz LO ({how} = uplink), the uplink {ul_lo}-{ul_hi} MHz needs the IC-9700 on {rig_lo:.3f}-{rig_hi:.3f} MHz, outside its {band} range ({band_lo:.0f}-{band_hi:.0f} MHz). Check the LO, and whether the mixer is low- or high-side"
+msgstr ""
+
+#: ohsnb/screens.py:394
+msgid "Zoom span"
 msgstr ""
 
 #: ohsnb/dsp/ao40.py:118
@@ -432,6 +843,10 @@ msgstr ""
 #: ohsnb/radio.py:698
 #, python-brace-format
 msgid "beacon must be one of {names}"
+msgstr ""
+
+#: ohsnb/screens.py:268
+msgid "dB"
 msgstr ""
 
 #: ohsnb/rigsetup.py:443
@@ -460,6 +875,10 @@ msgstr ""
 
 #: ohsnb/rigsetup.py:423
 msgid "leave (includes USB)"
+msgstr ""
+
+#: ohsnb/screens.py:748
+msgid "measured"
 msgstr ""
 
 #: ohsnb/rigsetup.py:442
@@ -547,9 +966,30 @@ msgstr ""
 msgid "{converter} is receive only: mark it TX only or RX/TX in Settings > Converters to transmit through it"
 msgstr ""
 
+#: ohsnb/screens.py:758
+#, python-brace-format
+msgid "{db:+.1f} dB against the beacon"
+msgstr ""
+
+#: ohsnb/overlay.py:142
+#: ohsnb/screens.py:761
+#, python-brace-format
+msgid "{db:+.1f} dB over the beacon"
+msgstr ""
+
+#: ohsnb/screens.py:685
+#, python-brace-format
+msgid "{dt} s"
+msgstr ""
+
 #: ohsnb/analyse.py:1404
 #, python-brace-format
 msgid "{file} has no usable core:sample_rate"
+msgstr ""
+
+#: ohsnb/screens.py:686
+#, python-brace-format
+msgid "{hz} Hz"
 msgstr ""
 
 #: ohsnb/analyse.py:1293

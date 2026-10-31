@@ -89,6 +89,19 @@ class Actions(unittest.TestCase):
             self.assertEqual(pa.faces()["faces"]["mute"]["l2"], "ON")
             pa.perform("no-such-action")       # a layout naming an unknown action does nothing
 
+    def test_the_step_turned_stops_at_its_ends(self):
+        # A screen's ◀ ▶ step control turns it; the pad's key cycles it.
+        with tempfile.TemporaryDirectory() as d:
+            pa = helpers.make_radio(d).pad_actions()
+            pa.perform("step", "turn", 2)
+            self.assertEqual(pa.step_hz, 5000)
+            pa.perform("step", "turn", 9)
+            self.assertEqual(pa.step_hz, 10000)
+            pa.perform("step", "turn", -9)
+            self.assertEqual(pa.step_hz, 10)
+            pa.perform("step")
+            self.assertEqual(pa.step_hz, 100)
+
     def test_the_record_key_goes_amber_while_recording(self):
         with tempfile.TemporaryDirectory() as d:
             r = helpers.make_radio(d, mode="usb", simSignals=False)

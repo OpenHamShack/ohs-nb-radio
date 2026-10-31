@@ -67,7 +67,7 @@ the desktop apps.
 | `POST api/overpower/capture` | control | save the last 20 s of receive IQ now (the LEILA evidence ring; `leilaCapture` must be on): `202 {"ok": true}`, the file then appears in Recordings as `…-LEILA`; `409 nothing_to_save` with the sentence why not. Receive only. |
 | `GET api/audio/rx[?channels=1\|2][&behind=<s>][&client=<id>]` | view | receive audio, raw PCM over a long-lived response, its format in the headers before any audio: `Content-Type: audio/L16; rate=<rate>; channels=<n>` and `X-Audio-Format: {"encoding": "s16le", "rate": <rate>, "channels": <n>}`. The rate is the app's: **48000 for Radio** (since 23/10/2026), 12000 for QO-100 NB. **Mono unless `?channels=2`** (below, "Receive audio format"); `400 bad_channels` for anything but 1 or 2. Radio: `behind=<s>` plays the timeshift from that long ago (below, "Timeshift"), `409 no_timeshift` without one |
 | `GET api/audio/tx` | transmit | WebSocket: binary frames of PCM are the microphone while it is open (voice modes; keying is still `api/ptt`), always **12 kHz mono s16le** in both apps; the first text frame is `{"kind": "hello", "format": {"encoding": "s16le", "rate": 12000, "channels": 1}}` |
-| `POST api/shack/pad/action` | control (transmit for `power`) | the controller's input host: `{"action", "kind", "step"}` from `<app>/pad-actions.json`; answers the pad faces. `ptt` is refused here: a pad keys through `api/ptt` like any client. |
+| `POST api/shack/pad/action` | control (transmit for `power`) | the controller's input host: `{"action", "kind", "step"}` from `<app>/pad-actions.json`; answers the pad faces. `ptt` is refused here: a pad keys through `api/ptt` like any client. `step` pressed goes round the tuning steps (10 Hz to 10 kHz); turned (`"kind": "turn", "step": ±n`) it moves up or down and stops at the ends (Radio's ui/2 home's ◀ STEP ▶). |
 | `GET api/shack/busy` | the platform | `{"busy": <on air>, "why"}` for the update gate |
 | `POST api/shack/release` | the platform | the broker asks for the radio back: `409 {"onAir": true}` while keyed (unless `"stop": true`), else `202` and the radio stops |
 | `GET api/recordings` | view | the recordings, newest first, and the status below (Recordings) |
@@ -93,9 +93,12 @@ the desktop apps.
 | `GET api/local-frequencies?radiusKm=&category=` | view | Radio only: what there is to listen to near the station (below, "Local frequencies") |
 | `POST api/local-frequencies/mine`, `PUT`/`DELETE api/local-frequencies/mine/{id}` | control | Radio only: the operator's own list ("my frequencies") |
 | `POST api/local-frequencies/refresh` | control **and** the administrator flag | Radio only: download newer data (below) |
-| `GET ui/v1/app` | view | Radio only (404 `not_found` in QO-100 NB): the ui/1 app descriptor the OpenHamShack launcher draws its tiles from (below, "ui/1 screens") |
-| `GET ui/v1/screen/{id}[?params]` | view | Radio only: one ui/1 screen document, `radio/home`, `radio/dab`, `radio/fm` or `radio/ships`; `404 unknown_screen`, `406 ui_unsupported` for a client that takes only another major version (below) |
-| `GET ui/v1/data/dab` | view | Radio only: the DAB station playing, flat for a screen to bind to (below) |
+| `GET ui/v2/app`, `GET ui/v2/status` | view | the launcher entries and each tile's status (below, "ui/2 screens" and "ui/2 screens (QO-100 NB)") |
+| `GET ui/v2/screen/{id}[?params]` | view | one ui/2 screen document; `ETag`, `304`, `406 ui_unsupported` for another ui major, `404 unknown_screen` (below) |
+| `GET ui/v2/live/{id}[?params]` | view | WebSocket: the screen's live patch frames (below) |
+| `GET ui/v2/poll/{id}` | view | a polled screen's ops: Weather Sats (below) |
+| `POST`/`DELETE ui/v2/hold/dmr`, `POST ui/v2/hold/dmr-listen` | control | Radio only: the DMR screen's hold on its channel, and which slots it hears (below) |
+| `POST ui/v2/hold/receiver {"client"}`, `DELETE ui/v2/hold/receiver?client=` | control | QO-100 NB only: the receiver hold its screens declare (below) |
 
 ## Decoders
 
@@ -532,9 +535,18 @@ An item (§3.2): `id`, `kind`, `layer`, `loHz`, `hiHz`, `centreHz`,
 | `stations` | `station` | the band scan's FM list (by `best.hz`, labelled by PS) and DAB ensembles | `station.fm`, `station.dab` | FM tune in `wfm`; DAB one action per service, playing it (`POST api/decoders/sessions`) |
 | `sessions` | `session` | decoder sessions, but the mode's own (`vfo`) | `session.<decoder>`; `active` while `running` or `synced` | none |
 
-Every action is at Control level. QO-100 NB has the band and dial
-layers and its sessions; it has no local frequencies or station lists.
-Spots, bookmarks, alerts and signals are not produced yet. Labels are in
+Every action is at Control level. QO-100 NB has no local frequencies
+or station lists, and its own producer (`ohsnb/overlay.py`) adds:
+
+| Layer | Kind | From | `role` | First action |
+|---|---|---|---|---|
+| `band` | `segment` | NB's own plan (`ohsnb/bandplan.py` SEGMENTS), in place of the terrestrial plan's single "satellites" segment | `segment.cw`, `segment.cw-digi`, `segment.ssb`, `segment.all`, `segment.beacon` (no transmitting) | none |
+| `bookmarks` | `bookmark` | the memories (`api/memories`), but a beacon's own preset; named at any zoom | `bookmark` (NB's presets), `bookmark.mine` | tune to it in its mode |
+| `beacons` | `beacon` | the four QO-100 beacons (`bandplan.BEACONS`); `active` for the one beacon lock follows; named at any zoom | `beacon.qo100` | its preset's tune |
+| `signals` | `signal` | the band skimmer's last list: only what it has named (SSB, a calling window, FT8...) and heard lately, never a bare carrier; named from 150 Hz a pixel | `signal` | tune |
+| `alerts` | `alert` | the over-power watch's open events | `alert.overpower`, `alert.leila` | tune |
+
+Spots are produced by neither app. Labels are in
 the server's language, like every other sentence it sends (it does not
 read `Accept-Language` yet); a segment's label is the dataset's own.
 Action paths are relative to the app's base and carry no `url`.
@@ -1079,9 +1091,10 @@ runs at a time.
 {"params": {"service": "C3A7"}}`. Another `block` is `400 bad_params`:
 stop the session and start one there.
 
-**Without the session's id** (what a ui/1 screen sends, since its
-actions are POSTs to fixed paths: "ui/1 screens" below), on the same
-`POST api/decoders/sessions` at the same control level:
+**Without the session's id** (what a server-driven screen sends, since
+its actions are fixed paths that cannot name an id the box made: "ui/2
+screens" below), on the same `POST api/decoders/sessions` at the same
+control level:
 
 - `{"decoder": "dab", "stop": true}` stops whichever DAB station plays,
   as the DELETE above would: `200 {"stopped": true, "id"}`, or `404
@@ -2213,6 +2226,14 @@ Every answer of the session routes is the session view (also `ais` in
   (32); `503 not_running` (the radio is stopped: "Start the radio to see
   ships"). A view-level client (`403 level_too_low`) cannot start AIS but
   may read the table: show what is there and say decoding needs Control.
+  `span_pinned` and `receiver_busy` (here and for ADS-B, APRS and
+  radiosondes) also carry `actions`, the calls that clear them, for a
+  screen's hold banner (SCREENS.md §5.3, §6): the same start with
+  `"dropSessions": true` ("Stop the decoders"); `POST api/decoders/sessions
+  {"decoder": "dab", "stop": true}` ("Stop DAB"); `DELETE
+  api/<other map>/session?all=1` ("Stop the ship map", ...). Each is
+  `{"do": "call", "method", "path", "body"?, "level": "control", "text"}`,
+  with `$client` for the client's own id.
 - **Gain and notches:** AIS's own, `aisGain` ("Each job's receiver gain":
   AGC by default, the operator's back after); set to a figure,
   `broadcastGain` steps it down only if the receiver reports overload (and
@@ -3332,90 +3353,140 @@ so offline costs one request a minute, not one a tile; at most
 first. Settings: `mapOnlineTiles` (off: no traffic at all and no tile,
 cached or not) and `mapTileCacheMb`.
 
-## ui/1 screens (Radio)
+## ui/2 screens (Radio)
 
-Radio's TV screens as server-driven ui/1 documents (openhamshack
-`docs/CLIENT-UI-PLAN.md` §5-6, step 1b), which the OpenHamShack client
-draws natively; a new panel then needs no client release. Built with
-ohs-libs `shack_ui` (pinned in `tools/vendor`), which checks every
-document against ohs-libs `spec/schemas/ui.schema.json` as it is served,
-so a screen that would break a client, or that has an action declaring
-`transmit`, is never sent. Code `ohsradio/screens.py`,
-`ohscore/server/uiv1.py`; tests `tests/test_ham_screens.py`; what each
-screen replaces on the Android TV, and what it leaves out,
-`docs/UI-PARITY-RADIO.md`. Receive only: every action is an existing
-route at its existing level, and no screen places `ptt` or `enableTx`.
+Radio's screens as server-driven ui/2 documents (openhamshack
+`docs/contract/SCREENS.md`, which is the wire contract; this section is
+only what Radio adds to it). The OpenHamShack client draws them natively;
+a new screen, layer or symbol is a Radio release, not a client one. Built
+with ohs-libs `shack_ui` v2 (pinned in `tools/vendor`): every document
+passes the contract's rules as it is served. Code
+`ohscore/server/uiv2.py` (the routes, shared) and `ohsradio/screens/`;
+tests `tests/test_ham_screens.py`; what each replaces on the Android TV,
+`docs/UI-PARITY-RADIO.md`. Receive only: no document places `ptt` or
+`txArm`, and every call is an existing route at its existing level.
+Replaces ui/1 (`ui/v1/...`), removed on 30/10/2026.
 
-**Requests.** The client sends `X-OpenHamShack-UI: 1.0` and
-`X-OpenHamShack-Components: waterfall/1, map.ais/1, audio/1, ...` (a
-native component, or one of its layers after a dot, and the newest
-version it draws). A native component the list lacks is left out and its
-fallback sent in its place; with no header at all (a browser, curl) every
-native component goes out with its fallback beside it. A client whose
-`X-OpenHamShack-UI` has another major version gets `406 {"code":
-"ui_unsupported", "ui": ["1.0"]}`. Each answer carries `ETag` (the
-document's `rev`, a hash of its content) and `Cache-Control: no-cache`;
-`If-None-Match` with it answers `304`. Every path in a document is
-relative to the app's base (`api/set`, never `/api/set`), whatever
-`X-Forwarded-Prefix` says; documents are not given `url`s beside their
-paths, as other answers are.
+**Requests** carry SCREENS.md §11's headers: `X-OpenHamShack-UI: 2.<minor>`
+(another major: `406 {"code": "ui_unsupported", "ui": ["2.0"]}`),
+`X-OpenHamShack-Form: tv|phone|tablet; w=; h=` (none: a TV),
+`X-OpenHamShack-Client` (the presence id, which `$client` becomes) and
+`Accept-Language`. The level in a document is the controller's, as
+for every route. Every path in a document is relative to the app's base,
+whatever `X-Forwarded-Prefix` says; no `url` is added beside them.
 
-**`GET ui/v1/app`**:
+**`GET ui/v2/app`**: `{"ui": "2.0", "app": "shack-radio", "kind": "radio",
+"name", "version", "minClient": "2.0", "entries": [...]}`, entries in
+launcher order, each `{"id", "title", "icon", "screen", "forms"}`:
+`radio` (`radio/home`), `dab`, `fm`, `ships`, `aircraft`, `wxsat`,
+`aprs`, `sonde` (`radio/sonde`), `dmr`. The maps are offered to `tv` and
+`tablet` only. An entry whose feature this Radio lacks is left out. No
+`art` yet: each names an icon from the client's set.
 
-```json
-{"ui": "1.0", "app": "shack-radio", "kind": "radio", "name": "Radio", "version": "0.1.22",
- "icon": null, "minClient": "1.0", "spectrum": 1, "overlay": 1,
- "screens": ["radio/home", "radio/dab", "radio/fm", "radio/ships"],
- "data": {"status": {"src": "get:api/status", "poll": 15}},
- "status": {"text": {"bind": "status.dialLabel.text"}, "onAir": {"bind": "status.onAir"},
-            "running": {"bind": "status.running"}},
- "entries": [{"id": "radio", "title": "Radio", "screen": "radio/home", "icon": "radio",
-              "status": {"text": {"bind": "status.dialLabel.text"}, "onAir": {"bind": "status.onAir"}}},
-             {"id": "dab", "title": "DAB Radio", "screen": "radio/dab", "icon": "dab", "status": {...}},
-             {"id": "fm", "title": "FM", "screen": "radio/fm", "icon": "fm", "status": {...}},
-             {"id": "ships", "title": "Ships", "screen": "radio/ships", "icon": "ships", "status": {...}}]}
-```
+**`GET ui/v2/status`**: `{"entries": {"<id>": {"status", "tone"}}}` for
+the tiles with something to say: `radio` (the dial label or frequency,
+`good`; `Stopped`, `muted`; `On the air`, `onAir`), `dab` (the station),
+`fm` (in wide FM), each map while its session runs, `wxsat` (waiting,
+recording `onAir`, decoding), `dmr` (the channels decoding).
 
-`entries` are the launcher's tiles in that order (§6.2); each `status`
-binds into `data` (`api/status`, every 15 s): DAB's text is
-`rxOwner.text`, Ships' `ais.text`. `icon` is null until Radio serves a PNG
-of its own; an entry's `icon` names one the client has. No Aircraft entry
-until there is an ADS-B screen.
+**The screens:** `radio/home`, `radio/fm`, `radio/dab`, `radio/ships`,
+`radio/aircraft`, `radio/aprs`, `radio/sonde`, `radio/dmr` (no
+parameters: the channel chooser; `?f=<Hz>`: that channel),
+`radio/wxsat` and `radio/wxsat/viewer?image=<imageId>`. Documents carry
+the screen's shape only: collections start empty and patched parts start
+blank, and the socket's first frame (`snap`) fills them, so a document's
+`rev` (its `ETag`) does not move with the radio. A screen with live data
+names `live.path`, which carries every parameter the document was built
+with: the socket builds the client's document again from its request, so
+its `hello` rev is the client's.
 
-**The screens.** Each binds `state` (`ws:api/events?kinds=state`, the
-merged state diffs) and, where it shows a meter or the stereo flag,
-`meter` (`ws:api/events?kinds=meter`).
+**`GET ui/v2/live/{id}`** (WebSocket, SCREENS.md §4): `hello`, `snap`, then
+patch frames at the client's `maxHz`, the latest of every change, never
+a backlog; pings every 30 s. It counts as one of the client's streams:
+presence going closes it, and opening one takes back a radio given back
+to the station. Radio brings each open screen up to date twice a second
+from its tables. `select` on Aircraft sends that client the aircraft's
+`photo` (Planespotters' `src`, `credit` and `link`, unchanged, for the
+client to fetch: "ADS-B" above) and who it is (`regLine`, `opLine`), again
+when either is found later; no other client gets them.
 
-| Screen | Binds | Does (method, path, body; level) |
-|---|---|---|
-| `radio/home` | the dial (`state.vfo`, `freq`), mode, `dialLabel.text`, RDS `ps`/`rt`, the signal (`meter.rx`, `db`), `rxOwner.text` (who has the receiver), `error`; native `waterfall` (`stream` main, the band, dial, channels, beacons, stations and sessions layers) and `audio` (`api/audio/rx`) | Frequency: `POST api/set {"changes": {"vfo": $value}}`; Mode (a choice of `state.MODES`): `{"changes": {"mode": $value}}`; Band down/up: `POST api/shack/pad/action {"action": "band", "kind": "turn", "step": -1\|1}`; Volume: `POST api/set {"volume": $value}`; Start the radio: `POST api/start` (all control); Mute: the `audio.mute` native verb; opens `radio/dab`, `radio/fm`, `radio/ships` |
-| `radio/dab` | `dab` (`get:ui/v1/data/dab`, every second): title, programme text, slide or logo, detail ("DAB+ · 64 kb/s · Varied"), ensemble, `whyText`, transmitters heard; `state.bandScan.text`; native `audio` | A tile per service of `api/dab/stations`, by ensemble: `POST api/decoders/sessions {"decoder": "dab", "freqHz", "params": {"block", "service"}, "replace": true}`; Stop: `{"decoder": "dab", "stop": true}` ("DAB" above: neither needs the session id); Scan now: `POST api/scan {"band": "dab"}`; Volume (all control); Mute |
-| `radio/fm` | RDS `ps`, `rt`, `ptyName`, `tp`; the dial; `meter.stereo`; `rxOwner.text`; `state.bandScan.text`; native `audio` | A tile per station of `api/fm/stations`, by frequency and A-Z (`tabs`): `POST api/set {"changes": {"vfo": best.hz, "mode": "wfm"}}`; Tune by frequency: the same with `$value`; Scan now: `POST api/scan {"band": "fm"}`; Volume (all control); Mute |
-| `radio/ships` | `ais` (`get:api/ais/vessels`, every 10 s): `session.text` and the nearest ships, a row each bound by index (`ais.vessels.0.name`, `shipTypeText`, `distanceKm`), as many as the table held when the screen opened (at most 12); `rxOwner.text`; native `map` with layer `ais` | The map component, as the TV's map does today: `POST api/ais/session {"client"}` every 10 s while it shows and `DELETE api/ais/session?client=` when it closes (control), `api/map/info`, `api/map/land`, `api/map/tiles/{z}/{x}/{y}.png`, `api/ais/vessels[/{mmsi}]`, `api/events?kinds=ais` (view); its props name each path. A row selects its ship on the map: `local` `map.ais.selected` with the row's `mmsi` binding |
+**`GET ui/v2/poll/radio/wxsat`**: `{"snap": true, "ops": [...], "everyS":
+2|10}` (2 while a pass records): the whole state, applied to the
+document's own, so what has gone is gone. Weather Sats opens no socket and
+holds nothing.
 
-A screen is built when it is asked for: the station lists are as the last
-scan left them, so a client asks again after a `stations` event or a
-change of `stationsAt` (or simply on opening the screen).
+**Holds** (SCREENS.md §6): the maps hold their session under the name
+presence renews - `ais`, `adsb`, `aprs`, `sonde` - with `POST
+api/<name>/session {"client": $client}` (a 30 s timeout: the receiver
+may reopen) and `DELETE api/<name>/session?client=`. Their refusals now
+carry `actions` (above, "AIS"). DAB holds nothing while open; a tile
+plays under the client's id. DMR holds:
 
-**`GET ui/v1/data/dab`** (view): what the DAB screen binds to, from the
-DAB session playing (whose own view, `GET api/decoders/sessions/{id}`,
-needs its id):
+- `POST ui/v2/hold/dmr {"client", "freqHz"}` (control): kept by shack_ui's
+  `Holds`, which remembers the session each client holds: the `dmr` session
+  on that channel, started if there is none (unsaved: client-scoped, like
+  a DAB station) and listening to both slots. `200 {"held": "dmr", "id"}`,
+  again with the same id for a repeated start, or the decoder sessions'
+  refusals.
+- `DELETE ui/v2/hold/dmr?client=&f=` (control): this client lets go
+  (`{"stopped"}`); the session stops when no client holds it. Presence
+  going does the same.
+- `POST ui/v2/hold/dmr-listen {"client", "listen"}` (control): `"1"`,
+  `"2"`, `"both"` (the slot param, then listening) or `"off"`, on the
+  session this client holds; `404 unknown_session` when it holds none.
 
-```json
-{"playing": true, "session": "ds_3f2a", "block": "11D", "service": "C221", "title": "Shack MP2 Tone",
- "dls": "Shack MP2 Tone - now: 1 kHz left, 1.5 kHz right", "detail": "DAB · 128 kb/s · Pop music",
- "ensemble": "Shack Test Mux · 11D", "imagePath": "api/dab/slides/C221?rev=7",
- "imageUrl": "/apps/radio/api/dab/slides/C221?rev=7", "why": null, "whyText": "",
- "transmitters": [...as in the session's meta...],
- "transmittersText": "Crystal Palace, 4 km, 0 dB\nWrotham, 31 km, -8.5 dB"}
-```
+## ui/2 screens (QO-100 NB)
 
-`service` is the station asked for, so a change shows at once; `dls`
-follows when the decoder has it. `imagePath` is the station's latest
-slide, else its logo, else null. `transmittersText` is one line per
-transmitter, worded here because ui/1 has no repeated row to fill from a
-list. While nothing plays: `playing` false, `title` "Not playing", the
-rest null or empty.
+The same routes as Radio's (above), with NB's screens: code
+`ohsnb/screens.py` (also what is left out, and why), tests
+`tests/test_nb_screens.py`. `tools/screens-dev.py` serves them from a
+checkout, on the simulator, to a renderer.
+
+- **Entries and screens:** `qo100nb` (`nb/home`: the dial, mode, the wide
+  and zoom scopes on `api/spectrum/v1` with overlay/1 labels, beacon lock,
+  S-meter, decodes, receive audio, receive settings, status, and the
+  transmit parts), `signals` (`nb/signals`: the skimmer and the over-power
+  and LEILA watch; OK tunes) and `beacon` (`nb/beacon`: the middle
+  beacon's text and the beacon's DX-cluster spots). All live; none polled.
+  `nb/decodes` (opened from home's Decodes tab, no tile) is the decodes
+  full screen: dB, DT, audio frequency, message and country as columns.
+- **Decodes** come grouped by slot, newest slot first, each slot's rows
+  in the decoder's order: every row carries `slot` ("11:30:15", UTC) and
+  the slot's first row `slotHead` (the same text), which the template
+  draws as the slot's header line; SCREENS.md has no list section headers,
+  so this is a row field and not a contract part. `snrText`, `dtText`
+  ("+0.2"), `freqText` (audio Hz), `line2` (country, DT and frequency for
+  the narrow list) and `tone`: `accent` for one naming the station's
+  callsign, `info` for a CQ, `muted` for a low-confidence decode. Both
+  lists are cleared when the mode leaves FT8/FT4/Q65/JS8 (FT8 to FT4
+  keeps them), and by Clear.
+- **Bookmarks** are the engine's memories (`GET api/memories`). Home's
+  `bookmark` picker gets its options and its value (the memory the dial
+  is within 50 Hz of, in its mode; off every one, the nearest, whose
+  option then reads "Near <name>") live, and recalls with `POST
+  api/recall`. **CH+/CH-** (`chUp`, `chDown`) are `send` actions (§5.1),
+  `{"name": "bookmark", "value": 1 | -1}`: the box recalls the next
+  memory above or below the dial (more than 50 Hz from it), stopping at
+  the ends. A `send` because the step depends on the dial now and no
+  call's body may compute it (§5.2).
+- **Events on the live socket** (`{"t": "event"}` from a `send`):
+  `bookmark` and `clearDecodes`, both obeyed only for a socket the proxy
+  gave Control level or above; a view-only device gets a toast.
+- **Live:** NB's engine feeds are drained only by the pump's calls, so
+  only while a screen has a client (the transmit watchdog counts a
+  drained feed as a UI alive). After 5 s with nobody watching, a new
+  client starts from the engine's state, not from a backlog.
+- **The receiver hold** (`nb/home`, `nb/signals`): `POST` answers `{}`
+  while the radio runs, and wakes one given back while idle; a radio that
+  was stopped or handed to another app is `409 {"code":
+  "receiver_stopped", "actions": [Start the radio]}`, one still starting
+  `503 receiver_starting`. `DELETE` answers `{}` and stops nothing: NB
+  keeps its receiver for other listeners and its background decoders. No
+  `renewS`: NB has no client presence and gives nothing back on its own.
+- **Transmit** is placed as SCREENS.md §7 says and keyed only by client
+  code: `ptt` (`api/ptt`, never on a TV) and `txArm` (`api/autotx`,
+  `digital`), and the transmit settings (`txGain`, `micGain`, `split`,
+  `cwWpm`) as `tx` actions leased to one of them.
 
 ## What it is not (yet)
 

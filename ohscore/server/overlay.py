@@ -20,7 +20,9 @@ Layers, and where each comes from:
 | sessions | session | the decoder sessions (api/decoders) |
 
 NB has no local frequencies or band scan (those layers are simply
-absent); spots, bookmarks, alerts and signals are not produced yet.
+absent). Its own subclass (ohsnb/overlay.py, given to the server by
+AppInfo.overlay) puts its band plan, bookmarks, beacons, skimmer signals
+and over-power alerts on the scope; spots are produced by neither app.
 
 Every action only tunes or plays, at Control level (§3.2, §5.6: never a
 transmit action). Labels are in the server's language, like every other
@@ -45,10 +47,14 @@ log = logging.getLogger("ohscore.server.overlay")
 # The label shows once the view is at or below this many Hz a pixel
 # (§3.2); the band's segments always (None). A channel at 400 Hz/px is the
 # plan's example; FM stations are 100 kHz apart, DAB blocks 1.7 MHz.
+# A bookmark and an alert are named whenever the renderer has room, as the
+# hand-built QO-100 NB scope named its bookmarks; a detected signal only
+# once the view is zoomed far enough that its label is about it alone.
 READ_AT = {"segment": None, "dial": None, "passband": None, "tx": None, "channel": 400.0, "beacon": 400.0,
-           "station": 2000.0, "session": 1000.0}
-PRIO = {"segment": 10, "beacon": 40, "station": 50, "channel": 60, "session": 80, "passband": 90, "dial": 100,
-        "tx": 100}
+           "station": 2000.0, "session": 1000.0, "bookmark": None, "signal": 150.0, "alert": None,
+           "spot": 400.0}
+PRIO = {"segment": 10, "signal": 30, "beacon": 40, "spot": 45, "station": 50, "channel": 60, "bookmark": 70,
+        "session": 80, "alert": 85, "passband": 90, "dial": 100, "tx": 100}
 # A session decoding now is drawn as active (§3.2).
 ACTIVE_STATES = ("running", "synced")
 
@@ -96,6 +102,10 @@ class Overlay:
 
     EVERY_S = 0.25
     SLOW_S = 10.0
+    # Which layers are kept for SLOW_S and which looked at every time: an
+    # app's own overlay (QO-100 NB's, ohsnb/overlay.py) names its own.
+    SLOW_LAYERS = ("band", "channels", "stations")
+    FAST_LAYERS = ("dial", "sessions")
 
     def __init__(self, radio, clock=time.monotonic):
         self.radio, self.clock = radio, clock
@@ -112,9 +122,9 @@ class Overlay:
             hit = self._slow.get(key)
             if hit is None or now - hit[0] >= self.SLOW_S:
                 self._slow = {k: v for k, v in self._slow.items() if now - v[0] < self.SLOW_S}
-                hit = (now, self._layers(("band", "channels", "stations"), st, a, b))
+                hit = (now, self._layers(self.SLOW_LAYERS, st, a, b))
                 self._slow[key] = hit
-        out = list(hit[1]) + self._layers(("dial", "sessions"), st, a, b)
+        out = list(hit[1]) + self._layers(self.FAST_LAYERS, st, a, b)
         return [i for i in out if in_range(i, a, b)]
 
     def _layers(self, names, st, lo, hi) -> list[dict]:

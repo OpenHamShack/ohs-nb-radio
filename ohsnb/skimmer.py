@@ -50,6 +50,11 @@ class BandSkimmer:
         self.dropped = 0
         self.calls: collections.deque = collections.deque(maxlen=400)   # (t, f, call, mode)
         self.next_pub = 0.0
+        # The last list published, for the scope's overlay (ohsnb/overlay.py),
+        # which must not subscribe to "skim": a drained feed counts as the
+        # UI alive to the transmit watchdog (Engine._supervise). Replaced
+        # whole, never mutated, so a reader on another thread sees one list.
+        self.last: list[dict] = []
 
     # -- receive thread ------------------------------------------------------
     def feed(self, X, starts) -> None:
@@ -124,6 +129,7 @@ class BandSkimmer:
                         seen.add(call)
                         calls.append(call)
                 e["calls"] = calls[:12]
+        self.last = entries
         self.radio._publish("skim", {"t": now, "entries": entries})
         active = [e for e in entries if e["active"]]
         self.radio._status(skimSignals=len(active), skimExact=sum(1 for e in active if e["kind"] == "ssb" and e["exact"]),

@@ -55,7 +55,7 @@ from .. import shacklibs, smeter_cal
 # The host module gets its own import line: the source scrub passes the
 # word only straight after "import ", never mid-list.
 from . import shack
-from . import overlay, presence, spectrum, uiv1, ws
+from . import overlay, presence, spectrum, uiv2, ws
 from .audio import CHANNELS, MIC_FORMAT
 from .autotx import AutoTx, Refused
 from .recording import server_recordings
@@ -97,6 +97,13 @@ OPENAIP_KEY_ENV = "OPENAIP_API_KEY"
 # holds the receiver only while a client holds its session, renewed or
 # vouched for by presence, and ends when the last client goes. NB has none.
 MAP_SERVICES = ("ais", "adsb", "aprs", "sonde")
+
+
+def map_stop_words() -> dict:
+    """The remedy's words for each map that may hold the receiver (a
+    function, so they are translated when asked, not at import)."""
+    return {"ais": _("Stop the ship map"), "adsb": _("Stop the aircraft map"), "aprs": _("Stop the APRS map"),
+            "sonde": _("Stop the radiosonde map")}
 
 
 def _json_default(o):
@@ -174,7 +181,7 @@ class AppInfo:
     transmit facts (each app knows where its signal goes on air)."""
 
     def __init__(self, app_id: str, kind: str, name: str, version: str, onair_body, device_for,
-                 commit: str = "", screens=None, presence: bool = False):
+                 commit: str = "", screens=None, presence: bool = False, overlay=None):
         self.app_id, self.kind, self.name, self.version, self.commit = app_id, kind, name, version, commit
         # Whether the app hangs its client-scoped holds off the platform's
         # client presence (presence.py; CLIENT-UI-PLAN 7.2-7.4). Radio only
@@ -182,10 +189,12 @@ class AppInfo:
         self.presence = presence
         self.onair_body = onair_body        # radio -> {"freqHz", "bandwidthHz", "mode"}
         self.device_for = device_for        # device setting -> broker device name, "" for none
-        # The app's ui/1 screens (uiv1.py): an object with descriptor(srv,
-        # req), screen(srv, id, params, req) and data(srv, name, req); None
-        # serves none (ui/v1 answers 404).
+        # The app's server-driven screens; None serves none.
         self.screens = screens
+        # The app's overlay/1 producer, a class taking the radio
+        # (overlay.Overlay's shape); None is the shared one, which knows
+        # Radio's sources. QO-100 NB names its own (ohsnb/overlay.py).
+        self.overlay = overlay
 
 
 class Server:
@@ -221,6 +230,9 @@ class Server:
         self._toasts = radio.subscribe("toast", 32)
         self.httpd: ThreadingHTTPServer | None = None
         self.threads: list[threading.Thread] = []
+        # The ui/2 screens' live sockets and the pump that feeds them
+        # (uiv2.py); nothing runs until a screen's socket opens.
+        self.ui_live = uiv2.Live(self)
         # Automatic transmit for the digital modes: off until a remote arms
         # it, and never on after a restart (it lives only here).
         self.digi = AutoTx(self, wall)
@@ -251,7 +263,7 @@ class Server:
         # count and per-stream levels every socket shares, and the
         # overlay's sources.
         self.spectrum = spectrum.Shared()
-        self.overlay = overlay.Overlay(radio)
+        self.overlay = (info.overlay or overlay.Overlay)(radio)
         # Client presence (presence.py; CLIENT-UI-PLAN 7.2-7.4): who made
         # each client-scoped hold and each client's open streams, always
         # kept (cheap); `presence` is the platform's feed, set by run.py
@@ -435,6 +447,9 @@ class Server:
                 return
             closed = self.holds.end_streams(client)
             ended = self._end_holds(self.holds.leave(client))
+            # The app's screen holds kept by shack_ui's Holds (uiv2.py).
+            if self.info.screens is not None:
+                ended += self.info.screens.gone(self, client)
             for name in MAP_SERVICES:
                 svc = getattr(self.radio, name, None)
                 if svc is None:
@@ -1089,7 +1104,8 @@ class _Handler(BaseHTTPRequestHandler):
             digital = (method, path) in DIGITAL_ROUTES and who["transmit"] == "digital"
             if not digital and not self._need(who, need):
                 return
-            if self.srv.parked and ((method != "GET" and path not in NO_WAKE) or path in WAKE_GETS):
+            if self.srv.parked and ((method != "GET" and path not in NO_WAKE) or path in WAKE_GETS
+                                    or path.startswith(WAKE_PREFIX)):
                 # Given back because nobody was using it: whoever asks for
                 # something now - an older client with no presence too -
                 # takes it again first, a second or two.
@@ -1380,6 +1396,33 @@ class _Handler(BaseHTTPRequestHandler):
                       "rate_too_low": 409, "out_of_range": 409, "too_many_sessions": 429, "not_running": 503,
                       "device_error": 503}
 
+    def _map_refused(self, e, route: str) -> None:
+        """A map's session refused (AIS, ADS-B, APRS, radiosondes), with the
+        remedies the TV's refusal cards offer as `actions` (SCREENS.md §5.3,
+        §6): a screen's hold banner draws them as buttons and starts the
+        hold again once one has worked. Background decoders pinning the
+        span: the same start with dropSessions. Another holder of the
+        receiver: stop it, as its own screen would. Each is an ordinary
+        call at the level its route needs (control); a client that is not
+        a screen ignores the field."""
+        more = {"sessions": e.sessions} if e.sessions is not None else {}
+        actions = []
+        if e.code == "span_pinned":
+            actions.append({"do": "call", "method": "POST", "path": f"api/{route}/session",
+                            "body": {"client": "$client", "dropSessions": True}, "level": "control",
+                            "timeoutS": 30, "text": _("Stop the decoders")})
+        elif e.code == "receiver_busy":
+            by = (self.srv.radio.state().get("rxOwner") or {}).get("by")
+            if by == "dab":
+                actions.append({"do": "call", "method": "POST", "path": "api/decoders/sessions",
+                                "body": {"decoder": "dab", "stop": True}, "level": "control", "text": _("Stop DAB")})
+            elif by in MAP_SERVICES and by != route:
+                actions.append({"do": "call", "method": "DELETE", "path": f"api/{by}/session?all=1",
+                                "level": "control", "text": map_stop_words().get(by, _("Stop it"))})
+        if actions:
+            more["actions"] = actions
+        self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+
     def get_decoders(self, who, q):
         d = self.srv.radio.decoders
         self._send(200, {"decoders": d.catalogue(), "codecs": d.codecs(), "limits": d.limits(),
@@ -1428,10 +1471,10 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _held_gives_way(self, who, b: dict, freq, params: dict, client: str | None = None) -> bool:
         """`"stop": true` and `"replace": true` on POST api/decoders/sessions
-        for a decoder that holds the receiver (DAB): what a ui/1 screen
-        needs, since its actions are POSTs to fixed paths (CLIENT-UI-PLAN
-        §5.5) and cannot carry the session id a DELETE or a live change
-        names, nor a DELETE at all. The same Control level as the route.
+        for a decoder that holds the receiver (DAB): made for ui/1, whose
+        actions were POSTs to fixed paths, and still what Radio's ui/2 DAB
+        screen sends, since a screen's actions cannot carry the session id
+        the box made (SCREENS.md §5.2). The same Control level as the route.
 
         - stop: the playing station stops, exactly as DELETE
           api/decoders/sessions/{id} would; 404 unknown_session when none
@@ -1688,73 +1731,6 @@ class _Handler(BaseHTTPRequestHandler):
         log.info("band scan of %s started by %s", "+".join(got["bands"]), who.get("user", "?"))
         self._send(202, got)
 
-    # ui/v1 (uiv1.py, docs/SERVER-API.md "ui/1 screens"): the app's
-    # server-driven screens. NB serves none yet and answers 404.
-    def _ui(self, who):
-        screens = self.srv.info.screens
-        if screens is None:
-            self._error(404, _("This app serves no screens."), "not_found")
-            return None, None
-        if not uiv1.ui_major_ok(self.headers.get("X-OpenHamShack-UI")):
-            self._error(406, _("This app serves ui/1 screens, which this OpenHamShack app cannot show."),
-                        "ui_unsupported", ui=[uiv1.UI_VERSION])
-            return None, None
-        req = uiv1.Request(self._base(), uiv1.parse_components(self.headers.get("X-OpenHamShack-Components")),
-                           who.get("level", "view"), self.headers.get("X-OpenHamShack-UI"))
-        return screens, req
-
-    def _send_ui(self, body: dict) -> None:
-        """A descriptor or screen: its rev as the ETag, 304 when the client
-        has it (§5.7), and never through with_urls (uiv1.py says why)."""
-        rev = uiv1.rev_of(body)
-        if "screen" in body:
-            body = {**body, "rev": rev}
-        etag = f'"{rev}"'
-        # no-cache, not no-store: kept, but asked about every time, so a
-        # screen never opens from a stale copy (§5.7) and costs a 304.
-        extra = {"ETag": etag, "X-OpenHamShack-UI": uiv1.UI_VERSION, "Cache-Control": "no-cache"}
-        if self.headers.get("If-None-Match") == etag:
-            self.send_response(304)
-            for k, v in extra.items():
-                self.send_header(k, v)
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
-        self._send(200, dumps(body), extra=extra)
-
-    def get_ui_app(self, who, q):
-        screens, req = self._ui(who)
-        if screens is not None:
-            self._send_ui(screens.descriptor(self.srv, req))
-
-    def get_ui_screen(self, who, q):
-        screens, req = self._ui(who)
-        if screens is None:
-            return
-        sid = urlsplit(self.path).path.rstrip("/")[len("/ui/v1/screen/"):]
-        params = {k: v[0] for k, v in q.items()}
-        try:
-            doc = screens.screen(self.srv, sid, params, req)
-        except uiv1.UnknownScreen:
-            self._error(404, _("There is no screen called {id}").format(id=sid), "unknown_screen")
-            return
-        self._send_ui(doc)
-
-    def get_ui_data(self, who, q):
-        """A screen's own data feed (`get:ui/v1/data/<name>`): what an
-        existing route has, shaped for binding where that route's own shape
-        cannot be bound to (Radio's DAB station is behind a session id)."""
-        screens, req = self._ui(who)
-        if screens is None:
-            return
-        name = urlsplit(self.path).path.rstrip("/")[len("/ui/v1/data/"):]
-        try:
-            body = screens.data(self.srv, name, req)
-        except uiv1.UnknownScreen:
-            self._error(404, _("There is nothing at {path}").format(path=self.path), "not_found")
-            return
-        self._send(200, body)
-
     # api/ais and api/map (docs/SERVER-API.md "AIS" and "Map"): Radio's ships
     # on a map. NB has neither and answers 404.
     def _ais(self):
@@ -1785,8 +1761,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             view = a.join(b.get("client"), drop_sessions=b.get("dropSessions") is True)
         except DecoderRefused as e:
-            more = {"sessions": e.sessions} if e.sessions is not None else {}
-            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+            self._map_refused(e, "ais")
             return
         self._send(200, view)
 
@@ -1867,8 +1842,7 @@ class _Handler(BaseHTTPRequestHandler):
             view = s.join(client, drop_sessions=b.get("dropSessions") is True
                           or q.get("dropSessions", [""])[0] in ("1", "true"))
         except DecoderRefused as e:
-            more = {"sessions": e.sessions} if e.sessions is not None else {}
-            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+            self._map_refused(e, "sonde")
             return
         self._send(200, view)
 
@@ -1941,8 +1915,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             view = a.join(b.get("client"), drop_sessions=b.get("dropSessions") is True)
         except DecoderRefused as e:
-            more = {"sessions": e.sessions} if e.sessions is not None else {}
-            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+            self._map_refused(e, "aprs")
             return
         self._send(200, view)
 
@@ -2162,8 +2135,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             view = a.join(b.get("client"), drop_sessions=b.get("dropSessions") is True)
         except DecoderRefused as e:
-            more = {"sessions": e.sessions} if e.sessions is not None else {}
-            self._error(self.REFUSAL_STATUS.get(e.code, 400), str(e), e.code, **more)
+            self._map_refused(e, "adsb")
             return
         self._send(200, view)
 
@@ -2869,6 +2841,8 @@ DIGITAL_ROUTES = {("POST", "/api/ptt/heartbeat")}
 # open a stream from it.
 NO_WAKE = frozenset({"/api/stop", "/api/halt", "/api/shack/release", "/api/ptt/heartbeat"})
 WAKE_GETS = frozenset({"/api/audio/rx", "/api/spectrum/v1", "/api/events"})
+# A ui/2 screen's live socket is a stream like api/events (uiv2.py).
+WAKE_PREFIX = "/ui/v2/live/"
 # Feeds whose items go out under another kind's name on api/events.
 EVENT_KIND = {"decoders": "decoder"}
 
@@ -2932,7 +2906,6 @@ ROUTES = {
     ("GET", "/api/wxsat/composite"): ("view", _Handler.get_wxsat_composite),
     ("GET", "/api/map/info"): ("view", _Handler.get_map_info),
     ("GET", "/api/map/land"): ("view", _Handler.get_map_land),
-    ("GET", "/ui/v1/app"): ("view", _Handler.get_ui_app),
     ("POST", "/api/decoders/sessions"): ("control", _Handler.post_decoder_session),
     ("POST", "/api/decoders/codecs/rescan"): ("control", _Handler.post_codecs_rescan),
     ("GET", "/api/decoders/files"): ("view", _Handler.get_decoder_files),
@@ -2950,6 +2923,11 @@ ROUTES = {
 # Routes with a path parameter: (method, prefix) -> (level, handler); the
 # rest of the path after the prefix is the parameter. Exact routes first.
 PREFIX_ROUTES = {
+    # ui/2 (uiv2.py): reads at view; an app's own holds (DMR) at control,
+    # as the API routes the TV's holds use are.
+    ("GET", uiv2.PREFIX): ("view", uiv2.serve_get),
+    ("POST", uiv2.PREFIX + "hold/"): ("control", uiv2.serve_hold),
+    ("DELETE", uiv2.PREFIX + "hold/"): ("control", uiv2.serve_hold),
     ("GET", "/api/decoders/sessions/"): ("view", _Handler.get_decoder_session),
     ("GET", "/api/ais/vessels/"): ("view", _Handler.get_ais_vessel),
     ("GET", "/api/adsb/aircraft/"): ("view", _Handler.get_adsb_one),
@@ -2966,8 +2944,6 @@ PREFIX_ROUTES = {
     ("GET", "/api/dab/slides/"): ("view", _Handler.get_dab_slide),
     ("GET", "/api/dab/logos/"): ("view", _Handler.get_dab_logo),
     ("GET", "/api/dab/schedule/"): ("view", _Handler.get_dab_schedule),
-    ("GET", "/ui/v1/screen/"): ("view", _Handler.get_ui_screen),
-    ("GET", "/ui/v1/data/"): ("view", _Handler.get_ui_data),
     ("PUT", "/api/local-frequencies/mine/"): ("control", _Handler.put_local_mine),
     ("DELETE", "/api/local-frequencies/mine/"): ("control", _Handler.delete_local_mine),
 }

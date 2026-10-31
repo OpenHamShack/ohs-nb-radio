@@ -7,6 +7,10 @@
     {"get": "api/ais/session", "keys": ["state"]},
     {"get": "api/ais/vessels"},
     {"get": "api/adsb/session", "keys": ["state"]},
-    {"get": "api/adsb/aircraft"}
+    {"get": "api/adsb/aircraft"},
+    {"get": "ui/v2/app", "keys": ["ui", "app", "kind", "minClient", "entries"]},
+    {"get": "ui/v2/status", "keys": ["entries"]},
+    {"get": "ui/v2/screen/radio/home", "keys": ["screen", "form", "level"]},
+    {"get": "api/wxsat/status", "keys": ["state"]}
   ]
 }
