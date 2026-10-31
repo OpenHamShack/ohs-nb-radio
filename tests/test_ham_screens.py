@@ -580,6 +580,12 @@ class Aircraft(unittest.TestCase):
         self.assertEqual(traffic.aircraft_item({"icao": "406A93", "messages": 2034.0})["messagesText"], "2,034")
         self.assertIsNone(traffic.aircraft_item({"icao": "406A93"})["messagesText"])
 
+    def test_altitude_reads_in_feet(self):
+        from ohsradio.screens import traffic
+        self.assertEqual(traffic.aircraft_item({"icao": "406A93", "altBaro": 33000})["sub"], "33,000 ft")
+        self.assertEqual(traffic.aircraft_item({"icao": "406A93", "altBaro": 4500})["sub"], "4,500 ft")
+        self.assertEqual(traffic.aircraft_item({"icao": "406A93", "onGround": True})["sub"], "Ground")
+
     def test_the_photo_follows_planespotters_terms(self):
         from ohsradio.screens import traffic
         icao = "F00202"

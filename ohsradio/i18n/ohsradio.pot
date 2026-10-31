@@ -142,7 +142,7 @@ msgid "AOS"
 msgstr ""
 
 #: ohsradio/screens/__init__.py:77
-#: ohsradio/screens/traffic.py:549
+#: ohsradio/screens/traffic.py:550
 msgid "APRS"
 msgstr ""
 
@@ -187,9 +187,9 @@ msgstr ""
 
 #: ohsradio/screens/traffic.py:218
 #: ohsradio/screens/traffic.py:240
-#: ohsradio/screens/traffic.py:542
-#: ohsradio/screens/traffic.py:617
-#: ohsradio/screens/traffic.py:638
+#: ohsradio/screens/traffic.py:543
+#: ohsradio/screens/traffic.py:618
+#: ohsradio/screens/traffic.py:639
 msgid "Altitude"
 msgstr ""
 
@@ -214,7 +214,7 @@ msgstr ""
 msgid "At anchor"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:599
+#: ohsradio/screens/traffic.py:600
 #, python-brace-format
 msgid "At {m} m"
 msgstr ""
@@ -255,8 +255,8 @@ msgstr ""
 msgid "Bands & power, {band}: not a number"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:620
-#: ohsradio/screens/traffic.py:643
+#: ohsradio/screens/traffic.py:621
+#: ohsradio/screens/traffic.py:644
 msgid "Battery"
 msgstr ""
 
@@ -293,7 +293,7 @@ msgstr ""
 msgid "Broadcast gain {db:g}: watching reception"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:621
+#: ohsradio/screens/traffic.py:622
 msgid "Burst"
 msgstr ""
 
@@ -301,7 +301,7 @@ msgstr ""
 msgid "By frequency"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:445
+#: ohsradio/screens/traffic.py:446
 msgid "Callsign"
 msgstr ""
 
@@ -314,7 +314,7 @@ msgid "Cancelled: nothing was changed."
 msgstr ""
 
 #: ohsradio/ais.py:131
-#: ohsradio/screens/traffic.py:379
+#: ohsradio/screens/traffic.py:380
 msgid "Cargo"
 msgstr ""
 
@@ -336,8 +336,8 @@ msgstr ""
 msgid "Choose a channel to decode. Add your repeaters in Local frequencies to list them here."
 msgstr ""
 
-#: ohsradio/screens/traffic.py:617
-#: ohsradio/screens/traffic.py:641
+#: ohsradio/screens/traffic.py:618
+#: ohsradio/screens/traffic.py:642
 msgid "Climb"
 msgstr ""
 
@@ -356,7 +356,7 @@ msgstr ""
 msgid "Could not record: {error}"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:447
+#: ohsradio/screens/traffic.py:448
 msgid "Course"
 msgstr ""
 
@@ -403,7 +403,7 @@ msgstr ""
 msgid "Decoding {where}"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:445
+#: ohsradio/screens/traffic.py:446
 msgid "Destination"
 msgstr ""
 
@@ -411,11 +411,11 @@ msgstr ""
 msgid "Details"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:483
+#: ohsradio/screens/traffic.py:484
 msgid "Digipeaters"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:421
+#: ohsradio/screens/traffic.py:422
 msgid "Distress beacon"
 msgstr ""
 
@@ -432,7 +432,7 @@ msgstr ""
 msgid "Done: the Pluto now runs as {chip}, which tunes {range}."
 msgstr ""
 
-#: ohsradio/screens/traffic.py:448
+#: ohsradio/screens/traffic.py:449
 msgid "Draught"
 msgstr ""
 
@@ -454,7 +454,7 @@ msgstr ""
 msgid "E"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:446
+#: ohsradio/screens/traffic.py:447
 msgid "ETA"
 msgstr ""
 
@@ -499,11 +499,6 @@ msgstr ""
 msgid "FIR / sample rate"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:258
-#, python-brace-format
-msgid "FL{fl}"
-msgstr ""
-
 #: ohsradio/screens/__init__.py:73
 #: ohsradio/screens/listen.py:233
 #: ohsradio/screens/listen.py:137
@@ -520,7 +515,7 @@ msgstr ""
 msgid "Failed"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:573
+#: ohsradio/screens/traffic.py:574
 msgid "Falling"
 msgstr ""
 
@@ -549,7 +544,7 @@ msgid "Firmware {version}: ADI's method for v0.32 and later."
 msgstr ""
 
 #: ohsradio/ais.py:124
-#: ohsradio/screens/traffic.py:380
+#: ohsradio/screens/traffic.py:381
 msgid "Fishing"
 msgstr ""
 
@@ -579,9 +574,9 @@ msgstr ""
 
 #: ohsradio/screens/traffic.py:220
 #: ohsradio/screens/traffic.py:241
-#: ohsradio/screens/traffic.py:447
-#: ohsradio/screens/traffic.py:541
-#: ohsradio/screens/traffic.py:618
+#: ohsradio/screens/traffic.py:448
+#: ohsradio/screens/traffic.py:542
+#: ohsradio/screens/traffic.py:619
 msgid "From"
 msgstr ""
 
@@ -589,7 +584,7 @@ msgstr ""
 msgid "Gallery"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:483
+#: ohsradio/screens/traffic.py:484
 msgid "Gateways"
 msgstr ""
 
@@ -615,13 +610,13 @@ msgid "Hear"
 msgstr ""
 
 #: ohsradio/screens/traffic.py:221
-#: ohsradio/screens/traffic.py:449
-#: ohsradio/screens/traffic.py:543
-#: ohsradio/screens/traffic.py:623
+#: ohsradio/screens/traffic.py:450
+#: ohsradio/screens/traffic.py:544
+#: ohsradio/screens/traffic.py:624
 msgid "Heard"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:518
+#: ohsradio/screens/traffic.py:519
 msgid "Heard direct"
 msgstr ""
 
@@ -641,7 +636,7 @@ msgstr ""
 msgid "Hide aircraft on the ground"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:453
+#: ohsradio/screens/traffic.py:454
 msgid "Hide ships standing still"
 msgstr ""
 
@@ -653,8 +648,8 @@ msgstr ""
 msgid "High-speed craft"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:619
-#: ohsradio/screens/traffic.py:642
+#: ohsradio/screens/traffic.py:620
+#: ohsradio/screens/traffic.py:643
 msgid "Humidity"
 msgstr ""
 
@@ -675,11 +670,11 @@ msgstr ""
 msgid "Labels"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:573
+#: ohsradio/screens/traffic.py:574
 msgid "Landed"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:622
+#: ohsradio/screens/traffic.py:623
 msgid "Lands"
 msgstr ""
 
@@ -806,7 +801,7 @@ msgstr ""
 msgid "Moored"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:483
+#: ohsradio/screens/traffic.py:484
 msgid "Moving"
 msgstr ""
 
@@ -832,12 +827,12 @@ msgid "NW"
 msgstr ""
 
 #: ohsradio/screens/traffic.py:232
-#: ohsradio/screens/traffic.py:457
+#: ohsradio/screens/traffic.py:458
 msgid "Nearest"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:551
-#: ohsradio/screens/traffic.py:633
+#: ohsradio/screens/traffic.py:552
+#: ohsradio/screens/traffic.py:634
 msgid "Newest"
 msgstr ""
 
@@ -859,7 +854,7 @@ msgstr ""
 msgid "Night"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:551
+#: ohsradio/screens/traffic.py:552
 msgid "No APRS stations heard yet"
 msgstr ""
 
@@ -904,11 +899,11 @@ msgstr ""
 msgid "No pictures yet: they appear after a pass is decoded"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:632
+#: ohsradio/screens/traffic.py:633
 msgid "No radiosondes decoded yet: listening on 400 to 406 MHz"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:456
+#: ohsradio/screens/traffic.py:457
 msgid "No ships heard yet: they appear within a minute of the map opening."
 msgstr ""
 
@@ -1014,7 +1009,7 @@ msgstr ""
 msgid "Now playing"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:484
+#: ohsradio/screens/traffic.py:485
 msgid "Objects and items"
 msgstr ""
 
@@ -1035,7 +1030,7 @@ msgstr ""
 msgid "On the air"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:548
+#: ohsradio/screens/traffic.py:549
 msgid "Only stations heard direct"
 msgstr ""
 
@@ -1044,7 +1039,7 @@ msgstr ""
 msgid "Orbits from {source}"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:381
+#: ohsradio/screens/traffic.py:382
 #: ohsradio/screens/traffic.py:187
 msgid "Other"
 msgstr ""
@@ -1053,7 +1048,7 @@ msgstr ""
 msgid "Other type"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:542
+#: ohsradio/screens/traffic.py:543
 msgid "Packets"
 msgstr ""
 
@@ -1062,7 +1057,7 @@ msgid "Parachutist"
 msgstr ""
 
 #: ohsradio/ais.py:131
-#: ohsradio/screens/traffic.py:379
+#: ohsradio/screens/traffic.py:380
 msgid "Passenger"
 msgstr ""
 
@@ -1075,11 +1070,11 @@ msgstr ""
 msgid "Passes cannot be predicted: {error}"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:544
+#: ohsradio/screens/traffic.py:545
 msgid "Path"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:333
+#: ohsradio/screens/traffic.py:334
 #, python-brace-format
 msgid "Photo of {what}"
 msgstr ""
@@ -1112,13 +1107,13 @@ msgstr ""
 msgid "Port tender"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:599
+#: ohsradio/screens/traffic.py:600
 #, python-brace-format
 msgid "Predicted at {m} m"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:620
-#: ohsradio/screens/traffic.py:642
+#: ohsradio/screens/traffic.py:621
+#: ohsradio/screens/traffic.py:643
 msgid "Pressure"
 msgstr ""
 
@@ -1237,7 +1232,7 @@ msgstr ""
 msgid "Restricted manoeuvrability"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:573
+#: ohsradio/screens/traffic.py:574
 msgid "Rising"
 msgstr ""
 
@@ -1274,7 +1269,7 @@ msgstr ""
 msgid "Sailing"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:380
+#: ohsradio/screens/traffic.py:381
 msgid "Sailing and pleasure"
 msgstr ""
 
@@ -1337,7 +1332,7 @@ msgstr ""
 msgid "Serial"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:380
+#: ohsradio/screens/traffic.py:381
 msgid "Service"
 msgstr ""
 
@@ -1355,14 +1350,14 @@ msgstr ""
 
 #: ohsradio/screens/__init__.py:74
 #: ohsradio/screens/listen.py:138
-#: ohsradio/screens/traffic.py:454
+#: ohsradio/screens/traffic.py:455
 msgid "Ships"
 msgstr ""
 
 #: ohsradio/screens/traffic.py:224
-#: ohsradio/screens/traffic.py:451
-#: ohsradio/screens/traffic.py:546
-#: ohsradio/screens/traffic.py:625
+#: ohsradio/screens/traffic.py:452
+#: ohsradio/screens/traffic.py:547
+#: ohsradio/screens/traffic.py:626
 msgid "Show"
 msgstr ""
 
@@ -1385,7 +1380,7 @@ msgstr ""
 msgid "Signal, dBFS (uncalibrated)"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:448
+#: ohsradio/screens/traffic.py:449
 msgid "Size"
 msgstr ""
 
@@ -1442,7 +1437,7 @@ msgid "SondeHub refused the upload ({status})"
 msgstr ""
 
 #: ohsradio/screens/__init__.py:78
-#: ohsradio/screens/traffic.py:630
+#: ohsradio/screens/traffic.py:631
 msgid "Sondes"
 msgstr ""
 
@@ -1452,10 +1447,10 @@ msgstr ""
 
 #: ohsradio/screens/traffic.py:219
 #: ohsradio/screens/traffic.py:240
-#: ohsradio/screens/traffic.py:446
-#: ohsradio/screens/traffic.py:541
-#: ohsradio/screens/traffic.py:618
-#: ohsradio/screens/traffic.py:643
+#: ohsradio/screens/traffic.py:447
+#: ohsradio/screens/traffic.py:542
+#: ohsradio/screens/traffic.py:619
+#: ohsradio/screens/traffic.py:644
 msgid "Speed"
 msgstr ""
 
@@ -1496,11 +1491,11 @@ msgstr ""
 msgid "Station"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:484
+#: ohsradio/screens/traffic.py:485
 msgid "Stations"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:381
+#: ohsradio/screens/traffic.py:382
 msgid "Stations and aids"
 msgstr ""
 
@@ -1585,12 +1580,12 @@ msgid "TS{n}"
 msgstr ""
 
 #: ohsradio/ais.py:131
-#: ohsradio/screens/traffic.py:379
+#: ohsradio/screens/traffic.py:380
 msgid "Tanker"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:619
-#: ohsradio/screens/traffic.py:641
+#: ohsradio/screens/traffic.py:620
+#: ohsradio/screens/traffic.py:642
 msgid "Temperature"
 msgstr ""
 
@@ -1999,7 +1994,7 @@ msgstr ""
 msgid "Waiting for the radio to restart…"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:483
+#: ohsradio/screens/traffic.py:484
 msgid "Weather"
 msgstr ""
 
@@ -2237,7 +2232,7 @@ msgstr ""
 msgid "up, sets in {d}"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:498
+#: ohsradio/screens/traffic.py:499
 #, python-brace-format
 msgid "wind {k} km/h"
 msgstr ""
@@ -2262,13 +2257,13 @@ msgstr ""
 msgid "{converter} transmits ({use}), so it needs its most drive in dBm, from its manual, before {band} can use it: it is the one number here that, wrong, destroys hardware"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:492
-#: ohsradio/screens/traffic.py:594
+#: ohsradio/screens/traffic.py:493
+#: ohsradio/screens/traffic.py:595
 #, python-brace-format
 msgid "{c} °C"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:427
+#: ohsradio/screens/traffic.py:428
 #, python-brace-format
 msgid "{db} dB"
 msgstr ""
@@ -2338,8 +2333,8 @@ msgstr ""
 msgid "{ft} ft"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:496
-#: ohsradio/screens/traffic.py:596
+#: ohsradio/screens/traffic.py:497
+#: ohsradio/screens/traffic.py:597
 #, python-brace-format
 msgid "{h} hPa"
 msgstr ""
@@ -2355,18 +2350,18 @@ msgid "{km} km · {deg}°"
 msgstr ""
 
 #: ohsradio/screens/traffic.py:296
-#: ohsradio/screens/traffic.py:412
+#: ohsradio/screens/traffic.py:413
 #, python-brace-format
 msgid "{kn} kn"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:509
-#: ohsradio/screens/traffic.py:593
+#: ohsradio/screens/traffic.py:510
+#: ohsradio/screens/traffic.py:594
 #, python-brace-format
 msgid "{k} km/h"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:413
+#: ohsradio/screens/traffic.py:414
 #, python-brace-format
 msgid "{l} × {b} m"
 msgstr ""
@@ -2377,15 +2372,15 @@ msgid "{mhz:.4f} MHz is outside what OpenHamShack Radio tunes (0.1 MHz - 6 GHz)"
 msgstr ""
 
 #: ohsradio/screens/common.py:96
-#: ohsradio/screens/traffic.py:591
+#: ohsradio/screens/traffic.py:592
 #: ohsradio/screens/wxsat.py:92
 #, python-brace-format
 msgid "{mhz} MHz"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:580
-#: ohsradio/screens/traffic.py:426
-#: ohsradio/screens/traffic.py:520
+#: ohsradio/screens/traffic.py:581
+#: ohsradio/screens/traffic.py:427
+#: ohsradio/screens/traffic.py:521
 #, python-brace-format
 msgid "{m} m"
 msgstr ""
@@ -2415,8 +2410,8 @@ msgstr ""
 msgid "{n} Hz"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:353
-#: ohsradio/screens/traffic.py:353
+#: ohsradio/screens/traffic.py:354
+#: ohsradio/screens/traffic.py:354
 #, python-brace-format
 msgid "{n} aircraft"
 msgstr ""
@@ -2431,38 +2426,38 @@ msgstr ""
 msgid "{n} kb/s"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:666
+#: ohsradio/screens/traffic.py:667
 #, python-brace-format
 msgid "{n} radiosonde"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:666
+#: ohsradio/screens/traffic.py:667
 #, python-brace-format
 msgid "{n} radiosondes"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:468
+#: ohsradio/screens/traffic.py:469
 #, python-brace-format
 msgid "{n} ship"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:468
+#: ohsradio/screens/traffic.py:469
 #, python-brace-format
 msgid "{n} ships"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:561
+#: ohsradio/screens/traffic.py:562
 #, python-brace-format
 msgid "{n} station"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:561
+#: ohsradio/screens/traffic.py:562
 #, python-brace-format
 msgid "{n} stations"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:494
-#: ohsradio/screens/traffic.py:595
+#: ohsradio/screens/traffic.py:495
+#: ohsradio/screens/traffic.py:596
 #, python-brace-format
 msgid "{p} %"
 msgstr ""
@@ -2512,12 +2507,12 @@ msgstr ""
 msgid "{uri}: {error}"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:597
+#: ohsradio/screens/traffic.py:598
 #, python-brace-format
 msgid "{v} V"
 msgstr ""
 
-#: ohsradio/screens/traffic.py:581
+#: ohsradio/screens/traffic.py:582
 #, python-brace-format
 msgid "{v} m/s"
 msgstr ""

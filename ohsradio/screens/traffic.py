@@ -254,8 +254,8 @@ def _alt_text(a: dict) -> str | None:
         alt = a.get("altGeo")
     if alt is None:
         return None
-    if alt >= 6_000:
-        return _("FL{fl}").format(fl=f"{round(alt / 100):03d}")
+    # Feet throughout, not flight levels above the transition altitude:
+    # Brian's choice (31/10/2026), and the bands are named in feet too.
     return _("{ft} ft").format(ft=f"{alt:,.0f}")
 
 
