@@ -25,6 +25,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # unpacked into site-packages (no pip in the image; a wheel is a zip with
 # nothing to run at install).
 #
+# shack_ui builds the ui/2 screens (ohsnb/screens.py, ohscore/server/uiv2.py).
+# The Radio image had it from ui/1 on; this one did not, and the first NB
+# build to serve ui/v2 (0.1.23-beta.1) answered api/ but failed every
+# ui/v2 request with SharedLibraryMissing, which the image's selftest never
+# imports. The import below is what now fails the build instead.
+#
 # shack-sdr (the decoder host and RTTY's decoder, the codec loader, the
 # RTL-SDR and SDRplay sources) is the one with native code: the wheel for
 # this architecture, checked against tools/vendor/shack-sdr.lock.
@@ -43,13 +49,13 @@ COPY tools/vendor/ /tmp/vendor/
 RUN cd /tmp/vendor \
     && site="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
     && mkdir -p "$site" \
-    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec shack_spectrum; do \
+    && for w in shack_bandplan shack_client shack_pad shack_cw shack_rec shack_spectrum shack_ui; do \
          f="$(ls ${w}-*.whl)"; \
          want="$(sed -n "s/^$(echo $w | tr _ -)==.*--hash=sha256:\([0-9a-f]*\).*/\1/p" requirements.lock)"; \
          echo "$want  $f" | sha256sum -c - || exit 1; \
          python3 -m zipfile -e "$f" "$site"; \
        done \
-    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum; shack_bandplan.load()" \
+    && python3 -c "import shack_bandplan, shack_client, shack_pad, shack_cw, shack_rec, shack_spectrum, shack_ui; shack_bandplan.load(); shack_ui.LiveHub" \
     && arch="$(uname -m)" \
     && f="$(ls shack_sdr-*-manylinux_*_${arch}.whl)" \
     && want="$(sed -n "s/^shack-sdr==.*--hash=sha256:\([0-9a-f]*\).*_${arch}$/\1/p" shack-sdr.lock)" \
