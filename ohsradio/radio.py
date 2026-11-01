@@ -332,6 +332,13 @@ class Radio(Engine):
         self.adsb.table.photo_lookup = self.aircraftinfo.photo
         if self.persist:
             self.aircraftinfo.start()
+        # Each ship's details and photo (shipinfo.py), by IMO or MMSI, on
+        # the same terms: every ship heard is looked up in the background.
+        from .shipinfo import ShipInfo
+        self.shipinfo = ShipInfo(Path(self.data_dir) / "shipinfo", lambda: bool(self.st.get("aisShipLookup", True)))
+        self.ais.table.info_lookup = self.shipinfo.info
+        if self.persist:
+            self.shipinfo.start()
         # APRS stations on 144.800 MHz (aprs.py), receive only, likewise
         # while a client has the station map open; the table keeps a day.
         from .aprs import AprsService

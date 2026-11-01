@@ -78,6 +78,7 @@ from ohscore import sdr
 from ohscore.countries import distance_bearing, locator_position
 from ohscore.decoders import Refused, sessions_text
 
+from ohsradio import shipdata
 from ohsradio.i18n import _
 
 log = logging.getLogger("ohsradio.ais")
@@ -194,6 +195,10 @@ class VesselTable:
         self.dirty = False
         self.saved_at = 0.0
         self.station: tuple[float, float] | None = None
+        # Set by Radio to shipinfo.ShipInfo.info (shipinfo.py): a vessel ->
+        # its Wikidata details, from a cache only, never a fetch on this
+        # thread. None (a bare table) means `info` is null.
+        self.info_lookup = None
         self.load()
 
     # -- the station ------------------------------------------------------
@@ -359,6 +364,8 @@ class VesselTable:
             removed = [] if full else [m for r, m in self.removed if r > since]
             rev = self.rev
         vessels.sort(key=lambda v: (v.get("distanceKm") is None, v.get("distanceKm") or 0.0, v["mmsi"]))
+        for v in vessels:
+            self._more(v)
         return {"rev": rev, "full": full, "vessels": vessels, "removed": removed}
 
     def vessel(self, mmsi: int) -> dict | None:
@@ -369,7 +376,20 @@ class VesselTable:
             out = dict(v)
             out["track"] = [{"t": _iso(p[0]), "lat": p[1], "lon": p[2], "speed": p[3], "course": p[4]}
                             for p in self.tracks.get(mmsi, ())]
+        self._more(out)
         return out
+
+    def _more(self, v: dict) -> None:
+        """What a copy of an entry gains from tables and lookups, outside
+        the table's lock (shipdata.py, shipinfo.py): the flag its MMSI
+        names, its destination's port, and Wikidata's details, whose
+        photo, when there is one, Radio serves itself."""
+        v["flag"] = shipdata.flag(v["mmsi"])
+        v["port"] = shipdata.destination(v.get("destination"))
+        info = self.info_lookup(v) if self.info_lookup else None
+        if info and info.get("photo"):
+            info["photo"] = {**info["photo"], "src": f"api/ais/vessels/{v['mmsi']}/photo"}
+        v["info"] = info
 
     def __len__(self) -> int:
         return len(self.v)
@@ -618,6 +638,9 @@ class AisService:
         r._publish("ais", {"type": "nmea", "t": it.get("t"), "channel": ch, "mmsi": f.get("mmsi"),
                            "msgType": f.get("type"), "sentences": f.get("nmea") or []})
         if v is not None:
+            # Cache reads only (_more), never a request on this thread;
+            # a ship's first asking queues its lookup.
+            self.table._more(v)
             r._publish("ais", {"type": "vessel", "rev": v["rev"], "vessel": v})
 
     # -- views -------------------------------------------------------------

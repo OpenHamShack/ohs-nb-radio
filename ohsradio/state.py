@@ -350,6 +350,20 @@ with REG.after("adsbRouteLookup"):
             "\"OpenHamShack-Radio\" with its version and web address; the screen then loads the photo from "
             "Planespotters itself, as their terms require, so that screen needs the internet too.")
 
+# --- ship details and photos (ohsradio/shipinfo.py) --------------------------------
+# On by default, like the other online extras. One setting, not aircraft's
+# two: Radio fetches Commons' picture itself and serves it from the box
+# (Commons' licences allow it), so the facts and the photo reach the same
+# places.
+with REG.after("adsbPhotoLookup"):
+    _k("aisShipLookup", "bool", True, "setting",
+       help="Show more about each ship on the AIS map: its builder, year, operator, tonnage and a photo with its "
+            "author's credit, from Wikidata and Wikimedia Commons. Radio asks about each new ship it hears, by "
+            "its IMO number or MMSI, once, in the background, one request at a time at most every two seconds, "
+            "and keeps the answer and the photo on this computer for a month. What goes out: the ship's number, "
+            "\"OpenHamShack-Radio\" with its version and web address. Without internet the ship shows only what "
+            "it sends.")
+
 # --- radiosondes and SondeHub (ohsradio/sonde.py, sondehub.py) ---------------------
 # Both on by default, like the other online extras above (Brian: offline,
 # nothing changes). The upload is what radiosonde_auto_rx does by default

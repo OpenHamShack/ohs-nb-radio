@@ -140,6 +140,10 @@ os.environ["OHS_FLIGHTROUTES_BASE"] = "http://127.0.0.1:9"
 # adsbdb being the same host; aircraft photos' Planespotters likewise.
 os.environ["OHS_PLANESPOTTERS_BASE"] = "http://127.0.0.1:9"
 
+# Ships' details (ohsradio/shipinfo.py): Wikidata's query service, Commons'
+# API and its image host, all three at the same closed port.
+os.environ["OHS_WIKIMEDIA_BASE"] = "http://127.0.0.1:9"
+
 # And no weather satellites: a test radio at IO75RL with the bundled
 # element sets ran Radio's automatic Meteor recording on the real clock, so
 # any test that happened to run during a real pass had its receiver taken

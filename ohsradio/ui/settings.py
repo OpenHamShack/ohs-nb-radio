@@ -48,7 +48,8 @@ class SettingsDialog(core.SettingsDialog):
               "dmrIdLookup": "DMR callsigns from the internet",
               "adsbRouteLookup": "Flight routes from the internet",
               "adsbAircraftLookup": "Aircraft details from the internet",
-              "adsbPhotoLookup": "Aircraft photos from Planespotters"}
+              "adsbPhotoLookup": "Aircraft photos from Planespotters",
+              "aisShipLookup": "Ship details and photos from Wikidata"}
     CHOICE_LABELS = {**core.CHOICE_LABELS,
                      "device": {"sim": "Simulator", "pluto": "Pluto family", "libresdr": "LibreSDR",
                                 "hl2": "Hermes-Lite 2", "rtlsdr": "RTL-SDR (RX only)",
@@ -191,6 +192,9 @@ class SettingsDialog(core.SettingsDialog):
         self._add(lay, "adsbRouteLookup")
         self._add(lay, "adsbAircraftLookup")
         self._add(lay, "adsbPhotoLookup")
+        # Ships' details and photos (ohsradio/shipinfo.py), likewise.
+        self._section(lay, self.tr("AIS"))
+        self._add(lay, "aisShipLookup")
         self._section(lay, self.tr("Codecs"))
         note = QLabel(self.tr("codec2, for FreeDV, comes with Radio on Windows and macOS and with your system on "
                               "Linux. Radio never includes the codecs whose patents or licences keep them out of "

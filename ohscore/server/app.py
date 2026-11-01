@@ -1796,11 +1796,20 @@ class _Handler(BaseHTTPRequestHandler):
                                      "lon": st[1] if st else None}})
 
     def get_ais_vessel(self, who, q):
+        """GET api/ais/vessels/{mmsi}, and under it /photo: the ship's
+        Wikimedia Commons thumbnail, which Radio keeps and serves itself
+        (ohsradio/shipinfo.py: Commons' licences allow it, unlike
+        Planespotters'), 404 no_photo when it has none."""
         a = self._ais()
         if a is None:
             return
+        parts = urlsplit(self.path).path[len("/api/ais/vessels/"):].strip("/").split("/")
+        sub = parts[1] if len(parts) == 2 else None
+        if len(parts) > 2 or (sub is not None and sub != "photo"):
+            self._error(404, _("There is nothing at {path}").format(path=urlsplit(self.path).path), "not_found")
+            return
         try:
-            mmsi = int(self._session_id())
+            mmsi = int(parts[0])
         except ValueError:
             self._error(400, _("An MMSI is a number of up to nine digits"), "bad_params")
             return
@@ -1808,7 +1817,17 @@ class _Handler(BaseHTTPRequestHandler):
         if v is None:
             self._error(404, _("No vessel {mmsi} has been heard lately").format(mmsi=mmsi), "unknown_vessel")
             return
-        self._send(200, v)
+        if sub is None:
+            self._send(200, v)
+            return
+        si = getattr(self.srv.radio, "shipinfo", None)
+        got = si.photo(v) if si is not None else None
+        if got is None:
+            self._error(404, _("No photo of this ship"), "no_photo")
+            return
+        # A day: the picture of a ship rarely changes, and the client's
+        # cache saves a TV fetching it again each time it is selected.
+        self._send_bytes(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
 
     # api/sonde (docs/SERVER-API.md "Radiosondes"): Radio's radiosondes,
     # shaped as api/ais is. Receive only. NB has none and answers 404.

@@ -19,6 +19,10 @@ AIS transmitter keys, end to end:
   `since`, the track, and a restart that keeps it.
 - **Over the API:** api/ais/session, api/ais/vessels[/{mmsi}], and the
   levels they need.
+- **More about each ship** (01/11/2026): its flag and destination port on
+  every copy of an entry, Wikidata's details once looked up (against the
+  fake Wikimedia of test_ham_shipinfo.py), and its photo served by Radio
+  at api/ais/vessels/{mmsi}/photo.
 """
 import scratch_home  # noqa: F401  first: no test may touch the real config (see scratch_home.py)
 import http.client
@@ -43,6 +47,7 @@ from ohsradio.radio import Radio
 
 from listen_helpers import ListeningSim, make_listener
 from test_server import SECRET
+from test_ham_shipinfo import JPEG, FakeWikimedia
 
 HOME = 145_500_000.0
 
@@ -442,6 +447,122 @@ class OverTheApi(unittest.TestCase):
         s, a = self.req("POST", "/api/ais/session", {"client": "tv-1", "dropSessions": True})
         self.assertEqual(s, 200, a)
 
+
+class MoreAboutEachShip(unittest.TestCase):
+    """flag, port, info and the photo over the API, on a radio whose table
+    is fed directly (no decoder needed)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        cfg = {"device": "sim", "audioBackend": "null", "simRealtime": False, "simSeed": 7, "simHourUtc": 12.0,
+               "simSignals": False, "callsign": "GM4BRI", "licenceClass": "full", "vfo": HOME, "mode": "fm",
+               "locator": "IO75RL"}
+        self.audio = StreamAudio(realtime=False)
+        self.radio = Radio(cfg, persist=False, data_dir=tmp.name, audio=self.audio)
+        self.src = FakeWikimedia()
+        self.addCleanup(self.src.close)
+        # persist=False starts no fetcher of its own: this one is pointed
+        # at the fake and started, as the ADS-B tests do theirs.
+        from ohsradio.shipinfo import ShipInfo
+        si = self.radio.shipinfo = ShipInfo(Path(tmp.name) / "shipinfo",
+                                            lambda: bool(self.radio.st.get("aisShipLookup", True)),
+                                            base_url=self.src.base_url())
+        si.rate_s = 0.02
+        self.radio.ais.table.info_lookup = si.info
+        si.start()
+        self.addCleanup(si.stop)
+        self.srv = Server(self.radio, ham_server.info("9.9.9"), self.audio, secret=SECRET)
+        httpd = self.srv.serve("127.0.0.1", 0)
+        self.port = httpd.server_address[1]
+        self.addCleanup(self.srv.shutdown)
+        t = self.radio.ais.table
+        # MV Loch Seaforth by her IMO, and a yacht Wikidata does not know.
+        t.heard({"type": 1, "mmsi": 235103359, "lat": 55.6, "lon": -5.0, "speed": 18.0}, 1000.0)
+        t.heard({"type": 5, "mmsi": 235103359, "shipName": "LOCH SEAFORTH", "imo": 9665437,
+                 "destination": "GB STO"}, 1001.0)
+        t.heard({"type": 18, "mmsi": 232001234, "lat": 55.5, "lon": -4.8}, 1002.0)
+        t.heard({"type": 4, "mmsi": 2320123, "lat": 55.7, "lon": -4.9}, 1003.0)
+
+    req = None   # OverTheApi.req, below
+
+    def raw(self, path):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
+        c.request("GET", path, None, {shack.SHACK_SECRET_HEADER: SECRET, "X-OpenHamShack-User": "brian",
+                                      "X-OpenHamShack-Level": "view", "X-OpenHamShack-Device": "dev_TEST",
+                                      "X-OpenHamShack-Auth": "device"})
+        r = c.getresponse()
+        out = r.status, r.getheader("Content-Type"), r.getheader("Cache-Control"), r.read()
+        c.close()
+        return out
+
+    def settled(self):
+        end = time.monotonic() + 15
+        while time.monotonic() < end:
+            s, a = self.req("GET", "/api/ais/vessels", level="view")
+            by = {v["mmsi"]: v for v in a["vessels"]}
+            if by[235103359]["info"] and by[232001234]["info"] is not None:
+                return by
+            time.sleep(0.05)
+        raise AssertionError("never looked up")
+
+    def test_flag_port_details_and_photo(self):
+        s, a = self.req("GET", "/api/ais/vessels", level="view")
+        by = {v["mmsi"]: v for v in a["vessels"]}
+        sea = by[235103359]
+        self.assertEqual(sea["flag"], {"mid": "235", "country": "United Kingdom", "iso": "GB", "emoji": "🇬🇧"})
+        self.assertEqual(sea["port"], {"text": "Stornoway", "code": "GB STO"})
+        self.assertIsNone(sea["info"])                             # not yet asked
+        self.assertEqual(by[2320123]["flag"]["country"], "United Kingdom")    # a coast station has one too
+        by = self.settled()
+        sea = by[235103359]
+        self.assertEqual((sea["info"]["label"], sea["info"]["operator"], sea["info"]["grossTonnage"]),
+                         ("MV Loch Seaforth", "Caledonian MacBrayne", 8680))
+        self.assertEqual(sea["info"]["photo"]["src"], "api/ais/vessels/235103359/photo")
+        self.assertEqual(sea["info"]["photo"]["credit"], "Mn28 · CC BY-SA 3.0")
+        self.assertEqual(by[232001234]["info"], {})                # a yacht nobody wrote up
+        self.assertIsNone(by[2320123]["info"])                     # never asked about
+        s, v = self.req("GET", "/api/ais/vessels/235103359", level="view")
+        self.assertEqual((s, v["info"]["builder"], v["port"]["text"]),
+                         (200, "Flensburger Schiffbau-Gesellschaft", "Stornoway"))
+        # The picture, from the box.
+        self.assertEqual(self.raw("/api/ais/vessels/235103359/photo"),
+                         (200, "image/jpeg", "max-age=86400", JPEG))
+        for path, code in (("/api/ais/vessels/232001234/photo", "no_photo"),
+                           ("/api/ais/vessels/2320123/photo", "no_photo"),
+                           ("/api/ais/vessels/235000999/photo", "unknown_vessel"),
+                           ("/api/ais/vessels/235103359/photo/x", "not_found"),
+                           ("/api/ais/vessels/235103359/track", "not_found")):
+            s, e = self.req("GET", path, level="view")
+            self.assertEqual((s, e["code"]), (404, code), path)
+
+    def test_the_socket_items_carry_them_too(self):
+        got = []
+        frame = {"t": 1010.0, "fields": {"type": 1, "mmsi": 235103359, "lat": 55.61, "lon": -5.0}}
+        with mock.patch.object(self.radio, "_publish", lambda ch, it: got.append(it)):
+            end = time.monotonic() + 15
+            while time.monotonic() < end:
+                self.radio.ais._frame(frame)
+                if got[-1]["vessel"]["info"]:
+                    break
+                time.sleep(0.05)
+                frame = dict(frame, t=frame["t"] + 1)
+        v = got[-1]["vessel"]
+        self.assertEqual((v["flag"]["iso"], v["info"]["qid"]), ("GB", "Q11713805"))
+
+    def test_the_setting_off_hides_them_and_asks_nothing(self):
+        self.radio.st["aisShipLookup"] = False
+        s, a = self.req("GET", "/api/ais/vessels", level="view")
+        time.sleep(0.3)
+        s, a = self.req("GET", "/api/ais/vessels", level="view")
+        self.assertTrue(all(v["info"] is None for v in a["vessels"]))
+        # The flag and port are bundled tables: no request, so no setting.
+        self.assertEqual({v["mmsi"]: v for v in a["vessels"]}[235103359]["port"]["text"], "Stornoway")
+        self.assertEqual(self.raw("/api/ais/vessels/235103359/photo")[0], 404)
+        self.assertEqual(self.src.requests, [])
+
+
+MoreAboutEachShip.req = OverTheApi.req
 
 if __name__ == "__main__":
     unittest.main()

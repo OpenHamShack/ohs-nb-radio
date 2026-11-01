@@ -2291,6 +2291,53 @@ Every answer of the session routes is the session view (also `ais` in
   is dropped. The table is kept on the controller and survives a restart:
   a map opened after one shows the ships it had, with their real ages.
 
+**Flag and port** (01/11/2026; `ohsradio/shipdata.py`, bundled tables, no
+network). Every vessel in these answers and on the feed also carries:
+
+- `flag`: `{"mid", "country", "iso", "emoji"}` - the country the MMSI's
+  Maritime Identification Digits are allocated to (ITU-R M.585), found in
+  whichever form the MMSI has (ship MIDxxxxxx, group 0MID, coast station
+  00MID, SAR aircraft 111MID, aid 99MID, craft 98MID, handheld 8MID);
+  `emoji` the Unicode flag of `iso`, either `null` where the table has no
+  code (306, the Dutch Caribbean). `null` for a SART/MOB/EPIRB (no MID) or
+  an MID the ITU has not allocated. `country` is in English.
+- `port`: `{"text", "code"}` for `destination`: each UN/LOCODE in it
+  ("GBARD", "GB ARD", "GB-ARD", "GBARD>IEDUB") becomes the port's name
+  ("Ardrossan", "Ardrossan → Dublin"), anything else stays as written;
+  `code` is the raw destination when something was mapped (show it muted
+  beside the name), else `null`. `null` with no destination. Every port in
+  UN/LOCODE (ohsradio/data/ships/, from UNECE's own repository).
+
+**Ship details and photos** (01/11/2026; `ohsradio/shipinfo.py`).
+`info`: `{"qid", "label" (Wikidata's name for the ship), "builder",
+"built" (a year), "operator", "grossTonnage", "homePort", "photo":
+{"src", "credit", "link", "width", "height"} | null, "source":
+"wikidata"}`, any field `null` when Wikidata has none. `null` until the
+ship has been looked up (or while that fails, with the setting off, or
+for a station that is not a ship: base stations, aids, beacons, SAR
+aircraft); `{}` when Wikidata does not know it. Radio looks up **every
+ship heard**, in the background: by its IMO number (Wikidata P458) when it
+has sent a valid one (check digit right), else its MMSI (P587), with one
+SPARQL query to query.wikidata.org; for a ship with a picture (P18), then
+Commons' API for its author and licence and a thumbnail at least 640 px
+wide. One request at a time, at least 2 s after the one before; a hit
+kept 30 days, a miss 7, a failure retried after 10 minutes with
+aircraft's backoff across the source (30 s doubling to 30 minutes).
+`photo.credit` is "<author> · <licence>" (the author's HTML stripped),
+`photo.link` the file's page on Commons - show the credit, and offer the
+link (a QR code on a TV) as for aircraft. **Radio keeps and serves the
+picture itself**, Commons' licences allowing redistribution with that
+attribution: `src` is `api/ais/vessels/{mmsi}/photo` (view; the JPEG or
+PNG, `Cache-Control: max-age=86400`; `404 no_photo` when there is none),
+so a client loads it from the box like any other picture, with no
+internet of its own. At most 300 pictures are kept, 600 kB each at most,
+oldest out first. Setting `aisShipLookup` (`api/set`, Settings › AIS;
+default `true`): off, nothing is asked and `info` is `null`. What goes
+out: the IMO or MMSI, the picture's file name, and the User-Agent
+"OpenHamShack-Radio/<version> (+https://openhamshack.com/)
+Python-urllib", as Wikimedia's policy asks - the project's address,
+never the operator's.
+
 **Keeping up.** Every change bumps `rev`. `GET api/ais/vessels?since=<rev>`
 answers only the vessels changed after that rev, in `vessels`, and the
 MMSIs dropped after it, in `removed`, with `full: false`. When `full` is
