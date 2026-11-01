@@ -22,6 +22,8 @@ as an item moves (common.sync), at most 30, as the TV keeps them.
 """
 from __future__ import annotations
 
+import re
+
 from ohsradio import shipinfo
 from ohsradio.i18n import _
 
@@ -397,6 +399,17 @@ def _ship_type(v: dict) -> str:
     return "type:other"
 
 
+def eta_text(eta: str | None) -> str | None:
+    """AIS's ETA ("10-31 20:30": month, day, UTC; no year) as "31 Oct
+    20:30". Left as sent when it is not a real date."""
+    m = re.fullmatch(r"(\d{2})-(\d{2}) (\d{2}:\d{2})", eta or "")
+    if not m or not 1 <= int(m[1]) <= 12 or not 1 <= int(m[2]) <= 31:
+        return eta
+    months = (_("Jan"), _("Feb"), _("Mar"), _("Apr"), _("May"), _("Jun"), _("Jul"), _("Aug"), _("Sep"), _("Oct"),
+              _("Nov"), _("Dec"))
+    return _("{day} {month} {time}").format(day=int(m[2]), month=months[int(m[1]) - 1], time=m[3])
+
+
 def ship_item(v: dict) -> dict:
     tag = _ship_type(v)
     cls = v.get("class")
@@ -431,12 +444,12 @@ def ship_item(v: dict) -> dict:
         "emergencyText": _("Distress beacon") if distress else None,
         "distText": nm_text(v.get("distanceKm"), v.get("bearingDeg")),
         "mmsi": str(v["mmsi"]), "callsign": v.get("callsign"), "kindText": v.get("shipTypeText"),
-        "idLine": " · ".join(x for x in (str(v["mmsi"]), f"IMO {v['imo']}" if v.get("imo") else None) if x),
+        "idLine": " · ".join(x for x in (str(v["mmsi"]), f"IMO {v['imo']:.0f}" if v.get("imo") else None) if x),
         "kindLine": " · ".join(x for x in (v.get("shipTypeText"), country) if x) or None, "flagText": country,
-        "navText": v.get("navStatusText"), "destination": dest, "eta": v.get("eta"),
+        "navText": v.get("navStatusText"), "destination": dest, "eta": eta_text(v.get("eta")),
         # "→ Ardrossan", or "Ardrossan → Dublin" for a from>to; the code as
         # sent beside it, muted, only where it was turned into a name.
-        "destLine": None if not dest else dest if "→" in dest else f"→ {dest}",
+        "destLine": None if not dest else dest if ("→" in dest or "↔" in dest) else f"→ {dest}",
         "destCode": port.get("code"),
         "speedText": speed, "courseText": None if v.get("course") is None else f"{v['course']:.0f}°",
         "sizeText": size, "draughtText": None if v.get("draught") is None else _("{m} m").format(m=v["draught"]),

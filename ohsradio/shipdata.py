@@ -48,7 +48,10 @@ DATA = Path(__file__).resolve().parent / "data" / "ships"
 
 _CODE = re.compile(r"^[A-Z]{2}[A-Z2-9]{3}$")
 _SEPARATORS = re.compile(r"[\s\-_.]+")
-_PARTS = re.compile(r"\s*(?:=>|->|>)\s*")
+# A ferry on a fixed run often sends both ends, "GB BDI <-> GB ARD": the
+# two-way forms must be matched before ">" or the "<" is left on a port.
+_PARTS = re.compile(r"\s*(<-+>|<=+>|<>|=>|->|>)\s*")
+_TWO_WAY = re.compile(r"^(<-+>|<=+>|<>)$")
 
 
 @lru_cache(maxsize=1)
@@ -131,8 +134,15 @@ def destination(text) -> dict | None:
     raw = text.strip() if isinstance(text, str) else ""
     if not raw:
         return None
-    parts = [x for x in _PARTS.split(raw) if x]
-    names = [port(x) for x in parts]
+    pieces = _PARTS.split(raw)   # port, separator, port, ...
+    parts, seps = [x for x in pieces[0::2]], pieces[1::2]
+    keep = [i for i, x in enumerate(parts) if x]
+    names = [port(parts[i]) for i in keep]
     if not any(names):
         return {"text": raw, "code": None}
-    return {"text": " → ".join(n or x for n, x in zip(names, parts)), "code": raw}
+    out = []
+    for j, i in enumerate(keep):
+        if j:
+            out.append(" ↔ " if _TWO_WAY.match(seps[i - 1]) else " → ")
+        out.append(names[j] or parts[i])
+    return {"text": "".join(out), "code": raw}

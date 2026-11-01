@@ -242,6 +242,11 @@ def parse_imageinfo(data) -> dict | None:
 def credit(artist: str | None, licence: str | None) -> str:
     """What the screen prints under the picture: author and licence, as
     Commons' licences ask; "Wikimedia Commons" where it says neither."""
+    # Commons often names a photographer by their user page, "User:Dave
+    # souza": the person's name is what the credit is for. Done here, not
+    # in plain(), so entries already cached read the same.
+    if artist:
+        artist = re.sub(r"(?i)^user:\s*", "", artist).strip() or None
     return " · ".join(x for x in (artist, licence) if x) or "Wikimedia Commons"
 
 

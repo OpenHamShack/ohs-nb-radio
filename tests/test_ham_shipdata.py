@@ -59,6 +59,11 @@ class Ports(unittest.TestCase):
         self.assertEqual(shipdata.destination("GB BEL > NOT A PORT"),
                          {"text": "Belfast → NOT A PORT", "code": "GB BEL > NOT A PORT"})
 
+    def test_a_ferry_sends_both_ends(self):
+        # CALEDONIAN ISLES, 01/11/2026: the TV read "GB BDI < → Ardrossan".
+        for sent in ("GB BDI <-> GB ARD", "GBBDI<>GBARD", "GBBDI <=> GBARD"):
+            self.assertEqual(shipdata.destination(sent)["text"], "Brodick, Isle of Arran ↔ Ardrossan", sent)
+
     def test_text_that_is_not_a_code_is_left_as_written(self):
         for text in ("ARDROSSAN", "FOR ORDERS", "ZZZZZ", "GB", "FISHING GROUNDS"):
             self.assertEqual(shipdata.destination(text), {"text": text, "code": None}, text)

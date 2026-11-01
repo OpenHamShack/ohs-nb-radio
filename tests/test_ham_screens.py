@@ -574,6 +574,13 @@ class Aircraft(unittest.TestCase):
         pump(self.radio, 10, until=lambda: self.radio.state()["rxOwner"] == {})
         self.assertEqual(self.radio.state()["rxOwner"], {})
 
+    def test_a_ships_imo_and_eta_read_as_people_write_them(self):
+        from ohsradio.screens import traffic
+        it = traffic.ship_item({"mmsi": 232001580, "imo": 9051284.0, "eta": "10-31 20:30"})
+        self.assertEqual(it["idLine"], "232001580 · IMO 9051284")
+        self.assertEqual(it["eta"], "31 Oct 20:30")
+        self.assertEqual(traffic.eta_text("00-00 24:60"), "00-00 24:60")   # AIS's "not available", as sent
+
     def test_a_count_reads_as_a_whole_number(self):
         from ohsradio.screens import traffic
         # The decoder sends 2034.0; the TV drew "2,034.0" (31/10/2026).

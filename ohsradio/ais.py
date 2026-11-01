@@ -281,6 +281,10 @@ class VesselTable:
             text("shipName", "name")
             text("callsign")
             take("imo", "destination", "draught", "toBow", "toStern", "toPort", "toStarboard", "shipType")
+            # The decoder's JSON gives whole numbers as floats: the TV drew
+            # "IMO 9051284.0" (01/11/2026).
+            if isinstance(v.get("imo"), float) and v["imo"].is_integer():
+                v["imo"] = int(v["imo"])
             m, d, h, mi = (f.get(k) for k in ("etaMonth", "etaDay", "etaHour", "etaMinute"))
             v["eta"] = f"{m:02.0f}-{d:02.0f} {h or 0:02.0f}:{mi or 0:02.0f}" if m and d else None
         if kind == 19:

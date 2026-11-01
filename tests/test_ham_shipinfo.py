@@ -189,6 +189,10 @@ class Facts(Base):
         self.assertIsNone(shipinfo.parse_query(d)["label"])
         self.assertEqual(shipinfo.parse_query(SPARQL)["label"], "MV Loch Seaforth")
 
+    def test_a_credit_names_the_person_not_their_user_page(self):
+        self.assertEqual(shipinfo.credit("User:Dave souza", "CC BY-SA 2.5"), "Dave souza · CC BY-SA 2.5")
+        self.assertEqual(shipinfo.credit("Marc Ryckaert", "CC BY-SA 4.0"), "Marc Ryckaert · CC BY-SA 4.0")
+
     def test_without_a_valid_imo_by_mmsi(self):
         si = self.make()
         si.start()
