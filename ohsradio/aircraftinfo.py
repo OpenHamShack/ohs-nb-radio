@@ -252,13 +252,16 @@ class Lookup:
                 continue
             if h is None:
                 continue
-            with self.lock:
-                self.queued.discard(h)
             wait = max(self._last_request + self.rate_s, self._last_request + self.backoff_s) - time.monotonic()
             if wait > 0 and self.stop_ev.wait(wait):
                 break
             self._last_request = time.monotonic()
             self._fetch_and_store(h)
+            # Queued until answered, not until taken: a ship's lookup is
+            # three paced requests, and the screen asking again meanwhile
+            # queued the same ship once more each time.
+            with self.lock:
+                self.queued.discard(h)
 
     def _fetch_and_store(self, h: str) -> None:
         try:
