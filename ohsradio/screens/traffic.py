@@ -22,6 +22,7 @@ as an item moves (common.sync), at most 30, as the TV keeps them.
 """
 from __future__ import annotations
 
+from ohsradio import shipinfo
 from ohsradio.i18n import _
 
 from .common import OSM, WORDS, dist_text, nm_text, place, station, station_layer, sync, ui
@@ -497,7 +498,8 @@ def selected_ship_fields(radio, key) -> dict:
     label = info.get("label")
     # Wikidata's name only when it says more than AIS's: "MV Loch
     # Seaforth" for "LOCH SEAFORTH" does not, the case and a prefix aside.
-    differs = label and _bare(label) != _bare(name)
+    # A cache filled before shipinfo.is_name dropped "IMO 9370288" labels.
+    differs = label and shipinfo.is_name(label) and _bare(label) != _bare(name)
     built = info.get("built")
     builder = info.get("builder")
     made = (_("Built {year} by {builder}").format(year=built, builder=builder) if built and builder

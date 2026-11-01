@@ -183,6 +183,12 @@ class Facts(Base):
             self.assertNotIn("Cookie", headers)
             self.assertNotIn("Referer", headers)
 
+    def test_a_label_that_is_only_an_imo_number_is_no_name(self):
+        d = copy.deepcopy(SPARQL)
+        d["results"]["bindings"][0]["itemLabel"]["value"] = "IMO 9370288"
+        self.assertIsNone(shipinfo.parse_query(d)["label"])
+        self.assertEqual(shipinfo.parse_query(SPARQL)["label"], "MV Loch Seaforth")
+
     def test_without_a_valid_imo_by_mmsi(self):
         si = self.make()
         si.start()

@@ -172,6 +172,11 @@ def _year(v) -> str | None:
     return m[1] if m else None
 
 
+def is_name(label: str) -> bool:
+    """False for a Wikidata label that is only "IMO 9370288": not a name."""
+    return not re.fullmatch(r"(?i)IMO\s*\d{7}", label.strip())
+
+
 def parse_query(data) -> dict | None:
     """The query service's answer as the facts (no photo yet) and the
     picture's Commons file name under "_file"; None for no such ship.
@@ -201,7 +206,11 @@ def parse_query(data) -> dict | None:
         gt = None
     image = first("image")
     file = urllib.parse.unquote(image.rsplit("/", 1)[-1]) if image and "/Special:FilePath/" in image else None
-    return {"qid": qid, "label": None if label == qid else label, "builder": first("builderLabel"),
+    # Many Wikidata ships are labelled only "IMO 9370288" (or by their
+    # Q-number): not a name, so the card would show it as one.
+    if label and (label == qid or not is_name(label)):
+        label = None
+    return {"qid": qid, "label": label, "builder": first("builderLabel"),
             "built": _year(first("inception")) or _year(first("service")), "operator": first("operatorLabel"),
             "grossTonnage": gt, "homePort": first("homeLabel"), "_file": file}
 
