@@ -240,7 +240,10 @@ class Photos(Base):
         # the file, not only from what is shown...
         self.clock.t += aircraftinfo.PHOTO_TTL_S + 1
         ai.photo("ABC123")
-        self.until(lambda: ai.photos.cache.get("ABC123"))
+        # The file, not the cache: the entry is in the cache a moment
+        # before the file is written, and reading between them failed
+        # about one run in five.
+        self.until(lambda: "ABC123" in (self.dir / "photos.json").read_text() or None)
         self.assertEqual(list(json.loads((self.dir / "photos.json").read_text())), ["ABC123"])
         # ...and a restart never reads one older than that back.
         self.clock.t += aircraftinfo.PHOTO_TTL_S + 1
