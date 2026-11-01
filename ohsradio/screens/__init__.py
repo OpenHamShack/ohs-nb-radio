@@ -155,6 +155,8 @@ def opened(srv, sid: str, params: dict, channel) -> None:
     """A live channel was made: hooks for what only one client needs."""
     if sid == "radio/aircraft":
         traffic.hook_aircraft(srv, channel)
+    elif sid == "radio/ships":
+        traffic.hook_ships(srv, channel)
 
 
 def feed(srv, sid: str, params: dict, channel) -> None:

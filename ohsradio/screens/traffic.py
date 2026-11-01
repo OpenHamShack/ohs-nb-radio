@@ -412,6 +412,14 @@ def ship_item(v: dict) -> dict:
     name = (v.get("name") or "").strip() or str(v["mmsi"])
     speed = None if v.get("speed") is None else _("{kn} kn").format(kn=f"{v['speed']:.1f}")
     size = _("{l} × {b} m").format(l=v["length"], b=v["beam"]) if v.get("length") and v.get("beam") else None
+    # The flag (from the MMSI) and the destination's port (from UN/LOCODE)
+    # are bundled tables (shipdata.py): small, the same for every client,
+    # so in every item. Wikidata's facts and the photo are the selected
+    # ship's only (selected_ship_fields), as aircraft's are.
+    flag = v.get("flag") or {}
+    country = " ".join(x for x in (flag.get("emoji"), flag.get("country")) if x) or None
+    port = v.get("port") or {}
+    dest = port.get("text") or v.get("destination")
     return {
         "lat": v.get("lat"), "lon": v.get("lon"),
         "rot": v.get("heading") if v.get("heading") is not None else v.get("course"),
@@ -422,7 +430,13 @@ def ship_item(v: dict) -> dict:
         "emergencyText": _("Distress beacon") if distress else None,
         "distText": nm_text(v.get("distanceKm"), v.get("bearingDeg")),
         "mmsi": str(v["mmsi"]), "callsign": v.get("callsign"), "kindText": v.get("shipTypeText"),
-        "navText": v.get("navStatusText"), "destination": v.get("destination"), "eta": v.get("eta"),
+        "idLine": " · ".join(x for x in (str(v["mmsi"]), f"IMO {v['imo']}" if v.get("imo") else None) if x),
+        "kindLine": " · ".join(x for x in (v.get("shipTypeText"), country) if x) or None, "flagText": country,
+        "navText": v.get("navStatusText"), "destination": dest, "eta": v.get("eta"),
+        # "→ Ardrossan", or "Ardrossan → Dublin" for a from>to; the code as
+        # sent beside it, muted, only where it was turned into a name.
+        "destLine": None if not dest else dest if "→" in dest else f"→ {dest}",
+        "destCode": port.get("code"),
         "speedText": speed, "courseText": None if v.get("course") is None else f"{v['course']:.0f}°",
         "sizeText": size, "draughtText": None if v.get("draught") is None else _("{m} m").format(m=v["draught"]),
         "snrText": None if v.get("snrDb") is None else _("{db} dB").format(db=f"{v['snrDb']:.1f}"),
@@ -438,16 +452,26 @@ def ships(srv, params, req):
     chips = [p.option(t, words[t], tone=c) for t, c, *_r in SHIP_TYPES]
     details = [
         p.row(p.icon(sym=item("sym"), tone=item("tone"), size="xl", surface="card"),
-              p.column(p.text(item("kindText"), style="caption", tone="muted"),
+              p.column(p.text(item("kindLine"), style="caption", tone="muted"),
                        p.text(item("title"), style="display", size="xl"),
-                       p.text(item("mmsi"), tone="muted", style="mono"), weight=1), gap="s"),
+                       p.text(item("idLine"), tone="muted", style="mono"), weight=1), gap="s"),
+        # Wikidata's, for the selected ship only (hook_ships): its own name
+        # where AIS's differs and its operator, then when and where built.
+        p.text(item("aboutLine")),
+        p.text(item("builtLine"), tone="muted"),
+        # Wikimedia Commons' picture, which Radio serves from the box
+        # (shipinfo.py), with the author and licence and a link to the
+        # file's page (a QR code on a TV), as Commons' licences ask.
+        p.image(item("photo.src"), h=140, fit="cover", credit=item("photo.credit"), link=item("photo.link"),
+                qr=True, alt=item("photo.alt")),
+        p.row(p.text(item("destLine"), tone="accent"), p.text(item("destCode"), tone="muted", style="mono"),
+              gap="s"),
         p.banner(item("emergencyText"), tone="emergency"),
         p.text(item("navText"), tone="accent"),
-        _grid(p.field(_("Callsign"), item("callsign")), p.field(_("Destination"), item("destination")),
-              p.field(_("ETA"), item("eta")), p.field(_("Speed"), item("speedText")),
-              p.field(_("Course"), item("courseText")), p.field(_("From"), item("distText")),
-              p.field(_("Size"), item("sizeText")), p.field(_("Draught"), item("draughtText")),
-              p.field(_("Heard"), [T.ago(item("at")), item("snrText")])),
+        _grid(p.field(_("Callsign"), item("callsign")), p.field(_("ETA"), item("eta")),
+              p.field(_("Speed"), item("speedText")), p.field(_("Course"), item("courseText")),
+              p.field(_("From"), item("distText")), p.field(_("Size"), item("sizeText")),
+              p.field(_("Draught"), item("draughtText")), p.field(_("Heard"), [T.ago(item("at")), item("snrText")])),
     ]
     menu = [p.text(_("Show"), style="caption", tone="muted"),
             *[_toggle("ais.hide", words[t], t, c) for t, c, *_r in SHIP_TYPES],
@@ -456,6 +480,57 @@ def ships(srv, params, req):
                   chips=chips, hide_key="ais.hide", row=_row(), details=details, menu=menu,
                   empty=_("No ships heard yet: they appear within a minute of the map opening."), empty_icon="ship",
                   list_title=_("Nearest"))
+
+
+def selected_ship_fields(radio, key) -> dict:
+    """What only the selected ship's details show, for the client that
+    selected it (as selected_fields for aircraft): who it is by
+    Wikidata - its name there when AIS's differs, operator, builder, year,
+    tonnage, home port - and its photo, served by Radio at
+    api/ais/vessels/<mmsi>/photo (shipinfo.py); {"src": None} for none."""
+    try:
+        v = (radio.ais.table.vessel(int(key)) if key else None) or {}
+    except ValueError:
+        v = {}
+    info = v.get("info") or {}
+    name = (v.get("name") or "").strip()
+    label = info.get("label")
+    # Wikidata's name only when it says more than AIS's: "MV Loch
+    # Seaforth" for "LOCH SEAFORTH" does not, the case and a prefix aside.
+    differs = label and _bare(label) != _bare(name)
+    built = info.get("built")
+    builder = info.get("builder")
+    made = (_("Built {year} by {builder}").format(year=built, builder=builder) if built and builder
+            else _("Built {year}").format(year=built) if built
+            else _("Built by {builder}").format(builder=builder) if builder else None)
+    gt = info.get("grossTonnage")
+    home = info.get("homePort")
+    out = {"aboutLine": " · ".join(x for x in (label if differs else None, info.get("operator")) if x) or None,
+           "builtLine": " · ".join(x for x in (made, _("{gt} GT").format(gt=f"{gt:,}") if gt else None,
+                                               _("Home port {port}").format(port=home) if home else None)
+                                   if x) or None}
+    ph = info.get("photo") or {}
+    if not ph.get("src"):
+        return out | {"photo": {"src": None}}
+    return out | {"photo": {"src": ph["src"], "credit": ph.get("credit"), "link": ph.get("link"),
+                            "alt": _("Photo of {what}").format(what=label or name or key)}}
+
+
+def _bare(name: str) -> str:
+    """A ship's name for comparing: letters and digits only, any of the
+    usual prefixes (MV, MS, HMS...) off."""
+    words = "".join(c if c.isalnum() else " " for c in (name or "").upper()).split()
+    if words and words[0] in ("MV", "MS", "MY", "SS", "RV", "HMS", "HMY", "NLV", "RMS", "FV", "MT", "SY"):
+        words = words[1:]
+    return "".join(words)
+
+
+def hook_ships(srv, ch) -> None:
+    """Only the selected ship needs its Wikidata details and photo: sent
+    to the client that selected it, not to every TV (hook_aircraft)."""
+    radio = srv.radio
+    ch.on_select(lambda client, key: client.up("vessels", key, selected_ship_fields(radio, key)) if key else None,
+                 sel="vessels")
 
 
 def feed_ships(srv, params, ch) -> None:
@@ -467,6 +542,14 @@ def feed_ships(srv, params, ch) -> None:
     ch.set("emergency", hidden=not distress, text=" · ".join(f"{it['title']}: {it['emergencyText']}"
                                                               for it in distress[:2]))
     _status(ch, a.view(), len(items), _("{n} ship"), _("{n} ships"))
+    # Details or a photo looked up after the ship was selected reach that
+    # client now, as feed_aircraft does.
+    seen = ch.__dict__.setdefault("_ui_selected_ships", {})
+    for key in {cv.selected("vessels") for cv in ch.clients("vessels")}:
+        now = selected_ship_fields(srv.radio, key)
+        if seen.get(key) != now:
+            seen[key] = now
+            ch.refresh("vessels", key)
 
 
 # ---------------------------------------------------------------- APRS

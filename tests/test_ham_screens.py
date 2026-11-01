@@ -641,6 +641,62 @@ class TheOtherMaps(unittest.TestCase):
                                     "course": 271.0, "heading": 270.0, "navStatus": 0, "channel": "A"}, t + 20)
         lv.until(lambda st: len(st["collections"]["vessels"]["items"]["235000001"]["trail"]) == 2)
 
+    def test_a_ships_flag_port_details_and_photo(self):
+        from ohsradio.screens import traffic
+        t = time.time()
+        table = self.radio.ais.table
+        table.heard({"type": 1, "mmsi": 235103359, "lat": 55.6, "lon": -5.0, "speed": 18.0, "channel": "A"}, t)
+        table.heard({"type": 5, "mmsi": 235103359, "shipName": "LOCH SEAFORTH", "imo": 9665437, "shipType": 60,
+                     "destination": "GBSTO", "channel": "B"}, t + 1)
+        # Wikidata's answer as shipinfo.py gives it (test_ham_shipinfo.py
+        # fetches it from a fake Wikimedia); here only what the screen does.
+        details = {"qid": "Q11713805", "label": "MV Loch Seaforth", "builder": "Flensburger Schiffbau-Gesellschaft",
+                   "built": "2015", "operator": "Caledonian MacBrayne", "grossTonnage": 8680,
+                   "homePort": "Stornoway", "source": "wikidata",
+                   "photo": {"credit": "Mn28 · CC BY-SA 3.0",
+                             "link": "https://commons.wikimedia.org/wiki/File:Loch_Seaforth.jpg"}}
+        found = [None]
+        table.info_lookup = lambda v: json.loads(json.dumps(found[0])) if v["mmsi"] == 235103359 else None
+        doc = self.c.screen("radio/ships")
+        lv = self.c.live(doc)
+        lv.until(lambda st: "235103359" in st["collections"]["vessels"]["items"])
+        v = lv.items("vessels")["235103359"]
+        # The flag and the port are in every item: bundled tables, no lookup.
+        self.assertEqual((v["kindLine"], v["idLine"]), ("Passenger · 🇬🇧 United Kingdom", "235103359 · IMO 9665437"))
+        self.assertEqual((v["destination"], v["destLine"], v["destCode"]), ("Stornoway", "→ Stornoway", "GBSTO"))
+        # Selecting it before Wikidata has answered: no details, no photo.
+        lv.send({"t": "select", "sel": "vessels", "key": "235103359"})
+        lv.until(lambda st: "photo" in st["collections"]["vessels"]["items"]["235103359"], radio=self.radio)
+        got = lv.items("vessels")["235103359"]
+        self.assertEqual((got["photo"], got.get("aboutLine"), got.get("builtLine")), ({"src": None}, None, None))
+        # The answer arriving reaches this client, and only it.
+        other = self.c.live(doc, client="phone-1")
+        found[0] = details
+        st = lv.until(lambda st: st["collections"]["vessels"]["items"]["235103359"]["photo"].get("src"),
+                      radio=self.radio)
+        got = st["collections"]["vessels"]["items"]["235103359"]
+        self.assertEqual(got["aboutLine"], "Caledonian MacBrayne")     # "MV Loch Seaforth" says no more than AIS
+        self.assertEqual(got["builtLine"],
+                         "Built 2015 by Flensburger Schiffbau-Gesellschaft · 8,680 GT · Home port Stornoway")
+        self.assertEqual(got["photo"], {"src": "api/ais/vessels/235103359/photo", "credit": "Mn28 · CC BY-SA 3.0",
+                                        "link": "https://commons.wikimedia.org/wiki/File:Loch_Seaforth.jpg",
+                                        "alt": "Photo of MV Loch Seaforth"})
+        other.until(lambda st: "235103359" in st["collections"]["vessels"]["items"], radio=self.radio)
+        self.assertNotIn("photo", other.items("vessels")["235103359"])
+        # The details draw the photo with its credit and the link as a QR
+        # code, and the document is valid with the item in it: the picture
+        # is a path on the box, which needs no allow-listed host.
+        (img,) = [p for p, _w, _t in ui.iter_parts(part(doc, "details")) if p.get("type") == "image"]
+        self.assertEqual((img["src"], img["credit"], img["link"], img["qr"]),
+                         ({"$": "photo.src"}, {"$": "photo.credit"}, {"$": "photo.link"}, True))
+        d = json.loads(json.dumps(doc))
+        d["collections"]["vessels"]["items"]["235103359"] = got
+        self.assertEqual(ui.check(d), [])
+        # A name that does say more is shown: Wikidata's for a renamed ship.
+        found[0] = dict(details, label="Isle of Lewis")
+        self.assertEqual(traffic.selected_ship_fields(self.radio, "235103359")["aboutLine"],
+                         "Isle of Lewis · Caledonian MacBrayne")
+
     def test_sondes(self):
         from ohsradio import sonde
         from test_ham_sonde import rs41_line
