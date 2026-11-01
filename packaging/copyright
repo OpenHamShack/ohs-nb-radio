@@ -54,6 +54,21 @@ Comment: AD1C's country file, read for the FT8 Country column: Big CTY,
  below; the publisher's copyright line names no holder ("Copyright (c)
  1994-"), and the files are AD1C's.
 
+Files: ohsradio/data/ships/locode.json.gz ohsradio/data/ships/locode.LICENCE.txt
+Copyright: United Nations Economic Commission for Europe (UNECE)
+License: GPL-3
+Comment: Port names for AIS destinations (ohsradio/shipdata.py): UN/LOCODE's
+ ports, taken from UNECE's own repository of the code list,
+ https://opensource.unicc.org/un/unece/uncefact/vocab-locode, which UNECE
+ licenses GPL-3.0, by tools/ships-data-build.py (locode.LICENCE.txt beside
+ it names the commit).
+
+Files: ohsradio/data/ships/mid.json ohsradio/data/ships/mid.LICENCE.txt
+Copyright: OpenHamShack
+License: GPL-3+
+Comment: The ITU's allocation of Maritime Identification Digits to
+ countries (ITU-R M.585), facts typed in for the ships' flags.
+
 Files: ohsradio/data/mapland/*
 Copyright: OpenStreetMap contributors
 License: ODbL-1.0

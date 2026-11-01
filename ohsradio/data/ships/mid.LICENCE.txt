@@ -1,0 +1,8 @@
+Maritime Identification Digits from the ITU's Table of Maritime
+Identification Digits (ITU-R M.585; the MARS database), each MID with the
+country or territory it is allocated to and, for its flag, that place's
+ISO 3166-1 alpha-2 code (a territory's own where Unicode draws a flag for
+it, else its country's; none for 306, shared by Curaçao, Sint Maarten and
+the Caribbean Netherlands). Facts, typed in for OpenHamShack Radio and
+checked against Wikipedia's list on 01/11/2026; GPL-3.0-or-later with the
+rest of it.

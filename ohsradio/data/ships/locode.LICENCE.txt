@@ -1,0 +1,6 @@
+Port names from UN/LOCODE, the United Nations Code for Trade and Transport
+Locations, maintained by UNECE, as published in UNECE's repository
+https://opensource.unicc.org/un/unece/uncefact/vocab-locode (locodes/*.csv,
+commit 219d1a3911220468dee4d02399702fe40d070a31), which is licensed GPL-3.0.
+Converted by tools/ships-data-build.py: ports only (function 1), code to
+name; rows marked for removal (X) or reference entries (=) left out.
