@@ -169,10 +169,21 @@ class Lookup:
     "unknown" to their lifetimes.
 
         lk.get("4CA264") -> ("ok", value) | ("unknown", None) | None
+
+    Ships' details (shipinfo.py) use it too, keyed otherwise: `clean`
+    turns what a caller asks about into the cache's key, or None for
+    something never to ask about; `on_drop(key, entry)` hears of each
+    entry the file loses (stale, or past `max_entries`), for a file kept
+    beside it.
     """
 
-    def __init__(self, name: str, path: Path, enabled, fetch, ttl: dict, clock=time.time):
+    def __init__(self, name: str, path: Path, enabled, fetch, ttl: dict, clock=time.time,
+                 clean=clean_icao, on_drop=None, thread_name: str | None = None):
         self.name = name
+        self.clean = clean
+        self.on_drop = on_drop
+        self.thread_name = thread_name or f"aircraftinfo-{name}"
+        self.max_entries = MAX_ENTRIES
         self.path = Path(path)
         self.enabled = enabled
         self.fetch = fetch
@@ -193,7 +204,7 @@ class Lookup:
 
     def start(self) -> None:
         if self.thread is None:
-            self.thread = threading.Thread(target=self._run, name=f"aircraftinfo-{self.name}", daemon=True)
+            self.thread = threading.Thread(target=self._run, name=self.thread_name, daemon=True)
             self.thread.start()
 
     def stop(self) -> None:
@@ -212,7 +223,7 @@ class Lookup:
         request for a miss, never blocks on one."""
         if not self.enabled():
             return None
-        h = clean_icao(icao)
+        h = self.clean(icao)
         if h is None:
             return None
         with self.lock:
@@ -267,11 +278,14 @@ class Lookup:
         terms limit how long its answers may be kept, not only used), then
         the oldest past MAX_ENTRIES; then a whole file or none."""
         now = self.clock()
-        for h in [h for h, e in self.cache.items() if now - e["at"] >= self.ttl[e["status"]]]:
-            del self.cache[h]
-        if len(self.cache) > MAX_ENTRIES:
-            for h, _e in sorted(self.cache.items(), key=lambda kv: kv[1]["at"])[:len(self.cache) - MAX_ENTRIES]:
-                del self.cache[h]
+        gone = [h for h, e in self.cache.items() if now - e["at"] >= self.ttl[e["status"]]]
+        if len(self.cache) - len(gone) > self.max_entries:
+            live = sorted((kv for kv in self.cache.items() if kv[0] not in gone), key=lambda kv: kv[1]["at"])
+            gone += [h for h, _e in live[:len(live) - self.max_entries]]
+        for h in gone:
+            ent = self.cache.pop(h)
+            if self.on_drop is not None:
+                self.on_drop(h, ent)
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.path.with_name(self.path.name + ".part")
@@ -289,7 +303,7 @@ class Lookup:
             return
         now = self.clock()
         for h, ent in data.items():
-            if (clean_icao(h) == h and isinstance(ent, dict) and ent.get("status") in self.ttl
+            if (self.clean(h) == h and isinstance(ent, dict) and ent.get("status") in self.ttl
                     and isinstance(ent.get("at"), (int, float)) and now - ent["at"] < self.ttl[ent["status"]]):
                 self.cache[h] = {"status": ent["status"], "value": ent.get("value"), "at": float(ent["at"])}
 
