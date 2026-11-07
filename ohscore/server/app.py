@@ -1020,10 +1020,12 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(status, {"error": text, "code": code, **more})
 
     def _body(self) -> dict:
+        self._body_taken = True
         n = int(self.headers.get("Content-Length") or 0)
         if n <= 0:
             return {}
         if n > 1 << 20:
+            self.close_connection = True       # left unread: the stream cannot be reused
             raise ValueError(_("The request is too large"))
         try:
             data = json.loads(self.rfile.read(n) or b"{}")
@@ -1073,6 +1075,37 @@ class _Handler(BaseHTTPRequestHandler):
         self._route("PUT")
 
     def _route(self, method: str) -> None:
+        self._body_taken = False
+        try:
+            self._route_once(method)
+        finally:
+            self._drain()
+
+    def _drain(self) -> None:
+        """Read whatever body the handler left unread. The platform's proxy
+        keeps its connection to us open between requests, so an unread
+        body becomes the start of the next request: POST api/stop never
+        read its "{}", and the POST api/start after it arrived as method
+        "{}POST", answered 501, and left the radio stopped (ohs-box,
+        07/11/2026, the scheduled IQ capture's live test)."""
+        if self._body_taken:
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self.close_connection = True
+            return
+        if n <= 0:
+            return
+        if n > 1 << 20:
+            self.close_connection = True
+            return
+        try:
+            self.rfile.read(n)
+        except OSError:
+            self.close_connection = True
+
+    def _route_once(self, method: str) -> None:
         u = urlsplit(self.path)
         path, query = u.path.rstrip("/") or "/", parse_qs(u.query)
         who = self._who()

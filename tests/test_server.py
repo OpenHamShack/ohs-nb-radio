@@ -147,6 +147,36 @@ class ServerTest(unittest.TestCase):
         return False
 
 
+
+class KeptAlive(ServerTest):
+    """The platform's proxy keeps one connection to the app open across
+    requests. A body a handler never reads must not become the start of
+    the next request (07/11/2026: POST api/stop's "{}" turned the POST
+    api/start after it into a 501 for method "{}POST", leaving the radio
+    stopped)."""
+
+    def test_an_unread_body_does_not_spoil_the_next_request(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
+        self.addCleanup(c.close)
+        h = {"Content-Type": "application/json", shack.SHACK_SECRET_HEADER: SECRET, "X-OpenHamShack-User": "brian",
+             "X-OpenHamShack-Level": "control", "X-OpenHamShack-Device": "dev_TEST",
+             "X-OpenHamShack-Auth": "device"}
+        for path, body in (("/api/stop", "{}"), ("/api/start", "{}"), ("/api/stop", '{"ignored": [1, 2, 3]}'),
+                           ("/api/start", None)):
+            c.request("POST", path, body, h)
+            r = c.getresponse()
+            raw = r.read()
+            self.assertEqual(r.status, 200, (path, raw[:200]))
+        self.assertTrue(json.loads(raw)["running"])
+        # And a request refused before any handler (404) leaves no body behind either.
+        c.request("POST", "/api/nothing/here", '{"x": 1}', h)
+        r = c.getresponse()
+        r.read()
+        self.assertEqual(r.status, 404)
+        c.request("GET", "/api/status", None, h)
+        r = c.getresponse()
+        self.assertEqual((r.status, json.loads(r.read())["running"]), (200, True))
+
 class WhoMayAsk(ServerTest):
     def test_nothing_without_the_proxy_secret(self):
         for secret in (None, "wrong", ""):
