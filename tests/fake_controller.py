@@ -36,6 +36,7 @@ class FakeRadio:
         self.recording: str | None = None
         self.n = 0
         self.fail = {}            # "recordings/start" or "POST ais/session" -> (status, code): refuse it
+        self.fail_times = {}      # likewise -> [status, code, n]: refuse it the next n times only
         self.linger_s = 0.0       # an ended AIS/ADS-B session holds the receiver this long, as the app's does
         self.release_at = None
         self.recorded_while_held = False
@@ -43,6 +44,10 @@ class FakeRadio:
         self.iq = None            # (rate, centre) -> ci16 bytes a recording holds; else a small fixed pattern
         self.extra = {}           # GET path -> JSON answered (smoke checks)
         self.app_extra = {}       # likewise beside api/, at the app's base (ui/v2/...)
+        self.iq_max_s = None      # an IQ recording ends itself after this long, as iqMaxSeconds does
+        self.rec_started = 0.0
+        self.last: dict = {}      # api/recordings/status's "last"
+        self.passes: list[dict] = []   # api/wxsat/passes's "passes"
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
@@ -99,12 +104,30 @@ class FakeRadio:
 
     # ---------------------------------------------------------- routes
 
+    def _close_recording(self, why: str) -> dict:
+        rid, self.recording = self.recording, None
+        d = self.device()
+        data = self.iq(d["fs"], d["rxLo"]) if self.iq else bytes(range(256)) * 64
+        (self.recdir / f"{rid}.sigmf-data").write_bytes(data)
+        (self.recdir / f"{rid}.sigmf-meta").write_text(json.dumps({
+            "global": {"core:datatype": "ci16_le", "core:sample_rate": d["fs"]},
+            "captures": [{"core:sample_start": 0, "core:frequency": d["rxLo"],
+                          "core:datetime": "2026-11-11T19:55:00.000000Z"}]}))
+        self.last = {"id": rid, "kind": "iq", "stopped": why, "error": ""}
+        return {"id": rid, "kind": "iq", "bytes": len(data), "seconds": 1.0}
+
     def route(self, method: str, path: str, q: dict, body: dict) -> tuple[int, dict]:
         if self.release_at and time.monotonic() >= self.release_at:
             self._release()
+        if self.recording and self.iq_max_s is not None and time.monotonic() - self.rec_started >= self.iq_max_s:
+            self._close_recording("the time limit")
         for key, (status, code) in self.fail.items():
             if key in (path, f"{method} {path}"):
                 return status, {"error": f"refused by the test ({code})", "code": code}
+        for key, left in self.fail_times.items():
+            if key in (path, f"{method} {path}") and left[2] > 0:
+                left[2] -= 1
+                return left[0], {"error": f"refused by the test ({left[1]})", "code": left[1]}
         if method == "GET" and path in self.extra:
             return 200, self.extra[path]
         if method == "GET" and path == "state":
@@ -126,18 +149,26 @@ class FakeRadio:
             self.n += 1
             self.recorded_while_held = self.recorded_while_held or bool(self.release_at)
             self.recording = f"openhamshack-radio-2026102{self.n}-{self.st['vfo']}"
+            self.rec_started = time.monotonic()
             return 200, {"active": [{"kind": "iq", "id": self.recording}]}
         if method == "POST" and path == "recordings/stop":
             if not self.recording:
                 return 200, {"stopped": []}
-            rid, self.recording = self.recording, None
-            d = self.device()
-            data = self.iq(d["fs"], d["rxLo"]) if self.iq else bytes(range(256)) * 64
-            (self.recdir / f"{rid}.sigmf-data").write_bytes(data)
-            (self.recdir / f"{rid}.sigmf-meta").write_text(json.dumps({
-                "global": {"core:datatype": "ci16_le", "core:sample_rate": d["fs"]},
-                "captures": [{"core:sample_start": 0, "core:frequency": d["rxLo"]}]}))
-            return 200, {"stopped": [{"id": rid, "kind": "iq", "bytes": len(data), "seconds": 1.0}]}
+            return 200, {"stopped": [self._close_recording("by the operator")]}
+        if method == "GET" and path == "recordings/status":
+            active = [{"kind": "iq", "id": self.recording, "sampleRate": self.device()["fs"],
+                       "seconds": round(time.monotonic() - self.rec_started, 1)}] if self.recording else []
+            return 200, {"recording": bool(active), "active": active, "last": self.last,
+                         "limits": {"iqMaxSeconds": self.iq_max_s or 600}}
+        if method == "GET" and path == "wxsat/passes":
+            return 200, {"passes": self.passes}
+        if method == "DELETE" and path.startswith("wxsat/passes/") and path.endswith("/record"):
+            pid = path.split("/")[2]
+            for p in self.passes:
+                if p["id"] == pid:
+                    p["plan"] = "skip-disabled"
+                    return 200, p
+            return 404, {"error": "no such pass", "code": "unknown_pass"}
         if method == "POST" and path == "recordings/delete":
             for f in self.recdir.glob(f"{body['id']}.*"):
                 f.unlink()

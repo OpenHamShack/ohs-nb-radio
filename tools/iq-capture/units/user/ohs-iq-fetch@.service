@@ -1,0 +1,11 @@
+# Copy one finished IQ capture from the controller into
+# ~/naughtcade-private/iq/<name>/ and remove the controller's copy once
+# it is checked (tools/iq-capture/fetch.sh, installed by deploy.sh).
+[Unit]
+Description=Fetch the IQ capture %i
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+ExecStart=%h/.local/lib/ohs-iq-capture/fetch.sh %i

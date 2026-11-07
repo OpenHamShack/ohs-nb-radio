@@ -1,0 +1,18 @@
+# One scheduled HF IQ capture on the controller (tools/iq-capture in
+# openhamshack-nb). The instance is the capture's name; its segment and
+# end time are in /etc/ohs-iq-capture/<name>.env. Started by that
+# capture's timer; installed by tools/iq-capture/deploy.sh.
+[Unit]
+Description=Scheduled HF IQ capture %i
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+EnvironmentFile=/etc/ohs-iq-capture/%i.env
+ExecStart=/usr/local/sbin/ohs-iq-capture %i ${IQ_LOW_HZ} ${IQ_HIGH_HZ} ${IQ_END_UTC}
+# SIGTERM to the script alone: its trap stops the recording and puts the
+# receiver back (a few API calls, a radio restart for the sample rate)
+# before anything else is killed.
+KillMode=mixed
+TimeoutStopSec=120

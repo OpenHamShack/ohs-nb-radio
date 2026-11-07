@@ -1,0 +1,523 @@
+#!/bin/bash
+# Record one HF band segment as IQ on the controller's receiver for an
+# evening, unattended, and cut each part down to the segment as it closes.
+#
+#   ohs-iq-capture <name> <segment low Hz> <segment high Hz> <end UTC>
+#   e.g. ohs-iq-capture rsgb-autumn-ssb-20261111 3600000 3775000 2026-11-11T21:35:00Z
+#
+# Why: the Naughtcade session wants reference recordings of two RSGB
+# autumn contests (80 m, 20:00-21:30 UTC) to calibrate a contest game;
+# Brian approved taking the receiver for them on 07/11/2026. Run as root by
+# ohs-iq-capture@<name>.service from a timer (units beside this file), so
+# it runs whether or not anybody is about, and late after a power cut
+# (Persistent=true: the box lost power on 30/10). Started after <end UTC>
+# it does nothing.
+#
+# What it does, in order, logging each step to /var/log/ohs-iq-capture/<name>.log:
+#   1. Skips every weather-satellite pass planned to overlap the window
+#      (DELETE api/wxsat/passes/<id>/record), so none is left to find
+#      the receiver taken at its AOS.
+#   2. Waits for the receiver: while something holds it (rxOwner, the
+#      radio on the air, or a 409 from api/set) it tries again every 30 s,
+#      up to 20 tries (10 minutes), then gives up having changed nothing.
+#      It never stops or preempts anything to get it, and never transmits.
+#   3. Saves the dial, mode, antenna and sample rate, and from then on an
+#      EXIT trap puts exactly those back however the script ends (an
+#      error, SIGTERM from systemd, a reboot's stop job).
+#   4. Sets 1.2 MS/s (a sample rate takes effect when the radio restarts,
+#      so it is stopped and started as Settings does), Antenna C, USB, and
+#      the dial on the segment's centre.
+#   5. Records IQ (api/recordings/start {"kind": "iq"}). Radio ends an IQ
+#      recording by itself at iqMaxSeconds (35 minutes on the box, about
+#      10 GB at 1.2 MS/s); when a part ends, the next is started at once and
+#      the closed one cut down in the background: decimate.py in Radio's
+#      own image (the box's Python has no numpy) under rootless podman,
+#      nice 19, 1 CPU, 1 GB. A part that was cut down is then deleted
+#      from Radio's recordings by the API, so the recordings' 30 GB limit
+#      never prunes a part before it is processed; one that failed is kept
+#      there and named in the log.
+#   6. At <end UTC> it stops the recording, puts the receiver back, waits
+#      for the last cut-down and writes capture.json (what happened) in
+#      /var/lib/ohs-iq/<name>/, where fetch.sh on the development host
+#      collects it all.
+#
+# Output in /var/lib/ohs-iq/<name>/ (0700, files 0600): per part
+# <name>-pNN.sigmf-data/.sigmf-meta and <name>-pNN.json. The folder
+# belongs to dock360, the account Radio's rootless podman runs as: the
+# container's root is dock360 on the host, so that is who can write there.
+# /var/lib/ohs-iq itself is root's, 0711, so dock360 can reach its own
+# folder but list nothing.
+#
+# The local-screen token is read by the Python helper below from its file
+# on each call; it is never on a command line, in the environment or in
+# the log.
+#
+# Exit status: 0 recorded and every part cut down (or started after the end
+# time: nothing to do); 1 an error (the log says which; the receiver is
+# put back); 2 bad arguments; 3 gave up waiting for the receiver; 4 the
+# receiver was NOT put back exactly (the log names what differs).
+#
+# The tests (tests/test_iq_capture.py) run it against tests/fake_controller.py
+# with these pointing at scratch folders; on the box they are left unset:
+# OHS_API_ROOT, OHS_TOKEN_FILE, OHS_IQ_RECDIR, OHS_IQ_OUT_ROOT,
+# OHS_IQ_LOG_DIR, OHS_IQ_TOOL_DIR, OHS_IQ_RUNNER (podman | local: python3
+# here, with no podman), OHS_IQ_RETRY_S, OHS_IQ_HELD_TRIES, OHS_IQ_POLL_S,
+# OHS_IQ_SETTLE_S.
+set -uo pipefail
+umask 077
+cd / || exit 1
+
+API_ROOT=${OHS_API_ROOT:-http://127.0.0.1/}
+TOKEN_FILE=${OHS_TOKEN_FILE:-/etc/openhamshack/local-screen.token}
+RECDIR=${OHS_IQ_RECDIR:-/var/lib/dock360/modules/shack-radio/data/recordings}
+OUT_ROOT=${OHS_IQ_OUT_ROOT:-/var/lib/ohs-iq}
+LOG_DIR=${OHS_IQ_LOG_DIR:-/var/log/ohs-iq-capture}
+TOOL_DIR=${OHS_IQ_TOOL_DIR:-/usr/local/lib/ohs-iq-capture}
+RUNNER=${OHS_IQ_RUNNER:-podman}
+RETRY_S=${OHS_IQ_RETRY_S:-30}
+HELD_TRIES=${OHS_IQ_HELD_TRIES:-20}
+POLL_S=${OHS_IQ_POLL_S:-5}
+SETTLE_S=${OHS_IQ_SETTLE_S:-3}
+RUN_USER=dock360
+CONTAINER=dock360-shack-radio
+
+# The receiver's rate is left as it is. The first live test (07/11/2026)
+# asked for 1.2 MS/s and restarted the radio for it, but Radio runs the
+# RSP at 2.4 MS/s whatever sampleRate says, so the restart bought nothing
+# and was the one step that could leave the radio stopped.
+RATE=2400000                       # what the RSP runs at, for the segment check only
+# A part ends after PART_S and the next starts at once (a second's gap).
+# At 2.4 MS/s a 15-minute part is about 8.6 GB and is cut down in about
+# 8 minutes, so at most two raw parts sit in Radio's 30 GB recordings at
+# a time; Radio's own 35-minute parts (about 20 GB) could have had the
+# oldest pruned while it was still being cut down.
+PART_S=${OHS_IQ_PART_S:-900}
+ANTENNA="Antenna C"
+MODE=usb
+RECEIVER=RSPdx
+
+usage() {
+    echo "usage: $0 <name> <segment low Hz> <segment high Hz> <end UTC, e.g. 2026-11-11T21:35:00Z>" >&2
+    exit 2
+}
+[ $# -eq 4 ] || usage
+NAME=$1 LO=$2 HI=$3 END_ARG=$4
+[[ $NAME =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]] || { echo "ohs-iq-capture: bad name '$NAME'" >&2; exit 2; }
+[[ $LO =~ ^[1-9][0-9]{4,9}$ && $HI =~ ^[1-9][0-9]{4,9}$ ]] && [ "$LO" -lt "$HI" ] \
+    || { echo "ohs-iq-capture: the segment must be two whole numbers of Hz, low below high" >&2; exit 2; }
+[ $(( HI - LO )) -le 1000000 ] || { echo "ohs-iq-capture: a segment over 1 MHz does not fit in $RATE S/s" >&2; exit 2; }
+END=$(date -u -d "$END_ARG" +%s 2>/dev/null) || { echo "ohs-iq-capture: cannot read the end time '$END_ARG'" >&2; exit 2; }
+CENTRE=$(( (LO + HI) / 2 ))
+
+mkdir -p "$LOG_DIR" && chmod 700 "$LOG_DIR"
+LOG=$LOG_DIR/$NAME.log
+touch "$LOG" && chmod 600 "$LOG"
+log() {
+    local line
+    line="$(date -u +%FT%TZ) $*"
+    printf '%s\n' "$line" >> "$LOG"
+    printf '%s\n' "$line" >&2          # the journal too
+}
+
+now() { date -u +%s; }
+# A sleep that a signal interrupts at once (bash runs a trap only between
+# commands, and a foreground sleep 30 would hold SIGTERM for 30 s).
+nap() { sleep "$1" & wait $!; }
+
+# ---------------------------------------------------------------- the API
+# One call: prints the HTTP status on the first line and the JSON body
+# after it (status 0 when the server could not be reached). The token is
+# read from its file here and scrubbed from anything printed.
+PY_API=$(cat <<'PY'
+import json, os, sys, urllib.error, urllib.request
+root = os.environ.get("OHS_API_ROOT", "http://127.0.0.1/").rstrip("/") + "/radio/api/"
+tok = ""
+try:
+    with open(os.environ.get("OHS_TOKEN_FILE", "/etc/openhamshack/local-screen.token")) as f:
+        tok = f.read().strip()
+except OSError as e:
+    print(0); print(json.dumps({"error": f"cannot read the local-screen token ({e.strerror})", "code": "no_token"}))
+    sys.exit(0)
+method, path, body = sys.argv[1], sys.argv[2], sys.argv[3]
+# A POST with nothing to say sends no body at all: Radio up to beta.32
+# never read the body of api/stop or api/start, and over the platform's
+# kept-alive connection an unread "{}" spoilt the next request.
+data = body.encode() if body else (b"" if method == "POST" else None)
+req = urllib.request.Request(root + path, data=data, method=method,
+                             headers={"Authorization": "Bearer " + tok, "Content-Type": "application/json"})
+try:
+    with urllib.request.urlopen(req, timeout=90) as r:
+        status, raw = r.status, r.read()
+except urllib.error.HTTPError as e:
+    status, raw = e.code, e.read()
+except (urllib.error.URLError, OSError) as e:
+    status, raw = 0, json.dumps({"error": str(e), "code": "unreachable"}).encode()
+text = raw.decode("utf-8", "replace").strip() or "{}"
+print(status)
+print(text.replace(tok, "<token>") if tok else text)
+PY
+)
+API_STATUS=0 API_BODY='{}'
+api() {
+    local out
+    out=$(OHS_API_ROOT=$API_ROOT OHS_TOKEN_FILE=$TOKEN_FILE python3 -c "$PY_API" "$1" "$2" "${3:-}")
+    API_STATUS=${out%%$'\n'*}
+    API_BODY=${out#*$'\n'}
+    [[ $API_STATUS =~ ^2[0-9][0-9]$ ]]
+}
+api_why() { j '" ".join(str(x) for x in (d.get("code"), d.get("error")) if x)' "$API_BODY"; }
+
+# A value from JSON: `j '<python expression on d>' "$json" [args...]` (the
+# args are sys.argv[2:]); a string as itself, None as nothing, anything
+# else as JSON.
+PY_J='import json, sys
+try:
+    d = json.loads(sys.stdin.read() or "{}")
+except ValueError:
+    d = {}
+v = eval(sys.argv[1], {"d": d, "sys": sys, "json": json})
+print("" if v is None else v if isinstance(v, str) else json.dumps(v))'
+j() { local e=$1 s=$2; shift 2; python3 -c "$PY_J" "$e" "$@" <<<"$s"; }
+
+# ------------------------------------------------------------- the record
+CHANGED=0          # the receiver has been changed and must be put back
+RATE_CHANGED=0
+STARTED_RADIO=0
+WAS_RUNNING=0
+BEFORE='{}'
+CUR=""             # the IQ recording running now
+PART=0
+PIDS=()
+STATUS=failed
+OUT=$OUT_ROOT/$NAME
+WORK=""
+RESTORED=null
+
+write_status() {
+    [ -d "$OUT" ] || return 0
+    local results="[]"
+    [ -n "$WORK" ] && [ -s "$WORK/results" ] && results=$(python3 -c 'import json, sys
+print(json.dumps([dict(zip(("part", "id", "ok"), (int(a), b, c == "ok"))) for a, b, c in (l.split() for l in sys.stdin if l.strip())]))' < "$WORK/results")
+    python3 -c 'import json, sys
+n, st, lo, hi, end, parts, restored = sys.argv[1:8]
+print(json.dumps({"name": n, "status": st, "segment": {"lowHz": int(lo), "highHz": int(hi)}, "endUtc": end,
+                  "parts": json.loads(parts), "restored": json.loads(restored)}, indent=1))' \
+        "$NAME" "$STATUS" "$LO" "$HI" "$END_ARG" "$results" "$RESTORED" > "$OUT/capture.json.partial" \
+        && chmod 600 "$OUT/capture.json.partial" && mv "$OUT/capture.json.partial" "$OUT/capture.json"
+}
+
+# Put back exactly what was there. Signals are ignored meanwhile: a second
+# SIGTERM must not leave the radio half put back.
+restore() {
+    [ $CHANGED = 1 ] || return 0
+    trap '' INT TERM HUP
+    local problems="" want got differ tries stopped
+    if [ "$STATUS" = recording ] || [ "$STATUS" = interrupted ]; then
+        # Interrupted mid-part: stopped, and kept in Radio's recordings
+        # (it is real contest air; the log names it for cutting down by
+        # hand). Asked whether or not CUR is set: a signal can land while
+        # the start is answered and before its id is read.
+        if api POST recordings/stop '{"kind": "iq"}'; then
+            stopped=$(j '" ".join(s.get("id", "") for s in d.get("stopped") or [] if s.get("kind") == "iq")' "$API_BODY")
+            [ -n "$stopped" ] && log "stopped $stopped early; it is left in Radio's recordings, not cut down"
+        else
+            problems+=" stop the recording: $(api_why);"
+        fi
+        CUR=""
+    fi
+    if [ $RATE_CHANGED = 1 ]; then
+        want=$(j 'json.dumps({"changes": {"sampleRate": d["sampleRate"]}})' "$BEFORE")
+        if api POST set "$want"; then
+            [ $WAS_RUNNING = 1 ] && { restart_radio || problems+=" restart for the sample rate;"; }
+        else
+            problems+=" the sample rate: $(api_why);"
+        fi
+    fi
+    # Only what differs is set: a tune that was refused changed nothing,
+    # and setting it back would only be refused again.
+    for tries in 1 2 3; do
+        api GET state || { nap "$RETRY_S"; continue; }
+        want=$(python3 -c 'import json, sys
+b, n = json.loads(sys.argv[1]), json.loads(sys.argv[2])
+c = {k: b[k] for k in ("vfo", "mode", "soapyAntenna") if n.get(k) != b[k]}
+print(json.dumps({"changes": c}) if c else "")' "$BEFORE" "$API_BODY")
+        [ -z "$want" ] && break
+        api POST set "$want" && break
+        log "restore: the dial, mode and antenna refused ($API_STATUS $(api_why))"
+        [ $tries = 3 ] || nap "$RETRY_S"
+    done
+    if [ $STARTED_RADIO = 1 ]; then
+        api POST stop || problems+=" stop the radio: $(api_why);"
+    fi
+    # Last of all, whatever else failed: a radio that was running before
+    # is running after. Leaving it stopped is the one outcome never wanted.
+    if [ $WAS_RUNNING = 1 ] && api GET status && [ "$(j 'd.get("running")' "$API_BODY")" != true ]; then
+        start_radio || problems+=" START THE RADIO: it is stopped;"
+    fi
+    if api GET state; then
+        got=$API_BODY
+        differ=$(python3 -c 'import json, sys
+b, n = json.loads(sys.argv[1]), json.loads(sys.argv[2])
+print(" ".join(f"{k}: {b[k]!r} now {n.get(k)!r}" for k in b if n.get(k) != b[k]))' "$BEFORE" "$got")
+    else
+        differ="the state could not be read ($(api_why))"
+    fi
+    CHANGED=0
+    traps_on
+    if [ -n "$differ$problems" ]; then
+        RESTORED=false
+        log "NOT restored: $differ$problems"
+        return 1
+    fi
+    RESTORED=true
+    log "restored $BEFORE"
+}
+
+on_exit() {
+    local rc=$?
+    restore || rc=4
+    if [ ${#PIDS[@]} -gt 0 ] && [ "${SIGNALLED:-0}" = 0 ]; then
+        log "waiting for ${#PIDS[@]} cut-down(s) to finish"
+        wait "${PIDS[@]}" 2>/dev/null
+    fi
+    write_status
+    [ -n "$WORK" ] && rm -rf "$WORK"
+    log "exit $rc ($STATUS)"
+    exit $rc
+}
+on_signal() {
+    SIGNALLED=1 STATUS=interrupted
+    log "interrupted by SIG$1"
+    # The cut-downs go too (a part they had not finished stays in Radio's
+    # recordings, whole); under systemd its stop job would end them anyway.
+    local p
+    for p in "${PIDS[@]}"; do pkill -TERM -P "$p" 2>/dev/null; kill -TERM "$p" 2>/dev/null; done
+    exit 130
+}
+traps_on() {
+    trap 'on_signal TERM' TERM
+    trap 'on_signal INT' INT
+    trap 'on_signal HUP' HUP
+}
+
+restart_radio() {
+    api POST stop || { log "restart: stop refused ($API_STATUS $(api_why))"; return 1; }
+    start_radio
+}
+
+# Start the radio and wait until it runs. The start is tried again: the
+# RSP can still be in the SDRplay service's hands for a few seconds after
+# a stop, and on 07/11/2026 a start straight after a stop was refused (a
+# server bug since fixed, which left the radio stopped). Each refusal is
+# logged with its reason.
+start_radio() {
+    local try i
+    for try in 1 2 3 4 5 6; do
+        if api POST start; then
+            for i in $(seq 1 60); do
+                api GET status && [ "$(j 'd.get("running")' "$API_BODY")" = true ] && return 0
+                nap 0.5
+            done
+            log "start: answered, but the radio is not running after 30 s"
+        else
+            log "start: refused ($API_STATUS $(api_why))"
+        fi
+        nap 2
+    done
+    return 1
+}
+
+# Podman as the account Radio's rootless containers run as, with the
+# session it would have (runuser rather than sudo: this runs as root,
+# from systemd, with no terminal).
+as_dock360() {
+    local uid
+    uid=$(id -u "$RUN_USER") || return 1
+    runuser -u "$RUN_USER" -- env XDG_RUNTIME_DIR="/run/user/$uid" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" "$@"
+}
+# The image Radio runs now (an update between parts moves it), for numpy.
+radio_image() { as_dock360 podman inspect --format '{{.ImageName}}' "$CONTAINER" 2>/dev/null; }
+
+# Cut one closed part down and, if that worked, delete the raw part from
+# Radio's recordings. Run in the background, one at a time (flock), so
+# the next part records meanwhile.
+process_part() {
+    local id=$1 n=$2 rc img
+    exec 9> "$WORK/cut.lock"
+    flock 9
+    # The meta is rewritten whole as a recording ends; give it a moment.
+    nap 2
+    log "part $n: cutting $id down to $LO-$HI Hz"
+    local args=(--lo "$LO" --hi "$HI" --name "$NAME" --part "$n" --receiver "$RECEIVER" --antenna "$ANTLABEL")
+    if [ "$RUNNER" = local ]; then
+        python3 "$TOOL_DIR/decimate.py" --meta "$RECDIR/$id.sigmf-meta" --data "$RECDIR/$id.sigmf-data" \
+            --out-dir "$OUT" "${args[@]}" >> "$LOG" 2>&1
+        rc=$?
+    else
+        img=$(radio_image)
+        if [ -z "$img" ]; then
+            log "part $n: cannot find Radio's image ($CONTAINER)"
+            rc=1
+        else
+            # --user 0:0: the container's root is dock360 on the host, who
+            # owns the output folder and, inside the user namespace, may
+            # read Radio's recordings whichever of its uids wrote them.
+            as_dock360 podman run --rm --network none --user 0:0 --entrypoint nice --memory 1g --cpus 1 \
+                -v "$RECDIR:/rec:ro" -v "$OUT:/out" -v "$TOOL_DIR:/tool:ro" "$img" \
+                -n 19 python3 /tool/decimate.py --meta "/rec/$id.sigmf-meta" --data "/rec/$id.sigmf-data" \
+                --out-dir /out "${args[@]}" >> "$LOG" 2>&1
+            rc=$?
+        fi
+    fi
+    if [ $rc != 0 ]; then
+        log "part $n: cut-down FAILED (rc $rc); $id is kept in Radio's recordings"
+        echo "$n $id failed" >> "$WORK/results"
+        return 1
+    fi
+    if api POST recordings/delete "$(j 'json.dumps({"id": sys.argv[2]})' '{}' "$id")"; then
+        log "part $n: cut down; deleted $id from Radio's recordings"
+    else
+        log "part $n: cut down, but deleting $id from Radio's recordings failed ($API_STATUS $(api_why))"
+    fi
+    echo "$n $id ok" >> "$WORK/results"
+}
+
+# ------------------------------------------------------------------- main
+if [ "$(now)" -ge "$END" ]; then
+    log "started after the end time ($END_ARG): nothing to record"
+    exit 0
+fi
+log "capture $NAME: $LO-$HI Hz until $END_ARG"
+
+mkdir -p "$OUT_ROOT" && chmod 711 "$OUT_ROOT"
+mkdir -p "$OUT" && chmod 700 "$OUT"
+[ "$RUNNER" = podman ] && chown "$RUN_USER:" "$OUT"
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/ohs-iq-capture.XXXXXX")
+: > "$WORK/results"
+trap on_exit EXIT
+traps_on
+
+# 1. Weather-satellite passes in the window are skipped first.
+hours=$(( (END - $(now)) / 3600 + 2 ))
+[ $hours -gt 72 ] && hours=72
+if api GET "wxsat/passes?hours=$hours&past=1"; then
+    for id in $(python3 -c 'import datetime as dt, json, sys
+now, end = float(sys.argv[1]), float(sys.argv[2])
+t = lambda s: dt.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+for p in json.loads(sys.stdin.read() or "{}").get("passes") or []:
+    if p.get("plan") in ("record", "recording") and t(p["aos"]) < end and t(p["los"]) > now:
+        print(p["id"])' "$(now)" "$END" <<<"$API_BODY"); do
+        if api DELETE "wxsat/passes/$id/record"; then
+            log "skipped weather-satellite pass $id"
+        else
+            log "could not skip pass $id ($API_STATUS $(api_why))"
+        fi
+    done
+else
+    log "no weather-satellite passes to look at ($API_STATUS $(api_why))"
+fi
+
+# 2-4. Wait for the receiver, save what is there, take it.
+tries=0
+held() {
+    tries=$(( tries + 1 ))
+    log "try $tries of $HELD_TRIES: $1"
+    if [ $tries -ge "$HELD_TRIES" ]; then
+        STATUS=gave-up
+        log "gave up waiting for the receiver; nothing recorded"
+        exit 3
+    fi
+    nap "$RETRY_S"
+}
+while :; do
+    if [ "$(now)" -ge "$END" ]; then
+        STATUS=past-end
+        log "the end time passed while waiting for the receiver"
+        exit 0
+    fi
+    if ! api GET status; then held "Radio did not answer ($API_STATUS $(api_why))"; continue; fi
+    owner=$(j 'd.get("rxOwner") or ""' "$API_BODY")
+    if [ "$(j 'd.get("onAir")' "$API_BODY")" = true ]; then held "the radio is on the air"; continue; fi
+    if [ -n "$owner" ]; then held "the receiver is held: $owner"; continue; fi
+    WAS_RUNNING=0
+    [ "$(j 'd.get("running")' "$API_BODY")" = true ] && WAS_RUNNING=1
+    if ! api GET state; then held "the state could not be read ($API_STATUS $(api_why))"; continue; fi
+    BEFORE=$(j 'json.dumps({k: d.get(k) for k in ("vfo", "mode", "soapyAntenna", "sampleRate")})' "$API_BODY")
+    # "Antenna C, Loop Antenna": the operator's own label from Settings, for the metadata.
+    label=$(j '(lambda L: L.get(sys.argv[2], "") if isinstance(L, dict) else "")(json.loads(d.get("soapyAntennaLabels") or "{}"))' \
+        "$API_BODY" "$ANTENNA" 2>/dev/null)
+    ANTLABEL=$ANTENNA${label:+, $label}
+    log "before: $BEFORE ($([ $WAS_RUNNING = 1 ] && echo running || echo stopped))"
+    CHANGED=1
+    RATE_CHANGED=0 STARTED_RADIO=0
+    if [ $WAS_RUNNING = 0 ]; then
+        start_radio || { log "error: the radio did not start"; exit 1; }
+        STARTED_RADIO=1
+    fi
+    if ! api POST set "{\"changes\": {\"soapyAntenna\": \"$ANTENNA\", \"mode\": \"$MODE\", \"vfo\": $CENTRE}}"; then
+        [ "$API_STATUS" = 409 ] && { why=$(api_why); restore; held "tuning was refused: $why"; continue; }
+        log "error tuning: $API_STATUS $(api_why)"; exit 1
+    fi
+    break
+done
+nap "$SETTLE_S"
+api GET state && log "tuned: $(j 'json.dumps(d.get("deviceStatus") or {})' "$API_BODY"), antenna $ANTLABEL"
+
+# 5. Record until the end time, a part at a time.
+STATUS=recording
+while [ "$(now)" -lt "$END" ]; do
+    if ! api POST recordings/start '{"kind": "iq"}'; then
+        log "could not start part $(( PART + 1 )): $API_STATUS $(api_why); trying again in ${RETRY_S} s"
+        nap "$RETRY_S"
+        continue
+    fi
+    CUR=$(j 'next((a["id"] for a in d.get("active") or [] if a.get("kind") == "iq"), "")' "$API_BODY")
+    if [ -z "$CUR" ]; then
+        log "part $(( PART + 1 )) started with no id: $API_BODY"
+        api POST recordings/stop '{"kind": "iq"}'
+        nap "$RETRY_S"
+        continue
+    fi
+    PART=$(( PART + 1 ))
+    log "part $PART: recording $CUR"
+    part_end=$(( $(now) + PART_S ))
+    while :; do
+        left=$(( END - $(now) ))
+        if [ $left -le 0 ] || [ "$(now)" -ge $part_end ]; then
+            why="the end time"
+            [ $left -gt 0 ] && why="its ${PART_S} s"
+            if api POST recordings/stop '{"kind": "iq"}'; then
+                log "part $PART: stopped at $why"
+            else
+                log "part $PART: stopping it failed ($API_STATUS $(api_why))"
+            fi
+            break
+        fi
+        [ $(( part_end - $(now) )) -lt $left ] && left=$(( part_end - $(now) ))
+        nap "$(( left < POLL_S ? left : POLL_S ))"
+        api GET recordings/status || continue
+        if [ -z "$(j 'next((a["id"] for a in d.get("active") or [] if a.get("id") == sys.argv[2]), "")' "$API_BODY" "$CUR" 2>/dev/null)" ]; then
+            log "part $PART: ended by Radio ($(j '(d.get("last") or {}).get("stopped") or "no reason given"' "$API_BODY"))"
+            break
+        fi
+    done
+    process_part "$CUR" "$PART" &
+    PIDS+=($!)
+    CUR=""
+done
+
+# 6. The receiver back first; then the cut-downs finish.
+STATUS=finishing
+restore || { STATUS=failed; exit 4; }
+log "waiting for the last cut-down"
+wait "${PIDS[@]}" 2>/dev/null
+PIDS=()
+if [ "$PART" -gt 0 ] && ! grep -q ' failed$' "$WORK/results"; then
+    STATUS=done
+    log "done: $PART part(s) recorded and cut down"
+    exit 0
+fi
+STATUS=failed
+log "finished with $(grep -c ' failed$' "$WORK/results") part(s) not cut down, of $PART"
+exit 1

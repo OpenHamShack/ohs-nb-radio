@@ -1,0 +1,13 @@
+# RSGB Autumn Series CW (80 m, Thu 26 Nov 2026): collect the capture from the controller
+# an hour after recording ends (fetch.sh waits for it to finish if it has
+# not). Persistent=true, so a host that was off at 22:30 fetches when it is back.
+[Unit]
+Description=Fetch the IQ capture rsgb-autumn-cw-20261126
+
+[Timer]
+OnCalendar=2026-11-26 22:30:00 UTC
+Persistent=true
+Unit=ohs-iq-fetch@rsgb-autumn-cw-20261126.service
+
+[Install]
+WantedBy=timers.target

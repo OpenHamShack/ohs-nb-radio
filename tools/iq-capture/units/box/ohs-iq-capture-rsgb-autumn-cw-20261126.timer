@@ -1,0 +1,16 @@
+# RSGB Autumn Series CW (80 m, Thu 26 Nov 2026): the contest runs 20:00-21:30 UTC; recording
+# starts five minutes early and runs to 21:35 (IQ_END_UTC in the .env).
+# Persistent=true: if the box is off at 19:55 (the power cut of 30/10),
+# the capture starts as soon as it is back, and records until the end
+# time; back after the end time, it starts and does nothing.
+[Unit]
+Description=Start the IQ capture rsgb-autumn-cw-20261126
+
+[Timer]
+OnCalendar=2026-11-26 19:55:00 UTC
+Persistent=true
+AccuracySec=1s
+Unit=ohs-iq-capture@rsgb-autumn-cw-20261126.service
+
+[Install]
+WantedBy=timers.target
