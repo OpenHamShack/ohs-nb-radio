@@ -45,12 +45,22 @@ def platform_presence(srv):
     token; None without the token or for any other app. Whether the
     controller has the service is the watch's own first question
     (presence.PresenceWatch.check_service): a controller without it costs
-    one GET now and then, and changes nothing."""
+    one GET now and then, and changes nothing.
+
+    on_leave is the same client_gone as on_gone (CLIENT-UI-PLAN 6.5): a
+    client going Back to the launcher, or to another app, renews presence
+    with no app or a different one rather than saying goodbye, so without
+    this Radio kept the RSP and streams for the rest of that client's 30 s
+    lease (Monitor commit 19ec4c2, 21/11/2026, found this on the Fire TV).
+    Radio stays stopped once it has handed the receiver over rather than
+    queuing to take it back (Brian's call, 21/11/2026); this only releases
+    what presence governs, same as a goodbye would."""
     url, token = os.environ.get(shack.SHACK_URL_ENV, ""), os.environ.get(shack.SHACK_TOKEN_ENV, "")
     if not srv.info.presence or not url or not token:
         return None
     return presence.PresenceWatch(srv.info.app_id, shack.shack_http(url, token), presence.events_opener(url, token),
-                                  on_gone=srv.client_gone, on_arrive=srv.client_arrived)
+                                  on_gone=srv.client_gone, on_arrive=srv.client_arrived,
+                                  on_leave=srv.client_gone)
 
 
 def pair_store(radio) -> str:

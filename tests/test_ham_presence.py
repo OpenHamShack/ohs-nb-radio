@@ -198,7 +198,8 @@ class Base(unittest.TestCase):
         self.srv.presence = presence.PresenceWatch(
             info.app_id, shack.shack_http(self.fake.base, APP_TOKEN),
             presence.events_opener(self.fake.base, APP_TOKEN, timeout=5.0),
-            on_gone=self.srv.client_gone, on_arrive=self.srv.client_arrived, clock=lambda: self.now[0])
+            on_gone=self.srv.client_gone, on_arrive=self.srv.client_arrived,
+            on_leave=self.srv.client_gone, clock=lambda: self.now[0])
         httpd = self.srv.serve("127.0.0.1", 0)
         self.port = httpd.server_address[1]
         self.addCleanup(self.srv.shutdown)
@@ -320,6 +321,49 @@ class Goodbye(Base):
         self.assertEqual([x["id"] for x in self.radio.decoders.sessions() if x["id"] != "vfo"], [a["id"]])
         self.assertTrue(self.claimed())
         self.assertTrue(self.status()["running"])
+
+
+@unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")
+class LeavingTheApp(Base):
+    """Back to the launcher is not a goodbye (CLIENT-UI-PLAN 6.5): the
+    client renews presence naming no app ("moved"), which Radio treats as
+    that client's goodbye for its own holds - same release as `gone`, at
+    once, not a lease later (Monitor commit 19ec4c2, 21/11/2026)."""
+
+    def test_a_client_moving_to_no_app_is_released_at_once_like_a_goodbye(self):
+        self.following()
+        self.fake.arrive("tv-lounge", ["dab", "audio"])
+        self.assertTrue(wait(lambda: self.status()["presence"]["clients"] == ["tv-lounge"]))
+        self.start_dab("tv-lounge")
+        ended = self.listen("tv-lounge")
+        self.assertTrue(wait(lambda: self.status()["audio"]["listeners"] == 1))
+        self.assertTrue(self.claimed())
+
+        # Back to the launcher: the renewal names no app, not a goodbye.
+        self.fake.push("moved", {"client": "tv-lounge", "app": "", "screen": "", "holds": []})
+        self.assertTrue(wait(lambda: self.radio.state()["rxOwner"] == {}, 5))
+        st = self.radio.state()
+        self.assertEqual((st["vfo"], st["mode"]), (HOME, "fm"))
+        self.assertTrue(ended.wait(5), "the client's audio stream was left open")
+        self.assertTrue(wait(lambda: not self.claimed(), 10), self.broker.calls[-3:])
+        self.assertFalse(self.status()["running"])
+
+    def test_a_renewal_still_naming_radio_keeps_the_claim(self):
+        # The same event type ("moved" also covers a plain renewal) but
+        # still this app: nothing has left, so nothing is released.
+        self.following()
+        self.fake.arrive("tv-lounge", ["dab", "audio"])
+        self.start_dab("tv-lounge")
+        ended = self.listen("tv-lounge")
+        self.assertTrue(wait(lambda: self.status()["audio"]["listeners"] == 1))
+        self.assertTrue(self.claimed())
+
+        self.fake.push("moved", {"client": "tv-lounge", "app": "shack-radio", "screen": "radio",
+                                  "holds": ["dab", "audio"]})
+        time.sleep(1.5)                                  # a presence tick or so
+        self.assertTrue(self.claimed())
+        self.assertTrue(self.status()["running"])
+        self.assertFalse(ended.is_set())
 
 
 @unittest.skipUnless(sdr.available(), "no shack_sdr for this machine")

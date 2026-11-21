@@ -42,6 +42,19 @@ that gave no id as None, which no `gone` can remove.
 **Transmit is never touched** (7.4): nothing here keys, unkeys, or
 frees a transmitter; the app's own on_gone decides what a client's
 leaving ends, and refuses while on the air.
+
+**Leaving this app is not the same as going** (CLIENT-UI-PLAN 6.5): a
+client that goes Back to the launcher, or switches to another app,
+renews presence with no app, or a different one, rather than saying
+goodbye. The platform reports that as `arrived`/`moved`, never `gone`,
+so without `on_leave` a client-scoped hold outlives the client by its
+whole 30 s lease - on Monitor this left the RSP claimed and an onair
+server running for nine minutes after Back (Monitor commit 19ec4c2,
+21/11/2026). `on_leave(client, "left")` is called, same as `on_gone`,
+for a client this app had present that the next event or reconcile
+shows present somewhere else (or nowhere); Brian chose Radio stay
+stopped rather than resume once handed off (21/11/2026), so this only
+releases what presence governs - it starts nothing back up.
 """
 from __future__ import annotations
 
@@ -221,14 +234,20 @@ class PresenceWatch:
     under the app token); `open_events` opens the event stream (an
     iterable of lines with close()); `on_gone(client, why)` is called on
     this thread when a client the platform had seen is gone, and
-    `on_arrive(client)` when a client arrives in, or moves to, this app."""
+    `on_arrive(client)` when a client arrives in, or moves to, this app.
+    `on_leave(client, why)` is called, same thread, for a client this app
+    had present that is now present elsewhere or gone (module docstring);
+    never called twice for the same departure (`on_gone` covers a client
+    that leaves by going, not by moving)."""
 
-    def __init__(self, app_id: str, request, open_events, on_gone, on_arrive=None, clock=time.monotonic):
+    def __init__(self, app_id: str, request, open_events, on_gone, on_arrive=None, on_leave=None,
+                 clock=time.monotonic):
         self.app_id = app_id
         self.request = request
         self.open_events = open_events
         self.on_gone = on_gone
         self.on_arrive = on_arrive
+        self.on_leave = on_leave
         self.clock = clock
         self.lock = threading.Lock()
         # client -> its last renewal ({client, app, screen, holds}), any app
@@ -327,10 +346,29 @@ class PresenceWatch:
             except Exception:  # noqa: BLE001
                 pass
 
+    def _here(self) -> set[str]:
+        """Clients this app currently has present (module docstring's
+        "left this app"): the before-snapshot a leave is measured against."""
+        with self.lock:
+            return {c for c, p in self.present.items() if p.get("app") == self.app_id}
+
+    def _left(self, before: set[str]) -> None:
+        """Of `before`, whoever moved to another app or the launcher -
+        still present, just not here - has left this app. A client that
+        went outright is not included (`self.present` no longer has it):
+        that is `_gone`'s business, already called `on_gone`, so a
+        departure is never reported twice."""
+        with self.lock:
+            moved = {c for c in before if c in self.present and self.present[c].get("app") != self.app_id}
+        if self.on_leave is not None:
+            for client in sorted(moved):
+                self.on_leave(client, "left")
+
     def handle(self, event: str, data: dict) -> None:
         client = data.get("client")
         if not isinstance(client, str) or not client:
             return
+        before = self._here()
         if event in ("arrived", "moved"):
             with self.lock:
                 was = self.present.get(client)
@@ -342,6 +380,7 @@ class PresenceWatch:
                 self.on_arrive(client)
         elif event == "gone":
             self._gone(client, str(data.get("why") or "expired"))
+        self._left(before)
 
     def _gone(self, client: str, why: str) -> None:
         with self.lock:
@@ -355,6 +394,7 @@ class PresenceWatch:
     def reconcile(self) -> None:
         """`GET presence`: who is here now. Anyone seen who is not is given
         one lease to come back (module docstring)."""
+        before = self._here()
         status, answer = self.request("GET", "/presence")
         if status != 200 or not isinstance(answer.get("clients"), list):
             raise OSError(f"presence answered HTTP {status}")
@@ -379,6 +419,7 @@ class PresenceWatch:
         if self.on_arrive is not None:
             for client in arrived:
                 self.on_arrive(client)
+        self._left(before)
 
     def tick(self) -> None:
         """Once a second: clients a reconcile missed that have not come back
